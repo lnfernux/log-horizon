@@ -300,7 +300,7 @@ MIT
 > [!CAUTION]
 > **Disclaimer**
 >
-> **This tool is created mainly by using AI.** Please exercise caution when using this solution and always understand what are you running before you run it in production. This tool was created as an experiment to learn more about Rust - the developer assumes no liability for any vulnerabilities or issues.
+> **This tool is created mainly by using AI.** Please exercise caution when using this solution and always understand what are you running before you run it in production. The developer assumes no liability for any vulnerabilities or issues.
 > 
 > By downloading, installing, or using this tool, you acknowledge that you have read, understood, and agree to these terms.
 >
