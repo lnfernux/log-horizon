@@ -14,8 +14,6 @@ Log Horizon connects to your Microsoft Sentinel workspace (and optionally Defend
 
 > **Important**: This is a generic approach. If you know a log source is important to your environment, that context always takes precedence over what this tool tells you. The classifications are a starting point, not gospel.
 
----
-
 ## What it does
 
 Jumping straight into it:
@@ -29,8 +27,6 @@ Jumping straight into it:
 - Wraps everything in a **Spectre.Console TUI**: coloured tables, menus, ASCII art banner, the works
 - **Exports** to JSON or Markdown when you need to share findings with the team
 
----
-
 ## Prerequisites
 
 | What you need | Version |
@@ -40,8 +36,6 @@ Jumping straight into it:
 | PwshSpectreConsole | 2.6.3+ |
 
 If you're not already logged into Azure, the module will fire up `Connect-AzAccount` for you. If you are, it'll just carry on.
-
----
 
 ## Getting started
 
@@ -57,8 +51,6 @@ git clone <repo-url> log-horizon
 Import-Module ./log-horizon/LogHorizon.psd1
 ```
 
----
-
 ## Usage
 
 ### The basics
@@ -66,6 +58,15 @@ Import-Module ./log-horizon/LogHorizon.psd1
 ```powershell
 Invoke-LogHorizon -SubscriptionId '00000000-0000-0000-0000-000000000000' -ResourceGroup 'rg-sentinel' -WorkspaceName 'my-sentinel-ws'
 ```
+
+Output should look something like this:
+
+<img width="860" height="842" alt="{F4FFA929-B24F-490C-BD3D-F75E214BCD93}" src="https://github.com/user-attachments/assets/29e7a399-713d-4a2b-9d7d-43dbf368be3f" />
+
+Also has a menu to dig deeper into other outputs:
+
+<img width="395" height="223" alt="{83CE9E6E-F373-49CD-BE05-182DB69F36BE}" src="https://github.com/user-attachments/assets/c1e0804e-5267-4d8e-bb10-01770b25b831" />
+
 
 ### Keyword gaps + Defender XDR
 
