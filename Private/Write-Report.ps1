@@ -41,7 +41,7 @@ function Write-LogHorizonBanner {
     ██╔══██║██║   ██║██╔══██╗██║ ███╔╝  ██║   ██║██║╚██╗██║
     ██║  ██║╚██████╔╝██║  ██║██║███████╗╚██████╔╝██║ ╚████║
     ╚═╝  ╚═╝ ╚═════╝ ╚═╝  ╚═╝╚═╝╚══════╝ ╚═════╝ ╚═╝  ╚═══╝[/]
-[grey]       ⚙  Sentinel SIEM Log Source Analyzer  ⚙[/]
+[grey]       ⚙  Microsoft Sentinel SIEM Log Source Analyzer  ⚙[/]
 [dim]              created by infernux.no[/]
 '@
 
