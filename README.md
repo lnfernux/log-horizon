@@ -8,9 +8,9 @@
 ![Module Version](https://img.shields.io/badge/version-0.2.0-green)
 
 ---
-I've had to answer *"what are we actually getting out of these logs?"* more times than I can count. So I built this.
+I've had to answer *"what are we actually getting out of these logs?"* or *"what is the recommended logs for Microsoft Sentinel"* more times than I can count. The answer always depend on so many things, but we can be generic. So I built this thingy right here.
 
-Log Horizon connects to your Microsoft Sentinel workspace (and optionally Defender XDR), goes through every log table you're ingesting, and tells you whether you're getting security value from it or just burning money. It classifies tables, scores them against your detection rules, and gives you concrete recommendations with savings estimates.
+**Log Horizon** connects to your Microsoft Sentinel workspace (and optionally Defender XDR), goes through every log table you're ingesting, and tells you whether you're getting security value from it or just burning money. It classifies tables, scores them against your detection rules, and gives you concrete recommendations with savings estimates.
 
 > **Important**: This is a generic approach. If you know a log source is important to your environment, that context always takes precedence over what this tool tells you. The classifications are a starting point, not gospel.
 
