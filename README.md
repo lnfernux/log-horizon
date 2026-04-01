@@ -221,7 +221,7 @@ Sitting at `Data/log-classifications.json`. **344 entries**, **190 connectors**,
 
 ### How the classifications were built
 
-The primary/secondary grading was done by feeding Microsoft's data connector and table definitions into AI, using Microsoft best practices and industry standards as the classification criteria. It's a solid baseline, but AI can still make mistakes. If something looks off for your environment, trust your own context over the tool.
+The primary/secondary grading was done by feeding Microsoft's data connector and table definitions into AI, using Microsoft best practices and industry standards as the classification criteria. On manual review it's a solid baseline and starting point, but AI can still make mistakes. If something looks off for your environment, trust your own context over the tool.
 
 The classification criteria were drawn from the following sources:
 
@@ -251,10 +251,6 @@ The classification criteria were drawn from the following sources:
 **ASD ACSC / Joint advisories**
 - Joint-sealed advisory: Identifying and Mitigating Living Off the Land Techniques
 - ASD ACSC's Windows Event Logging and Forwarding
-
-**Other**
-- US White House M-21-31
-- Malcolm network traffic analysis tool suite
 
 ---
 
