@@ -1,13 +1,18 @@
-# Log Horizon
+<center>
+  <img width="500"  src="https://github.com/user-attachments/assets/a1e00e5f-e566-47bd-ad08-2678ba07b7ee" />
+</center>
 
+**Microsoft Sentinel SIEM Log Source Analyzer**
+
+![PowerShell 7+](https://img.shields.io/badge/PowerShell-7%2B-blue)
+![Module Version](https://img.shields.io/badge/version-0.2.0-green)
+
+---
 I've had to answer *"what are we actually getting out of these logs?"* more times than I can count. So I built this.
 
 Log Horizon connects to your Microsoft Sentinel workspace (and optionally Defender XDR), goes through every log table you're ingesting, and tells you whether you're getting security value from it or just burning money. It classifies tables, scores them against your detection rules, and gives you concrete recommendations with savings estimates.
 
 > **Important**: This is a generic approach. If you know a log source is important to your environment, that context always takes precedence over what this tool tells you. The classifications are a starting point, not gospel.
-
-![PowerShell 7+](https://img.shields.io/badge/PowerShell-7%2B-blue)
-![Module Version](https://img.shields.io/badge/version-0.2.0-green)
 
 ---
 
@@ -186,7 +191,7 @@ Sitting at `Data/log-classifications.json`. **344 entries**, **190 connectors**,
 | `recommendedTier` | `analytics` (hot tier) or `datalake` (auxiliary candidate) |
 | `isFree` | Whether Microsoft ingests this one for free |
 
-### Primary vs secondary
+### Primary vs secondary security data
 
 **Primary** (211 entries): the tables you're actually building detections on. Sign-in logs, security alerts, threat intel, audit trails, vulnerability findings, firewall hits, EDR telemetry.
 
@@ -279,16 +284,23 @@ Tests/
   LogHorizon.Tests.ps1       Pester v5 unit tests (26 tests)
 ```
 
----
-
 ## Tests
 
 ```powershell
 Invoke-Pester ./Tests/LogHorizon.Tests.ps1 -Output Detailed
 ```
 
----
-
 ## License
 
 MIT
+
+## Disclaimer
+
+> [!CAUTION]
+> **Disclaimer**
+>
+> **This tool is created mainly by using AI.** Please exercise caution when using this solution and always understand what are you running before you run it in production. This tool was created as an experiment to learn more about Rust - the developer assumes no liability for any vulnerabilities or issues.
+> 
+> By downloading, installing, or using this tool, you acknowledge that you have read, understood, and agree to these terms.
+>
+
