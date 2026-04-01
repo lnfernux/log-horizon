@@ -1168,7 +1168,7 @@
   {
     "tableName": "MicrosoftGraphActivityLogs",
     "connector": "Microsoft Graph Activity Logs",
-    "classification": "secondary",
+    "classification": "primary",
     "category": "Identity & Access",
     "description": "Microsoft Graph API request activity logs showing API calls made by applications and users",
     "keywords": ["graph", "api", "activity", "microsoft", "application", "request"],
