@@ -17,14 +17,31 @@ function Get-SocOptimization {
     try {
         $response = Invoke-RestMethod -Uri $uri -Headers $headers -ErrorAction Stop
         $response.value | ForEach-Object {
+            # Extract actionable suggestions (e.g. specific tables to enable, rules to create)
+            $suggestions = @()
+            if ($_.properties.suggestions) {
+                $suggestions = $_.properties.suggestions | ForEach-Object {
+                    [PSCustomObject]@{
+                        Title       = $_.title
+                        Description = $_.description
+                        Action      = $_.action
+                        TypeId      = $_.suggestionTypeId
+                        Properties  = $_.additionalProperties
+                    }
+                }
+            }
+
             [PSCustomObject]@{
-                Id          = $_.id
-                Title       = $_.properties.title
-                Description = $_.properties.description
-                Category    = $_.properties.category
-                Priority    = $_.properties.priority
-                State       = $_.properties.state
-                Actions     = $_.properties.actions
+                Id                   = $_.id
+                Title                = $_.properties.title
+                Description          = $_.properties.description
+                Category             = $_.properties.category
+                Priority             = $_.properties.priority
+                State                = $_.properties.state
+                RecommendationTypeId = $_.properties.recommendationTypeId
+                Suggestions          = $suggestions
+                AdditionalProperties = $_.properties.additionalProperties
+                Actions              = $_.properties.actions
             }
         }
     }

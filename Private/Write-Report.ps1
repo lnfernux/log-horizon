@@ -309,24 +309,122 @@ function Write-SocOptimization {
         return
     }
 
-    $table = @()
-    $num = 0
-    foreach ($sr in $Analysis.SocRecommendations) {
-        $num++
-        $stateMarkup = switch ($sr.State) {
-            'Active' { '[yellow]Active[/]' }
-            default  { '[dim]Inactive[/]' }
-        }
+    # Split active vs inactive, sort by title within each group
+    $active   = $Analysis.SocRecommendations | Where-Object { $_.State -eq 'Active' } | Sort-Object Title
+    $inactive = $Analysis.SocRecommendations | Where-Object { $_.State -ne 'Active' } | Sort-Object Title
 
-        $table += [PSCustomObject]@{
-            '#'       = $num
-            'State'   = $stateMarkup
-            'Title'   = Get-SpectreEscapedText $sr.Title
+    # Detect console width to decide whether to show Detail column
+    $showDetail = ($Host.UI.RawUI.WindowSize.Width -ge 121)
+
+    # Show active recommendations
+    if ($active.Count -gt 0) {
+        $table = @()
+        $num = 0
+        foreach ($sr in $active) {
+            $num++
+            if ($showDetail) {
+                $detail = Get-SocRecommendationDetail -Recommendation $sr
+                $table += [PSCustomObject]@{
+                    '#'      = $num
+                    'Title'  = Get-SpectreEscapedText $sr.Title
+                    'Detail' = Get-SpectreEscapedText ($detail.Length -gt 120 ? $detail.Substring(0, 117) + '...' : $detail)
+                }
+            } else {
+                $table += [PSCustomObject]@{
+                    '#'      = $num
+                    'Title'  = Get-SpectreEscapedText $sr.Title
+                }
+            }
         }
+        $table | Format-SpectreTable -Border Rounded -Color DodgerBlue2 -HeaderColor DodgerBlue2
+        Write-SpectreHost "[dim]  $($active.Count) active recommendation(s). $($inactive.Count) inactive hidden.[/]"
+    }
+    else {
+        Write-SpectreHost "[green]No active SOC optimization recommendations.[/]"
+        Write-SpectreHost "[dim]  $($inactive.Count) inactive recommendation(s) hidden.[/]"
     }
 
-    $table | Format-SpectreTable -Border Rounded -Color DodgerBlue2 -HeaderColor DodgerBlue2 -AllowMarkup
-    Write-SpectreHost "[dim]  $($Analysis.SocRecommendations.Count) total Microsoft SOC optimization recommendations.[/]"
+    Write-SpectreHost ""
+
+    # Drill-down menu
+    $choices = @('Back', 'Show inactive') + (1..$active.Count | ForEach-Object { "$_" })
+    $pick = Read-SpectreSelection -Title "[deepskyblue1]Enter a number for details, Show inactive, or Back:[/]" -Choices $choices
+
+    if ($pick -eq 'Show inactive' -and $inactive.Count -gt 0) {
+        Write-SpectreHost ""
+        $inactiveTable = @()
+        $inum = 0
+        foreach ($sr in $inactive) {
+            $inum++
+            if ($showDetail) {
+                $detail = Get-SocRecommendationDetail -Recommendation $sr
+                $inactiveTable += [PSCustomObject]@{
+                    '#'      = $inum
+                    'Title'  = Get-SpectreEscapedText $sr.Title
+                    'Detail' = Get-SpectreEscapedText ($detail.Length -gt 120 ? $detail.Substring(0, 117) + '...' : $detail)
+                }
+            } else {
+                $inactiveTable += [PSCustomObject]@{
+                    '#'      = $inum
+                    'Title'  = Get-SpectreEscapedText $sr.Title
+                }
+            }
+        }
+        $inactiveTable | Format-SpectreTable -Border Rounded -Color Grey -HeaderColor Grey
+        Write-SpectreHost "[dim]  $($inactive.Count) inactive recommendation(s).[/]"
+    }
+    elseif ($pick -ne 'Back' -and $pick -ne 'Show inactive') {
+        $idx = [int]$pick - 1
+        $rec = $active[$idx]
+        Write-SocRecommendationDrillDown -Recommendation $rec
+    }
+}
+
+function Get-SocRecommendationDetail {
+    param([PSCustomObject]$Recommendation)
+
+    if ($Recommendation.Description) {
+        return $Recommendation.Description
+    }
+    if ($Recommendation.Suggestions -and $Recommendation.Suggestions.Count -gt 0) {
+        $first = $Recommendation.Suggestions | Select-Object -First 1
+        if ($first.Title) { return $first.Title }
+        if ($first.Action) { return $first.Action }
+    }
+    ''
+}
+
+function Write-SocRecommendationDrillDown {
+    param([PSCustomObject]$Recommendation)
+
+    $rec = $Recommendation
+    Write-SpectreHost ""
+    Write-SpectreHost "[dodgerblue2]$(Get-SpectreEscapedText $rec.Title)[/]"
+    if ($rec.Description) {
+        Write-SpectreHost "[white]$(Get-SpectreEscapedText $rec.Description)[/]"
+    }
+    if ($rec.Suggestions -and $rec.Suggestions.Count -gt 0) {
+        Write-SpectreHost ""
+        Write-SpectreHost "[deepskyblue1]Suggestions:[/]"
+        foreach ($s in $rec.Suggestions) {
+            $title = if ($s.Title) { $s.Title } else { $s.TypeId }
+            Write-SpectreHost "  [yellow]>[/] [white]$(Get-SpectreEscapedText $title)[/]"
+            if ($s.Description) {
+                Write-SpectreHost "    [dim]$(Get-SpectreEscapedText $s.Description)[/]"
+            }
+            if ($s.Action) {
+                Write-SpectreHost "    [green]Action:[/] [white]$(Get-SpectreEscapedText $s.Action)[/]"
+            }
+        }
+    }
+    if ($rec.AdditionalProperties) {
+        Write-SpectreHost ""
+        Write-SpectreHost "[deepskyblue1]Additional context:[/]"
+        foreach ($key in $rec.AdditionalProperties.PSObject.Properties.Name) {
+            Write-SpectreHost "  [dim]${key}:[/] [white]$(Get-SpectreEscapedText "$($rec.AdditionalProperties.$key)")[/]"
+        }
+    }
+    Write-SpectreHost ""
 }
 
 # All tables

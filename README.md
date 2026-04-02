@@ -5,7 +5,7 @@
 **Microsoft Sentinel SIEM Log Source Analyzer**
 
 ![PowerShell 7+](https://img.shields.io/badge/PowerShell-7%2B-blue)
-![Module Version](https://img.shields.io/badge/version-0.2.1-green)
+![Module Version](https://img.shields.io/badge/version-0.2.2-green)
 
 ---
 I've had to answer *"what are we actually getting out of these logs?"* or *"what is the recommended logs for Microsoft Sentinel"* more times than I can count. The answer always depend on so many things, but we can be generic. So I built this thingy right here.
@@ -304,7 +304,7 @@ The classification criteria were drawn from the following sources:
 ## Project layout
 
 ```
-LogHorizon.psd1              Module manifest (v0.2.1)
+LogHorizon.psd1              Module manifest (v0.2.2)
 LogHorizon.psm1              Module loader
 Public/
   Invoke-LogHorizon.ps1      Entry point, the main orchestrator
@@ -336,6 +336,15 @@ Invoke-Pester ./Tests/LogHorizon.Tests.ps1 -Output Detailed
 ## License
 
 MIT
+
+## Version history
+
+| Version | Date | Changes |
+|---|---|---|
+| 0.2.2 | 2026-04-02 | SOC optimization table hides Detail column on narrow consoles |
+| 0.2.1 | 2026-04-02 | Custom classification support (`-CustomClassificationPath`), enriched SOC optimization recommendations with API suggestions/drill-down, active-only default view, UTF-8 encoding warning suppression |
+| 0.2.0 | - | Initial public release with classification engine, cost-value scoring, Spectre.Console TUI, export to JSON/Markdown |
+| 0.1.0 | - | Internal version for development |
 
 ## Known issues
 
