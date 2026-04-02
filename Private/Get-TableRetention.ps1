@@ -20,18 +20,19 @@ function Get-TableRetention {
     $wsResponse = Invoke-RestMethod -Uri $wsUri -Headers $headers -ErrorAction Stop
     $workspaceRetention = [int]$wsResponse.properties.retentionInDays
 
-    # Per-table retention
-    $uri = "https://management.azure.com$($Context.ResourceId)/tables?api-version=2023-09-01"
+    # Per-table retention and plan
+    $uri = "https://management.azure.com$($Context.ResourceId)/tables?api-version=2025-07-01"
     $response = Invoke-RestMethod -Uri $uri -Headers $headers -ErrorAction Stop
 
     $tables = foreach ($table in $response.value) {
         $props = $table.properties
         [PSCustomObject]@{
             TableName              = $table.name
-            Plan                   = $props.plan                        # Analytics | Basic
+            Plan                   = $props.plan                        # Analytics | Basic | Auxiliary
             RetentionInDays        = [int]$props.retentionInDays        # interactive/hot
             TotalRetentionInDays   = [int]$props.totalRetentionInDays   # hot + archive
             ArchiveRetentionInDays = [int]$props.archiveRetentionInDays # total - retention
+            TableSubType           = $props.tableSubType                # Any | Classic | DataCollectionRuleBased
         }
     }
 

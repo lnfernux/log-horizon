@@ -6,6 +6,7 @@ BeforeAll {
     . "$privatePath\Invoke-Analysis.ps1"
     . "$privatePath\Export-Report.ps1"
     . "$privatePath\Write-Report.ps1"
+    . "$privatePath\Get-DataTransforms.ps1"
 }
 
 Describe 'Get-TablesFromKql' {
@@ -348,5 +349,468 @@ Describe 'Classification database integrity' {
         $names = $script:db | ForEach-Object tableName
         $dupes = $names | Group-Object | Where-Object Count -gt 1
         $dupes | Should -BeNullOrEmpty
+    }
+}
+
+Describe 'Invoke-Classification _SPLT_CL detection' {
+    It 'classifies _SPLT_CL tables as secondary split tables' {
+        $tableUsage = @(
+            [PSCustomObject]@{ TableName = 'SigninLogs'; MonthlyGB = 5; IsFree = $false }
+            [PSCustomObject]@{ TableName = 'SigninLogs_SPLT_CL'; MonthlyGB = 3; IsFree = $false }
+        )
+        $result = Invoke-Classification -TableUsage $tableUsage -RuleTableCoverage @{}
+        $splt = $result.Classifications['SigninLogs_SPLT_CL']
+        $splt.Classification | Should -Be 'secondary'
+        $splt.IsSplitTable | Should -Be $true
+        $splt.ParentTable | Should -Be 'SigninLogs'
+        $splt.Source | Should -Be 'split-detection'
+        $splt.Category | Should -Match 'Split Table'
+    }
+
+    It 'inherits connector from parent table in DB' {
+        $tableUsage = @(
+            [PSCustomObject]@{ TableName = 'SecurityEvent'; MonthlyGB = 50; IsFree = $false }
+            [PSCustomObject]@{ TableName = 'SecurityEvent_SPLT_CL'; MonthlyGB = 20; IsFree = $false }
+        )
+        $result = Invoke-Classification -TableUsage $tableUsage -RuleTableCoverage @{}
+        $splt = $result.Classifications['SecurityEvent_SPLT_CL']
+        $splt.Connector | Should -Not -Be 'Unknown'
+    }
+
+    It 'sets IsSplitTable to false for regular tables' {
+        $tableUsage = @(
+            [PSCustomObject]@{ TableName = 'SecurityEvent'; MonthlyGB = 50; IsFree = $false }
+        )
+        $result = Invoke-Classification -TableUsage $tableUsage -RuleTableCoverage @{}
+        $result.Classifications['SecurityEvent'].IsSplitTable | Should -Be $false
+        $result.Classifications['SecurityEvent'].ParentTable | Should -BeNullOrEmpty
+    }
+}
+
+Describe 'Get-TransformType' {
+    It 'detects filter transforms' {
+        $result = Get-TransformType -KQL 'source | where EventID != 4688'
+        $result | Should -Be 'Filter'
+    }
+
+    It 'detects column removal transforms' {
+        $result = Get-TransformType -KQL 'source | project-away RawData, Message'
+        $result | Should -Be 'ColumnRemoval'
+    }
+
+    It 'detects enrichment transforms' {
+        $result = Get-TransformType -KQL 'source | extend GeoInfo = geo_info_from_ip_address(IPAddress)'
+        $result | Should -Be 'Enrichment'
+    }
+
+    It 'detects projection transforms' {
+        $result = Get-TransformType -KQL 'source | project TimeGenerated, Account, EventID'
+        $result | Should -Be 'Projection'
+    }
+
+    It 'detects aggregation transforms' {
+        $result = Get-TransformType -KQL 'source | summarize count() by bin(TimeGenerated, 1h)'
+        $result | Should -Be 'Aggregation'
+    }
+
+    It 'returns Custom for unrecognized transforms' {
+        $result = Get-TransformType -KQL 'source | take 100'
+        $result | Should -Be 'Custom'
+    }
+}
+
+Describe 'Invoke-Analysis with transforms' {
+    BeforeAll {
+        $tableUsage = @(
+            [PSCustomObject]@{ TableName = 'SecurityEvent'; DataGB = 150; MonthlyGB = 50; RecordCount = 1000000; EstMonthlyCostUSD = 279.50; IsFree = $false }
+        )
+
+        $classMap = @{
+            'SecurityEvent' = [PSCustomObject]@{ Classification = 'primary'; Category = 'Windows Security'; RecommendedTier = 'analytics'; IsFree = $false; RecommendedRetentionDays = 180; IsSplitTable = $false; ParentTable = $null }
+        }
+        $classifications = [PSCustomObject]@{
+            Classifications = $classMap
+            KeywordGaps     = @()
+            DatabaseEntries = 1
+        }
+
+        $rulesData = [PSCustomObject]@{
+            Rules         = @()
+            TableCoverage = @{ 'SecurityEvent' = 5 }
+            TotalRules    = 5
+            EnabledRules  = 5
+            DontCorrCount = 0
+            IncCorrCount  = 0
+        }
+
+        $huntingData = [PSCustomObject]@{
+            Queries       = @()
+            TableCoverage = @{}
+            TotalQueries  = 0
+        }
+
+        $dataTransforms = [PSCustomObject]@{
+            Transforms   = @(
+                [PSCustomObject]@{
+                    DCRName       = 'dcr-securityevent'
+                    DCRId         = '/subscriptions/00000000/dcr-securityevent'
+                    OutputTable   = 'SecurityEvent'
+                    InputStreams  = @('SecurityEvent')
+                    TransformKql  = 'source | where EventID != 4688'
+                    TransformType = 'Filter'
+                    Destination   = 'workspace'
+                }
+            )
+            TableLookup  = @{
+                'SecurityEvent' = @(
+                    [PSCustomObject]@{
+                        DCRName       = 'dcr-securityevent'
+                        DCRId         = '/subscriptions/00000000/dcr-securityevent'
+                        OutputTable   = 'SecurityEvent'
+                        InputStreams  = @('SecurityEvent')
+                        TransformKql  = 'source | where EventID != 4688'
+                        TransformType = 'Filter'
+                        Destination   = 'workspace'
+                    }
+                )
+            }
+            RelevantDCRs = @(
+                [PSCustomObject]@{ Name = 'dcr-securityevent'; Id = '/subscriptions/00000000/dcr-securityevent'; Location = 'eastus'; Kind = $null }
+            )
+            TotalDCRs    = 1
+        }
+
+        $script:txResult = Invoke-Analysis -TableUsage $tableUsage `
+                                            -Classifications $classifications `
+                                            -RulesData $rulesData `
+                                            -HuntingData $huntingData `
+                                            -SocRecommendations @() `
+                                            -DataTransforms $dataTransforms
+    }
+
+    It 'marks table with HasTransform' {
+        $se = $script:txResult.TableAnalysis | Where-Object TableName -eq 'SecurityEvent'
+        $se.HasTransform | Should -Be $true
+    }
+
+    It 'captures transform types' {
+        $se = $script:txResult.TableAnalysis | Where-Object TableName -eq 'SecurityEvent'
+        $se.TransformTypes | Should -Contain 'Filter'
+    }
+
+    It 'includes transform summary stats' {
+        $script:txResult.Summary.TablesWithTransforms | Should -Be 1
+        $script:txResult.Summary.TransformDCRs | Should -Be 1
+    }
+
+    It 'passes through DataTransforms in analysis output' {
+        $script:txResult.DataTransforms | Should -Not -BeNullOrEmpty
+        $script:txResult.DataTransforms.Transforms.Count | Should -Be 1
+    }
+}
+
+Describe 'Get-FieldsFromKql' {
+    It 'extracts fields from where clause' {
+        $result = Get-FieldsFromKql -Kql 'SecurityEvent | where EventID == 4625 and Account != "SYSTEM"'
+        $result | Should -Contain 'EventID'
+        $result | Should -Contain 'Account'
+    }
+
+    It 'extracts fields from project clause' {
+        $result = Get-FieldsFromKql -Kql 'SecurityEvent | project TimeGenerated, Account, EventID, Computer'
+        $result | Should -Contain 'TimeGenerated'
+        $result | Should -Contain 'Account'
+        $result | Should -Contain 'EventID'
+        $result | Should -Contain 'Computer'
+    }
+
+    It 'extracts fields from summarize by clause' {
+        $result = Get-FieldsFromKql -Kql 'SigninLogs | summarize count() by UserPrincipalName, IPAddress'
+        $result | Should -Contain 'UserPrincipalName'
+        $result | Should -Contain 'IPAddress'
+    }
+
+    It 'extracts fields from join on clause' {
+        $kql = 'SecurityEvent | join kind=inner (SigninLogs) on AccountObjectId'
+        $result = Get-FieldsFromKql -Kql $kql
+        $result | Should -Contain 'AccountObjectId'
+    }
+
+    It 'extracts fields from extend clause' {
+        $result = Get-FieldsFromKql -Kql 'SigninLogs | extend GeoInfo = geo_info_from_ip_address(IPAddress)'
+        $result | Should -Contain 'GeoInfo'
+    }
+
+    It 'extracts fields from isnotempty/isempty' {
+        $result = Get-FieldsFromKql -Kql 'SigninLogs | where isnotempty(UserPrincipalName) and isnull(DeviceDetail)'
+        $result | Should -Contain 'UserPrincipalName'
+        $result | Should -Contain 'DeviceDetail'
+    }
+
+    It 'filters out KQL keywords' {
+        $result = Get-FieldsFromKql -Kql 'SecurityEvent | where EventID == 4625 | summarize count() by Account'
+        $result | Should -Not -Contain 'where'
+        $result | Should -Not -Contain 'summarize'
+        $result | Should -Not -Contain 'count'
+        $result | Should -Not -Contain 'source'
+    }
+
+    It 'handles complex multi-line KQL' {
+        $kql = @"
+let threshold = 10;
+SigninLogs
+| where ResultType != 0
+| where UserPrincipalName has "@"
+| summarize FailedCount = count() by UserPrincipalName, IPAddress, AppDisplayName
+| where FailedCount > threshold
+"@
+        $result = Get-FieldsFromKql -Kql $kql
+        $result | Should -Contain 'ResultType'
+        $result | Should -Contain 'UserPrincipalName'
+        $result | Should -Contain 'IPAddress'
+        $result | Should -Contain 'AppDisplayName'
+    }
+
+    It 'returns empty array for empty input' {
+        $result = Get-FieldsFromKql -Kql ''
+        $result | Should -Be @()
+    }
+
+    It 'extracts fields from has/contains operators' {
+        $result = Get-FieldsFromKql -Kql 'AuditLogs | where OperationName has "Add member"'
+        $result | Should -Contain 'OperationName'
+    }
+}
+
+Describe 'New-SplitKql' {
+    It 'generates split KQL from knowledge base' {
+        $hvFields = @{
+            'SecurityEvent' = [PSCustomObject]@{
+                description     = 'Windows Security Events'
+                highValueFields = @('TimeGenerated', 'EventID', 'Account', 'Computer')
+                splitHints      = @(
+                    [PSCustomObject]@{
+                        description = 'Keep critical EventIDs'
+                        kql         = 'EventID in (4624, 4625, 4688)'
+                    }
+                )
+            }
+        }
+
+        $result = New-SplitKql -TableName 'SecurityEvent' -HighValueFieldsDB $hvFields
+        $result.SplitKql | Should -Be 'EventID in (4624, 4625, 4688)'
+        $result.Source | Should -Be 'knowledge-base'
+        $result.HighValueFields | Should -Contain 'TimeGenerated'
+        $result.HighValueFields | Should -Contain 'EventID'
+    }
+
+    It 'generates split KQL from rules when no KB entry exists' {
+        $rules = @(
+            [PSCustomObject]@{
+                RuleName = 'Test Rule'
+                Enabled  = $true
+                Tables   = @('CustomTable_CL')
+                Query    = 'CustomTable_CL | where Status == "Failed" | project TimeGenerated, UserName, Status'
+            }
+        )
+
+        $result = New-SplitKql -TableName 'CustomTable_CL' -Rules $rules
+        $result.Source | Should -Be 'rule-analysis'
+        $result.RuleFields | Should -Contain 'Status'
+        $result.SplitKql | Should -Not -BeNullOrEmpty
+        $result.RuleCount | Should -Be 1
+    }
+
+    It 'combines KB and rules when both available' {
+        $hvFields = @{
+            'SigninLogs' = [PSCustomObject]@{
+                description     = 'Azure AD Sign-in Logs'
+                highValueFields = @('TimeGenerated', 'UserPrincipalName', 'IPAddress', 'ResultType')
+                splitHints      = @(
+                    [PSCustomObject]@{
+                        description = 'Keep failures'
+                        kql         = 'ResultType != 0'
+                    }
+                )
+            }
+        }
+        $rules = @(
+            [PSCustomObject]@{
+                RuleName = 'Brute Force'
+                Enabled  = $true
+                Tables   = @('SigninLogs')
+                Query    = 'SigninLogs | where ResultType != 0 | summarize count() by UserPrincipalName, IPAddress'
+            }
+        )
+
+        $result = New-SplitKql -TableName 'SigninLogs' -Rules $rules -HighValueFieldsDB $hvFields
+        $result.Source | Should -Be 'combined'
+        $result.SplitKql | Should -Be 'ResultType != 0'
+        $result.RuleFields.Count | Should -BeGreaterThan 0
+        $result.AllFields | Should -Contain 'TimeGenerated'
+    }
+
+    It 'returns source=none when no data available' {
+        $result = New-SplitKql -TableName 'UnknownTable_CL'
+        $result.Source | Should -Be 'none'
+        $result.SplitKql | Should -BeNullOrEmpty
+        $result.RuleFields.Count | Should -Be 0
+    }
+
+    It 'generates projection KQL from merged fields' {
+        $hvFields = @{
+            'SecurityEvent' = [PSCustomObject]@{
+                description     = 'Windows Security Events'
+                highValueFields = @('EventID', 'Account')
+                splitHints      = @()
+            }
+        }
+
+        $result = New-SplitKql -TableName 'SecurityEvent' -HighValueFieldsDB $hvFields
+        $result.ProjectKql | Should -Not -BeNullOrEmpty
+        $result.ProjectKql | Should -Match 'source'
+        $result.ProjectKql | Should -Match 'project'
+        $result.AllFields | Should -Contain 'TimeGenerated'
+        $result.AllFields | Should -Contain 'EventID'
+        $result.AllFields | Should -Contain 'Account'
+    }
+}
+
+Describe 'High-value-fields database integrity' {
+    BeforeAll {
+        $hvPath = Join-Path $PSScriptRoot '..\Data\high-value-fields.json'
+        $script:hvRaw = Get-Content $hvPath -Raw | ConvertFrom-Json
+        $script:hvTables = @($script:hvRaw.PSObject.Properties | Where-Object MemberType -eq 'NoteProperty')
+    }
+
+    It 'has at least 10 table entries' {
+        $script:hvTables.Count | Should -BeGreaterOrEqual 10
+    }
+
+    It 'every entry has required fields' {
+        foreach ($prop in $script:hvTables) {
+            $entry = $prop.Value
+            $entry.description | Should -Not -BeNullOrEmpty -Because "$($prop.Name) needs a description"
+            $entry.highValueFields | Should -Not -BeNullOrEmpty -Because "$($prop.Name) needs highValueFields"
+            $entry.highValueFields.Count | Should -BeGreaterOrEqual 5 -Because "$($prop.Name) should have at least 5 fields"
+        }
+    }
+
+    It 'every entry with splitHints has valid KQL' {
+        foreach ($prop in $script:hvTables) {
+            $entry = $prop.Value
+            if ($entry.splitHints -and $entry.splitHints.Count -gt 0) {
+                foreach ($hint in $entry.splitHints) {
+                    $hint.kql | Should -Not -BeNullOrEmpty -Because "$($prop.Name) splitHint needs kql"
+                    $hint.kql | Should -Not -Match '^source \|' -Because "$($prop.Name) splitHint KQL should be condition-only (portal prepends 'source | where')"
+                    $hint.description | Should -Not -BeNullOrEmpty -Because "$($prop.Name) splitHint needs description"
+                }
+            }
+        }
+    }
+
+    It 'all common Sentinel tables are covered' {
+        $expectedTables = @('SecurityEvent', 'SigninLogs', 'CommonSecurityLog', 'Syslog', 'AuditLogs', 'AzureActivity', 'OfficeActivity')
+        foreach ($t in $expectedTables) {
+            $script:hvRaw.$t | Should -Not -BeNullOrEmpty -Because "$t should be in high-value-fields DB"
+        }
+    }
+
+    It 'TimeGenerated is in highValueFields for all tables' {
+        foreach ($prop in $script:hvTables) {
+            $prop.Value.highValueFields | Should -Contain 'TimeGenerated' -Because "$($prop.Name) should include TimeGenerated"
+        }
+    }
+}
+
+Describe 'Invoke-Analysis with split KQL generation' {
+    BeforeAll {
+        $tableUsage = @(
+            [PSCustomObject]@{ TableName = 'SecurityEvent'; DataGB = 150; MonthlyGB = 50; RecordCount = 1000000; EstMonthlyCostUSD = 279.50; IsFree = $false }
+        )
+
+        $classMap = @{
+            'SecurityEvent' = [PSCustomObject]@{ Classification = 'primary'; Category = 'Windows Security'; RecommendedTier = 'analytics'; IsFree = $false; RecommendedRetentionDays = 180; IsSplitTable = $false; ParentTable = $null }
+        }
+        $classifications = [PSCustomObject]@{
+            Classifications = $classMap
+            KeywordGaps     = @()
+            DatabaseEntries = 1
+        }
+
+        $rulesData = [PSCustomObject]@{
+            Rules         = @(
+                [PSCustomObject]@{
+                    RuleName = 'Failed Logons'
+                    Kind     = 'Scheduled'
+                    Enabled  = $true
+                    Tables   = @('SecurityEvent')
+                    HasQuery = $true
+                    Query    = 'SecurityEvent | where EventID == 4625 | summarize count() by Account, Computer'
+                    Description = ''
+                    ExcludedFromCorrelation = $false
+                    IncludedInCorrelation   = $false
+                }
+            )
+            TableCoverage = @{ 'SecurityEvent' = 1 }
+            TotalRules    = 1
+            EnabledRules  = 1
+            DontCorrCount = 0
+            IncCorrCount  = 0
+        }
+
+        $huntingData = [PSCustomObject]@{
+            Queries       = @()
+            TableCoverage = @{}
+            TotalQueries  = 0
+        }
+
+        $hvFields = @{
+            'SecurityEvent' = [PSCustomObject]@{
+                description     = 'Windows Security Events'
+                highValueFields = @('TimeGenerated', 'EventID', 'Account', 'Computer', 'Activity')
+                splitHints      = @(
+                    [PSCustomObject]@{
+                        description = 'Keep critical EventIDs'
+                        kql         = 'EventID in (4624, 4625, 4688)'
+                    }
+                )
+            }
+        }
+
+        $script:splitResult = Invoke-Analysis -TableUsage $tableUsage `
+                                               -Classifications $classifications `
+                                               -RulesData $rulesData `
+                                               -HuntingData $huntingData `
+                                               -SocRecommendations @() `
+                                               -HighValueFields $hvFields
+    }
+
+    It 'generates SplitCandidate recommendation with SplitSuggestion' {
+        $rec = $script:splitResult.Recommendations | Where-Object { $_.Type -eq 'SplitCandidate' -and $_.TableName -eq 'SecurityEvent' }
+        $rec | Should -Not -BeNullOrEmpty
+        $rec.SplitSuggestion | Should -Not -BeNullOrEmpty
+    }
+
+    It 'uses combined source when both KB and rules available' {
+        $rec = $script:splitResult.Recommendations | Where-Object { $_.Type -eq 'SplitCandidate' -and $_.TableName -eq 'SecurityEvent' }
+        $rec.SplitSuggestion.Source | Should -Be 'combined'
+    }
+
+    It 'includes split KQL from knowledge base' {
+        $rec = $script:splitResult.Recommendations | Where-Object { $_.Type -eq 'SplitCandidate' -and $_.TableName -eq 'SecurityEvent' }
+        $rec.SplitSuggestion.SplitKql | Should -Match 'EventID'
+    }
+
+    It 'extracts rule fields' {
+        $rec = $script:splitResult.Recommendations | Where-Object { $_.Type -eq 'SplitCandidate' -and $_.TableName -eq 'SecurityEvent' }
+        $rec.SplitSuggestion.RuleFields | Should -Contain 'EventID'
+        $rec.SplitSuggestion.RuleFields | Should -Contain 'Account'
+    }
+
+    It 'generates projection KQL' {
+        $rec = $script:splitResult.Recommendations | Where-Object { $_.Type -eq 'SplitCandidate' -and $_.TableName -eq 'SecurityEvent' }
+        $rec.SplitSuggestion.ProjectKql | Should -Not -BeNullOrEmpty
+        $rec.SplitSuggestion.ProjectKql | Should -Match 'project'
     }
 }

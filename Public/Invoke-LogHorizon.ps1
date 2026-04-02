@@ -89,6 +89,9 @@ function Invoke-LogHorizon {
         # Table retention configuration
         $result.TableRetention = Get-TableRetention -Context $ctx
 
+        # Data transforms (DCR-based)
+        $result.DataTransforms = Get-DataTransforms -Context $ctx
+
         [PSCustomObject]$result
     }
 
@@ -101,6 +104,7 @@ function Invoke-LogHorizon {
     $tableRetentionResult = $collectResult.TableRetention
     $tableRetention = $tableRetentionResult.Tables
     $workspaceRetentionDays = $tableRetentionResult.WorkspaceRetentionDays
+    $dataTransforms = $collectResult.DataTransforms
 
     # Phase 2 - Classification
     $classifications = Invoke-SpectreCommandWithStatus -Title "[deepskyblue1]Classifying log sources...[/]" -Spinner Dots -ScriptBlock {
@@ -108,6 +112,16 @@ function Invoke-LogHorizon {
                               -RuleTableCoverage $rulesData.TableCoverage `
                               -Keywords $Keywords `
                               -CustomClassificationPath $CustomClassificationPath
+    }
+
+    # Load high-value-fields knowledge base
+    $hvFieldsPath = Join-Path $PSScriptRoot '..\Data\high-value-fields.json'
+    $highValueFields = @{}
+    if (Test-Path $hvFieldsPath) {
+        $hvRaw = Get-Content $hvFieldsPath -Raw | ConvertFrom-Json
+        foreach ($prop in $hvRaw.PSObject.Properties) {
+            $highValueFields[$prop.Name] = $prop.Value
+        }
     }
 
     # Phase 3 - Analysis
@@ -120,7 +134,9 @@ function Invoke-LogHorizon {
                         -SocRecommendations $socRecs `
                         -TableRetention $tableRetention `
                         -WorkspaceRetentionDays $workspaceRetentionDays `
-                        -PricePerGB $PricePerGB
+                        -PricePerGB $PricePerGB `
+                        -DataTransforms $dataTransforms `
+                        -HighValueFields $highValueFields
     }
 
     $sw.Stop()

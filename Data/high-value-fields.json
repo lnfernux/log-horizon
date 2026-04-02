@@ -1,0 +1,245 @@
+{
+  "SecurityEvent": {
+    "description": "Windows Security Event Log - logon, process creation, service install, account management, policy changes",
+    "highValueFields": [
+      "TimeGenerated", "EventID", "Account", "Computer", "Activity",
+      "Process", "CommandLine", "NewProcessName", "ParentProcessName",
+      "LogonType", "IpAddress", "WorkstationName",
+      "SubjectUserName", "SubjectDomainName",
+      "TargetUserName", "TargetDomainName",
+      "ServiceName", "ServiceFileName",
+      "Status", "SubStatus", "LogonProcessName",
+      "AuthenticationPackageName", "PrivilegeList"
+    ],
+    "splitHints": [
+      {
+        "description": "Keep security-critical EventIDs in Analytics: logon (4624/4625/4648), process (4688), service install (7045), account changes (4720-4738), privilege (4672), Kerberoasting (4769), audit log cleared (1102)",
+        "kql": "EventID in (1102, 4624, 4625, 4634, 4648, 4657, 4663, 4672, 4688, 4697, 4698, 4699, 4700, 4701, 4702, 4720, 4722, 4723, 4724, 4725, 4726, 4728, 4732, 4733, 4738, 4740, 4756, 4767, 4769, 4771, 4776, 5136, 5140, 5145, 7034, 7040, 7045)"
+      }
+    ]
+  },
+  "SigninLogs": {
+    "description": "Azure AD interactive sign-in logs - authentication events, MFA, conditional access, risk detection",
+    "highValueFields": [
+      "TimeGenerated", "UserPrincipalName", "UserDisplayName", "IPAddress",
+      "Location", "ResultType", "ResultDescription",
+      "AppDisplayName", "AppId", "ClientAppUsed",
+      "DeviceDetail", "ConditionalAccessStatus",
+      "RiskLevelDuringSignIn", "RiskLevelAggregated", "RiskState", "RiskDetail",
+      "MfaDetail", "AuthenticationRequirement",
+      "ResourceDisplayName", "ResourceId",
+      "UserAgent", "CorrelationId", "OriginalRequestId",
+      "HomeTenantId", "ResourceTenantId"
+    ],
+    "splitHints": [
+      {
+        "description": "Keep failed sign-ins, risky sign-ins, and MFA events in Analytics",
+        "kql": "ResultType != 0 or RiskLevelDuringSignIn != \"none\" or ConditionalAccessStatus == \"failure\" or AuthenticationRequirement == \"multiFactorAuthentication\""
+      }
+    ]
+  },
+  "AADNonInteractiveUserSignInLogs": {
+    "description": "Azure AD non-interactive sign-in logs - token refreshes, service-to-service, background auth",
+    "highValueFields": [
+      "TimeGenerated", "UserPrincipalName", "IPAddress",
+      "Location", "ResultType", "ResultDescription",
+      "AppDisplayName", "ClientAppUsed",
+      "ConditionalAccessStatus", "RiskLevelDuringSignIn",
+      "ResourceDisplayName", "UserAgent", "CorrelationId"
+    ],
+    "splitHints": [
+      {
+        "description": "Keep failures and risky sign-ins in Analytics; routine token refreshes to Data Lake",
+        "kql": "ResultType != 0 or RiskLevelDuringSignIn != \"none\""
+      }
+    ]
+  },
+  "AuditLogs": {
+    "description": "Azure AD audit logs - directory changes, app registrations, role assignments, group changes",
+    "highValueFields": [
+      "TimeGenerated", "OperationName", "Category", "Result", "ResultReason",
+      "InitiatedBy", "TargetResources", "AdditionalDetails",
+      "LoggedByService", "CorrelationId", "Identity"
+    ],
+    "splitHints": [
+      {
+        "description": "Keep role/group changes, credential changes, and app modifications in Analytics",
+        "kql": "OperationName has_any (\"Add member\", \"Remove member\", \"Add owner\", \"Remove owner\", \"role\", \"password\", \"credential\", \"application\", \"service principal\", \"policy\", \"conditional access\")"
+      }
+    ]
+  },
+  "CommonSecurityLog": {
+    "description": "CEF-formatted logs from firewalls, proxies, IDS/IPS, WAFs, and other network security appliances",
+    "highValueFields": [
+      "TimeGenerated", "DeviceVendor", "DeviceProduct", "DeviceAction",
+      "Activity", "LogSeverity", "SimplifiedDeviceAction",
+      "SourceIP", "SourcePort", "DestinationIP", "DestinationPort",
+      "Protocol", "RequestURL", "RequestMethod",
+      "DestinationUserName", "SourceUserName",
+      "DeviceEventClassID", "Message"
+    ],
+    "splitHints": [
+      {
+        "description": "Keep denied/blocked/alert actions and high-severity events in Analytics",
+        "kql": "DeviceAction has_any (\"Deny\", \"Block\", \"Drop\", \"Reject\", \"Alert\", \"Reset\") or toint(LogSeverity) >= 7"
+      }
+    ]
+  },
+  "Syslog": {
+    "description": "Linux syslog - system events, authentication, daemon logs, cron, kernel messages",
+    "highValueFields": [
+      "TimeGenerated", "Computer", "HostIP", "Facility", "SeverityLevel",
+      "SyslogMessage", "ProcessName", "ProcessID"
+    ],
+    "splitHints": [
+      {
+        "description": "Keep auth, authpriv (login events), kern (kernel), and high-severity messages in Analytics",
+        "kql": "Facility in (\"auth\", \"authpriv\", \"kern\") or SeverityLevel in (\"emerg\", \"alert\", \"crit\", \"err\")"
+      }
+    ]
+  },
+  "AzureActivity": {
+    "description": "Azure platform activity log - resource CRUD, RBAC changes, policy events, service health",
+    "highValueFields": [
+      "TimeGenerated", "Caller", "CallerIpAddress",
+      "OperationNameValue", "CategoryValue", "ActivityStatusValue",
+      "ResourceGroup", "Resource", "ResourceId", "ResourceProviderValue",
+      "SubscriptionId", "Authorization", "HTTPRequest", "Level",
+      "Properties"
+    ],
+    "splitHints": [
+      {
+        "description": "Keep write/delete operations and failures in Analytics; read-only success events to Data Lake",
+        "kql": "CategoryValue in (\"Administrative\", \"Security\", \"Policy\") or ActivityStatusValue == \"Failed\" or OperationNameValue has_any (\"delete\", \"write\", \"action\")"
+      }
+    ]
+  },
+  "OfficeActivity": {
+    "description": "Office 365 unified audit log - Exchange, SharePoint, OneDrive, Teams, Power Platform activity",
+    "highValueFields": [
+      "TimeGenerated", "UserId", "Operation", "OfficeWorkload",
+      "ClientIP", "ResultStatus", "UserAgent",
+      "ItemName", "SourceFileName", "SourceRelativeUrl",
+      "SiteUrl", "OfficeObjectId", "UserType",
+      "ExternalAccess", "OrganizationName"
+    ],
+    "splitHints": [
+      {
+        "description": "Keep file sharing, permission changes, mailbox delegation, and external access events in Analytics",
+        "kql": "Operation has_any (\"SharingSet\", \"AnonymousLinkCreated\", \"SharingInvitationCreated\", \"AddedToSecureLink\", \"MemberAdded\", \"MemberRemoved\", \"Add-MailboxPermission\", \"Set-Mailbox\", \"New-InboxRule\", \"Set-InboxRule\", \"UpdateInboxRules\", \"FileDownloaded\", \"FileSyncDownloadedFull\") or ExternalAccess == true"
+      }
+    ]
+  },
+  "DeviceProcessEvents": {
+    "description": "Defender for Endpoint process creation and execution events",
+    "highValueFields": [
+      "TimeGenerated", "Timestamp", "DeviceName", "DeviceId",
+      "FileName", "FolderPath", "ProcessCommandLine",
+      "InitiatingProcessFileName", "InitiatingProcessCommandLine",
+      "InitiatingProcessFolderPath", "InitiatingProcessParentFileName",
+      "AccountName", "AccountDomain", "AccountSid",
+      "SHA256", "SHA1", "MD5",
+      "ProcessId", "ProcessCreationTime",
+      "LogonId", "LogonType"
+    ],
+    "splitHints": [
+      {
+        "description": "Keep suspicious process patterns in Analytics (LOLBins, scripting engines, unsigned, unusual paths)",
+        "kql": "FileName in~ (\"powershell.exe\", \"pwsh.exe\", \"cmd.exe\", \"wscript.exe\", \"cscript.exe\", \"mshta.exe\", \"regsvr32.exe\", \"rundll32.exe\", \"certutil.exe\", \"bitsadmin.exe\", \"msiexec.exe\", \"wmic.exe\", \"net.exe\", \"net1.exe\", \"nltest.exe\", \"dsquery.exe\", \"psexec.exe\", \"schtasks.exe\", \"sc.exe\", \"whoami.exe\", \"tasklist.exe\", \"systeminfo.exe\") or FolderPath has_any (\"\\\\Temp\\\\\", \"\\\\AppData\\\\\", \"\\\\ProgramData\\\\\", \"\\\\Downloads\\\\\")"
+      }
+    ]
+  },
+  "DeviceNetworkEvents": {
+    "description": "Defender for Endpoint network connection events",
+    "highValueFields": [
+      "TimeGenerated", "Timestamp", "DeviceName", "DeviceId",
+      "RemoteIP", "RemotePort", "RemoteUrl",
+      "LocalIP", "LocalPort", "Protocol",
+      "InitiatingProcessFileName", "InitiatingProcessCommandLine",
+      "ActionType", "AccountName"
+    ],
+    "splitHints": [
+      {
+        "description": "Keep connections from suspicious processes and uncommon ports in Analytics",
+        "kql": "InitiatingProcessFileName in~ (\"powershell.exe\", \"pwsh.exe\", \"cmd.exe\", \"wscript.exe\", \"cscript.exe\", \"mshta.exe\", \"rundll32.exe\", \"certutil.exe\") or RemotePort in (22, 23, 445, 3389, 5985, 5986, 4444, 8080, 8443, 1337)"
+      }
+    ]
+  },
+  "DeviceFileEvents": {
+    "description": "Defender for Endpoint file creation, modification, and deletion events",
+    "highValueFields": [
+      "TimeGenerated", "Timestamp", "DeviceName", "DeviceId",
+      "FileName", "FolderPath", "SHA256",
+      "InitiatingProcessFileName", "InitiatingProcessCommandLine",
+      "ActionType", "AccountName"
+    ],
+    "splitHints": [
+      {
+        "description": "Keep file events from suspicious processes and in sensitive paths in Analytics",
+        "kql": "ActionType in (\"FileCreated\", \"FileModified\") and (FolderPath has_any (\"\\\\System32\\\\\", \"\\\\Startup\\\\\", \"\\\\Tasks\\\\\", \"\\\\Temp\\\\\") or FileName endswith_cs \".exe\" or FileName endswith_cs \".dll\" or FileName endswith_cs \".ps1\" or FileName endswith_cs \".bat\" or FileName endswith_cs \".vbs\")"
+      }
+    ]
+  },
+  "DeviceLogonEvents": {
+    "description": "Defender for Endpoint logon and authentication events",
+    "highValueFields": [
+      "TimeGenerated", "Timestamp", "DeviceName", "DeviceId",
+      "AccountName", "AccountDomain", "AccountSid",
+      "LogonType", "ActionType",
+      "RemoteIP", "RemoteDeviceName",
+      "IsLocalAdmin", "FailureReason"
+    ],
+    "splitHints": [
+      {
+        "description": "Keep remote logons, failed logons, and admin logons in Analytics",
+        "kql": "ActionType == \"LogonFailed\" or LogonType in (\"RemoteInteractive\", \"Network\", \"CachedRemoteInteractive\") or IsLocalAdmin == true"
+      }
+    ]
+  },
+  "AzureDiagnostics": {
+    "description": "Azure resource diagnostic logs - diverse schema varies by resource type (NSG, KeyVault, SQL, etc.)",
+    "highValueFields": [
+      "TimeGenerated", "ResourceType", "Resource", "ResourceGroup",
+      "ResourceId", "OperationName", "Category",
+      "ResultType", "ResultSignature", "ResultDescription",
+      "CallerIPAddress", "Level", "CorrelationId",
+      "DurationMs", "Properties"
+    ],
+    "splitHints": [
+      {
+        "description": "Keep failures, Key Vault access, NSG flow denies, and high-severity events in Analytics",
+        "kql": "ResultType == \"Failed\" or Level == \"Error\" or Level == \"Critical\" or Category in (\"AuditEvent\", \"NetworkSecurityGroupEvent\", \"NetworkSecurityGroupRuleCounter\") or OperationName has_any (\"SecretGet\", \"SecretSet\", \"SecretDelete\", \"KeyGet\", \"VaultGet\")"
+      }
+    ]
+  },
+  "W3CIISLog": {
+    "description": "IIS web server access logs - HTTP requests, status codes, response times",
+    "highValueFields": [
+      "TimeGenerated", "sSiteName", "sComputerName",
+      "csMethod", "csUriStem", "csUriQuery",
+      "scStatus", "scSubStatus", "scWin32Status",
+      "cIP", "csUserAgent", "csReferer",
+      "sIP", "sPort", "TimeTaken", "csUserName"
+    ],
+    "splitHints": [
+      {
+        "description": "Keep error responses (4xx/5xx) and suspicious request patterns in Analytics",
+        "kql": "scStatus >= 400 or csUriStem has_any (\".asp\", \".php\", \".jsp\", \".cgi\", \"cmd.exe\", \"..\\\\\")"
+      }
+    ]
+  },
+  "WindowsFirewall": {
+    "description": "Windows Firewall log events - allowed and blocked network connections",
+    "highValueFields": [
+      "TimeGenerated", "Computer", "FirewallAction",
+      "SourceIP", "SourcePort", "DestinationIP", "DestinationPort",
+      "Protocol", "Direction", "ProcessName"
+    ],
+    "splitHints": [
+      {
+        "description": "Keep blocked connections and inbound traffic in Analytics",
+        "kql": "FirewallAction == \"DROP\" or Direction == \"IN\""
+      }
+    ]
+  }
+}

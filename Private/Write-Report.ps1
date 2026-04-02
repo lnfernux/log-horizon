@@ -95,6 +95,14 @@ function Write-Dashboard {
         $overviewLines += "[bold yellow]:warning: Workspace default retention is $($s.WorkspaceRetentionDays)d - increase to 90d[/]"
     }
 
+    if ($s.TablesWithTransforms -gt 0 -or $s.SplitTables -gt 0) {
+        $transformParts = @()
+        if ($s.TablesWithTransforms -gt 0) { $transformParts += "[deepskyblue1]$($s.TablesWithTransforms) table(s) with transforms[/]" }
+        if ($s.SplitTables -gt 0) { $transformParts += "[yellow]$($s.SplitTables) split table(s)[/]" }
+        if ($s.TransformDCRs -gt 0) { $transformParts += "[dim]$($s.TransformDCRs) DCR(s)[/]" }
+        $overviewLines += "[bold]Transforms:[/]       $($transformParts -join '  |  ')"
+    }
+
     if ($s.EstTotalSavings -gt 0) {
         $overviewLines += "[bold]Savings Potential:[/] [green]`$$($s.EstTotalSavings)/mo[/]"
     }
@@ -166,6 +174,8 @@ function Write-InteractiveMenu {
         'View Detection Assessment'     = 'detection'
         'View SOC Optimization'         = 'soc'
         'View Retention Assessment'     = 'retention'
+        'View Data Transforms'          = 'transforms'
+        'View Split KQL Suggestions'    = 'splitkql'
         'View All Tables'               = 'tables'
     }
 
@@ -194,6 +204,8 @@ function Write-InteractiveMenu {
             'detection'       { Write-DetectionAssessment -Analysis $Analysis }
             'soc'             { Write-SocOptimization -Analysis $Analysis }
             'retention'       { Write-RetentionAssessment -Analysis $Analysis }
+            'transforms'      { Write-DataTransforms -Analysis $Analysis }
+            'splitkql'        { Write-SplitKqlSuggestions -Analysis $Analysis }
             'tables'          { Write-AllTables -Analysis $Analysis }
             'xdr'             { Write-XDRAnalysis -Analysis $Analysis -DefenderXDR $DefenderXDR }
             'export'          {
@@ -232,11 +244,12 @@ function Write-Recommendations {
     $sorted = $Analysis.Recommendations |
         Sort-Object { $prioOrder[$_.Priority] }, { -$_.EstSavingsUSD }
 
-    $maxShow = [math]::Min(10, $sorted.Count)
+    $initialMax = 10
+    $showCount = [math]::Min($initialMax, $sorted.Count)
 
-    $lines = @("[bold]Recommendations[/] [dim](sorted by priority, top $maxShow)[/]", "")
+    $lines = @("[bold]Recommendations[/] [dim](sorted by priority, showing $showCount of $($sorted.Count))[/]", "")
 
-    for ($i = 0; $i -lt $maxShow; $i++) {
+    for ($i = 0; $i -lt $showCount; $i++) {
         $rec = $sorted[$i]
 
         $prioIcon = switch ($rec.Priority) {
@@ -253,12 +266,43 @@ function Write-Recommendations {
         $lines += ""
     }
 
-    if ($sorted.Count -gt 10) {
-        $lines += "[dim]... and $($sorted.Count - 10) more. Export report for full list.[/]"
+    $remaining = $sorted.Count - $initialMax
+    if ($remaining -gt 0) {
+        $lines += "[dim]... and $remaining more below.[/]"
     }
 
     $body = $lines -join "`n"
     $body | Format-SpectrePanel -Header "[dodgerblue2] RECOMMENDATIONS [/]" -Border Rounded -Color DodgerBlue2
+
+    # Offer to expand if there are more
+    if ($remaining -gt 0) {
+        Write-SpectreHost ""
+        $pick = Read-SpectreSelection -Title "[deepskyblue1]Show all recommendations?[/]" -Choices @("Show all $($sorted.Count) recommendations", 'Back') -Color DodgerBlue2
+
+        if ($pick -ne 'Back') {
+            $allLines = @("[bold]All Recommendations[/] [dim]($($sorted.Count) total)[/]", "")
+
+            for ($i = 0; $i -lt $sorted.Count; $i++) {
+                $rec = $sorted[$i]
+
+                $prioIcon = switch ($rec.Priority) {
+                    'High'   { '[red]HIGH[/]' }
+                    'Medium' { '[yellow]MED[/]' }
+                    'Low'    { '[deepskyblue1]LOW[/]' }
+                }
+
+                $savings = if ($rec.EstSavingsUSD -gt 0) { "  [green]~`$$($rec.EstSavingsUSD)/mo savings[/]" } else { '' }
+                $num = ($i + 1).ToString().PadLeft(2)
+
+                $allLines += "[bold]$num.[/] $prioIcon  [bold]$(Get-SafeEscapedText $rec.Title)[/]$savings"
+                $allLines += "      [dim]$(Get-SafeEscapedText $rec.Detail)[/]"
+                $allLines += ""
+            }
+
+            $allBody = $allLines -join "`n"
+            $allBody | Format-SpectrePanel -Header "[dodgerblue2] ALL RECOMMENDATIONS [/]" -Border Rounded -Color DodgerBlue2
+        }
+    }
 }
 
 # Detection assessment
@@ -458,6 +502,201 @@ function Write-SocRecommendationDrillDown {
         }
     }
     Write-SpectreHost ""
+}
+
+# Data transforms
+function Write-DataTransforms {
+    param([PSCustomObject]$Analysis)
+
+    $transforms = $Analysis.DataTransforms
+    $tablesWithTransforms = @($Analysis.TableAnalysis | Where-Object { $_.HasTransform })
+    $splitTables = @($Analysis.TableAnalysis | Where-Object { $_.IsSplitTable })
+
+    if ((-not $transforms -or $transforms.Transforms.Count -eq 0) -and $splitTables.Count -eq 0) {
+        Write-SpectreHost "[dim]No ingest-time transforms or split tables detected.[/]"
+        return
+    }
+
+    # Overview panel
+    $lines = @()
+    $lines += "[bold]DCRs with transforms:[/]  $($transforms.RelevantDCRs.Count) of $($transforms.TotalDCRs) total"
+    $lines += "[bold]Tables with transforms:[/] $($tablesWithTransforms.Count)"
+    $lines += "[bold]Split tables (_SPLT_CL):[/]  $($splitTables.Count)"
+
+    # Type breakdown
+    if ($transforms.Transforms.Count -gt 0) {
+        $typeGroups = $transforms.Transforms | Group-Object TransformType | Sort-Object Count -Descending
+        $typeSummary = ($typeGroups | ForEach-Object { "$($_.Name): $($_.Count)" }) -join ', '
+        $lines += "[bold]Transform types:[/]      $typeSummary"
+    }
+    $lines += ""
+
+    $body = $lines -join "`n"
+    $body | Format-SpectrePanel -Header "[dodgerblue2] DATA TRANSFORMS [/]" -Border Rounded -Color DodgerBlue2
+    Write-SpectreHost ""
+
+    # Split tables section
+    if ($splitTables.Count -gt 0) {
+        $splitRows = @()
+        foreach ($t in $splitTables) {
+            $parentGB = $null
+            $parentEntry = $Analysis.TableAnalysis | Where-Object { $_.TableName -eq $t.ParentTable } | Select-Object -First 1
+            $parentGBStr = if ($parentEntry) { "$($parentEntry.MonthlyGB)" } else { '-' }
+
+            $splitRows += [PSCustomObject]@{
+                'Split Table'  = Get-SafeEscapedText $t.TableName
+                'Parent'       = Get-SafeEscapedText $t.ParentTable
+                'Split GB/mo'  = $t.MonthlyGB
+                'Parent GB/mo' = $parentGBStr
+                'Plan'         = if ($t.TablePlan) { $t.TablePlan } else { 'Data Lake' }
+            }
+        }
+
+        $splitRows | Format-SpectreTable -Border Rounded -Color Yellow -HeaderColor Yellow
+        Write-SpectreHost ""
+    }
+
+    # Transform detail table
+    if ($transforms.Transforms.Count -gt 0) {
+        $table = @()
+        foreach ($t in $transforms.Transforms) {
+            $kqlPreview = $t.TransformKql
+            if ($kqlPreview.Length -gt 80) {
+                $kqlPreview = $kqlPreview.Substring(0, 77) + '...'
+            }
+
+            $typeMarkup = switch ($t.TransformType) {
+                'Filter'        { '[red]Filter[/]' }
+                'ColumnRemoval' { '[yellow]ColumnRemoval[/]' }
+                'Projection'    { '[yellow]Projection[/]' }
+                'Enrichment'    { '[green]Enrichment[/]' }
+                'Aggregation'   { '[deepskyblue1]Aggregation[/]' }
+                default         { '[grey]Custom[/]' }
+            }
+
+            $table += [PSCustomObject]@{
+                'Table'     = Get-SafeEscapedText $t.OutputTable
+                'Type'      = $typeMarkup
+                'DCR'       = Get-SafeEscapedText ($t.DCRName.Length -gt 30 ? $t.DCRName.Substring(0, 27) + '...' : $t.DCRName)
+                'Transform' = Get-SafeEscapedText $kqlPreview
+            }
+        }
+
+        $table | Format-SpectreTable -Border Rounded -Color DodgerBlue2 -HeaderColor DodgerBlue2 -AllowMarkup
+    }
+
+    Write-SpectreHost ""
+
+    # Drill-down submenu
+    if ($transforms.Transforms.Count -gt 0) {
+        $choices = @('Back') + @($transforms.Transforms | ForEach-Object { $_.OutputTable } | Select-Object -Unique | Sort-Object)
+        $pick = Read-SpectreSelection -Title "[deepskyblue1]Select a table for full KQL, or Back:[/]" -Choices $choices -Color DodgerBlue2
+
+        if ($pick -ne 'Back') {
+            $tableTransforms = @($transforms.Transforms | Where-Object { $_.OutputTable -eq $pick })
+            foreach ($tt in $tableTransforms) {
+                Write-SpectreHost ""
+                Write-SpectreHost "[dodgerblue2][bold]$($tt.OutputTable)[/] — $($tt.TransformType) via $(Get-SafeEscapedText $tt.DCRName)[/]"
+                Write-SpectreHost ""
+                Write-SpectreHost "[deepskyblue1]KQL:[/]"
+                Write-SpectreHost "[dim]$(Get-SafeEscapedText $tt.TransformKql)[/]"
+            }
+        }
+    }
+}
+
+# Split KQL suggestions
+function Write-SplitKqlSuggestions {
+    param([PSCustomObject]$Analysis)
+
+    $splitRecs = @($Analysis.Recommendations | Where-Object { $_.Type -eq 'SplitCandidate' -and $_.SplitSuggestion })
+
+    if ($splitRecs.Count -eq 0) {
+        Write-SpectreHost "[dim]No split KQL suggestions available. Tables must be high-volume primary sources with detections and no existing transforms.[/]"
+        return
+    }
+
+    # Overview
+    $lines = @()
+    $lines += "[bold]Split candidates:[/] $($splitRecs.Count) table(s)"
+    $withKql = @($splitRecs | Where-Object { $_.SplitSuggestion.SplitKql })
+    $lines += "[bold]With split KQL:[/]  $($withKql.Count) table(s) have a generated split suggestion"
+    $lines += ""
+    $body = $lines -join "`n"
+    $body | Format-SpectrePanel -Header "[dodgerblue2] SPLIT KQL SUGGESTIONS [/]" -Border Rounded -Color DodgerBlue2
+    Write-SpectreHost ""
+
+    # Summary table
+    $table = @()
+    foreach ($rec in $splitRecs) {
+        $s = $rec.SplitSuggestion
+        $sourceMarkup = switch ($s.Source) {
+            'knowledge-base' { '[green]Knowledge Base[/]' }
+            'rule-analysis'  { '[deepskyblue1]Rule Analysis[/]' }
+            'combined'       { '[green]Combined[/]' }
+            default          { '[grey]None[/]' }
+        }
+
+        $table += [PSCustomObject]@{
+            'Table'       = Get-SafeEscapedText $rec.TableName
+            'GB/mo'       = ($Analysis.TableAnalysis | Where-Object TableName -eq $rec.TableName).MonthlyGB
+            'Rules'       = $s.RuleCount
+            'Fields'      = "$($s.RuleFields.Count) rule + $($s.HighValueFields.Count) KB"
+            'Source'      = $sourceMarkup
+            'Est Savings' = "`$$($rec.EstSavingsUSD)/mo"
+        }
+    }
+
+    $table | Format-SpectreTable -Border Rounded -Color DodgerBlue2 -HeaderColor DodgerBlue2 -AllowMarkup
+    Write-SpectreHost ""
+
+    # Drill-down
+    $choices = @('Back') + @($splitRecs | ForEach-Object { $_.TableName })
+    $pick = Read-SpectreSelection -Title "[deepskyblue1]Select a table for full KQL suggestion, or Back:[/]" -Choices $choices -Color DodgerBlue2
+
+    if ($pick -ne 'Back') {
+        $rec = $splitRecs | Where-Object { $_.TableName -eq $pick } | Select-Object -First 1
+        $s = $rec.SplitSuggestion
+
+        Write-SpectreHost ""
+        Write-SpectreHost "[dodgerblue2][bold]$($rec.TableName)[/] — Split KQL Suggestion[/]"
+
+        if ($s.Description) {
+            Write-SpectreHost "[dim]$(Get-SafeEscapedText $s.Description)[/]"
+        }
+        Write-SpectreHost ""
+
+        # Show split KQL
+        if ($s.SplitKql) {
+            Write-SpectreHost "[bold]Split Transform KQL[/] [dim](condition-only — the portal prepends 'source | where' automatically)[/]"
+            Write-SpectreHost "[deepskyblue1]$(Get-SafeEscapedText $s.SplitKql)[/]"
+            Write-SpectreHost ""
+        }
+
+        # Show projection KQL
+        if ($s.ProjectKql) {
+            Write-SpectreHost "[bold]Column Reduction KQL[/] [dim](keeps only detection-relevant fields)[/]"
+            Write-SpectreHost "[deepskyblue1]$(Get-SafeEscapedText $s.ProjectKql)[/]"
+            Write-SpectreHost ""
+        }
+
+        # Show field analysis
+        if ($s.RuleFields.Count -gt 0) {
+            $ruleFieldStr = ($s.RuleFields | Select-Object -First 20) -join ', '
+            Write-SpectreHost "[bold]Fields from analytics rules ($($s.RuleFields.Count)):[/]"
+            Write-SpectreHost "  [white]$(Get-SafeEscapedText $ruleFieldStr)[/]"
+            Write-SpectreHost ""
+        }
+
+        if ($s.HighValueFields.Count -gt 0) {
+            $hvFieldStr = ($s.HighValueFields | Select-Object -First 20) -join ', '
+            Write-SpectreHost "[bold]Fields from knowledge base ($($s.HighValueFields.Count)):[/]"
+            Write-SpectreHost "  [white]$(Get-SafeEscapedText $hvFieldStr)[/]"
+            Write-SpectreHost ""
+        }
+
+        Write-SpectreHost "[dim]Source: $($s.Source) | $($s.RuleCount) rule(s) | $($s.ConditionCount) condition(s) extracted[/]"
+    }
 }
 
 # All tables

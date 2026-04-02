@@ -43,6 +43,27 @@ function Invoke-Classification {
     foreach ($table in $TableUsage) {
         $name = $table.TableName
 
+        # Detect _SPLT_CL tables (Sentinel split/filter Data Lake copies)
+        if ($name -match '^(.+)_SPLT_CL$') {
+            $parentName = $Matches[1]
+            $parentEntry = $lookup[$parentName]
+            $classified[$name] = [PSCustomObject]@{
+                TableName              = $name
+                Classification         = 'secondary'
+                Category               = 'Split Table (Data Lake)'
+                Description            = "Data Lake copy of $parentName via Sentinel split transform"
+                RecommendedTier        = 'datalake'
+                IsFree                 = $false
+                Source                 = 'split-detection'
+                Connector              = if ($parentEntry) { $parentEntry.connector } else { 'Unknown' }
+                MitreSources           = if ($parentEntry) { $parentEntry.mitreSources } else { @() }
+                RecommendedRetentionDays = 90
+                IsSplitTable           = $true
+                ParentTable            = $parentName
+            }
+            continue
+        }
+
         if ($lookup.ContainsKey($name)) {
             $entry = $lookup[$name]
             $classified[$name] = [PSCustomObject]@{
@@ -56,6 +77,8 @@ function Invoke-Classification {
                 Connector              = $entry.connector
                 MitreSources           = $entry.mitreSources
                 RecommendedRetentionDays = if ($entry.recommendedRetentionDays) { [int]$entry.recommendedRetentionDays } else { 90 }
+                IsSplitTable           = $false
+                ParentTable            = $null
             }
         }
         else {
@@ -174,5 +197,7 @@ function Resolve-DynamicClassification {
         Connector              = 'Unknown'
         MitreSources           = @()
         RecommendedRetentionDays = 90
+        IsSplitTable           = $false
+        ParentTable            = $null
     }
 }

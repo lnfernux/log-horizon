@@ -16,7 +16,9 @@ function Invoke-Analysis {
         [array]$SocRecommendations,
         [array]$TableRetention,
         [int]$WorkspaceRetentionDays = 0,
-        [decimal]$PricePerGB = 5.59
+        [decimal]$PricePerGB = 5.59,
+        [PSCustomObject]$DataTransforms,
+        [hashtable]$HighValueFields
     )
 
     $classMap       = $Classifications.Classifications   # hashtable
@@ -31,6 +33,12 @@ function Invoke-Analysis {
         foreach ($tr in $TableRetention) {
             $retentionMap[$tr.TableName] = $tr
         }
+    }
+
+    # Build transform lookup from DCR data
+    $transformLookup = @{}
+    if ($DataTransforms -and $DataTransforms.TableLookup) {
+        $transformLookup = $DataTransforms.TableLookup
     }
 
     # Per-table analysis
@@ -77,10 +85,21 @@ function Invoke-Analysis {
         $actualTotal = if ($ret) { [int]$ret.TotalRetentionInDays } else { $null }
         $actualInteractive = if ($ret) { [int]$ret.RetentionInDays } else { $null }
         $tablePlan = if ($ret) { $ret.Plan } else { $null }
+        $tableSubType = if ($ret) { $ret.TableSubType } else { $null }
         # Compliant = at least 90 days total retention (baseline)
         $retentionCompliant = if ($null -ne $actualTotal -and $tablePlan -eq 'Analytics') { $actualTotal -ge 90 } else { $null }
         # Can improve = meets 90d baseline but below category-specific recommendation
         $retentionCanImprove = if ($retentionCompliant -and $recommendedRetention -gt 90) { $actualTotal -lt $recommendedRetention } else { $false }
+
+        # Transform data
+        $tableTransforms = $transformLookup[$name]
+        $hasTransform = $null -ne $tableTransforms -and $tableTransforms.Count -gt 0
+        $transformTypes = if ($hasTransform) { @($tableTransforms | ForEach-Object { $_.TransformType } | Select-Object -Unique) } else { @() }
+        $transformKql = if ($hasTransform) { @($tableTransforms | ForEach-Object { $_.TransformKql }) } else { @() }
+
+        # Split table detection
+        $isSplitTable = if ($cls) { [bool]$cls.IsSplitTable } else { $false }
+        $parentTable = if ($cls) { $cls.ParentTable } else { $null }
 
         [PSCustomObject]@{
             TableName                    = $name
@@ -102,8 +121,14 @@ function Invoke-Analysis {
             ActualInteractiveRetentionDays = $actualInteractive
             RecommendedRetentionDays     = $recommendedRetention
             TablePlan                    = $tablePlan
+            TableSubType                 = $tableSubType
             RetentionCompliant           = $retentionCompliant
             RetentionCanImprove          = $retentionCanImprove
+            HasTransform                 = $hasTransform
+            TransformTypes               = $transformTypes
+            TransformKql                 = $transformKql
+            IsSplitTable                 = $isSplitTable
+            ParentTable                  = $parentTable
         }
     }
 
@@ -192,6 +217,40 @@ function Invoke-Analysis {
                 CurrentCost   = $t.EstMonthlyCostUSD
             })
         }
+
+        # 9. Split candidate — high-volume tables with some detections that could benefit from split
+        if (-not $t.IsFree -and
+            -not $t.IsSplitTable -and
+            -not $t.HasTransform -and
+            $t.MonthlyGB -ge 10 -and
+            $t.TotalCoverage -ge 1 -and
+            $t.Classification -eq 'primary') {
+
+            $splitSavings = [math]::Round($t.EstMonthlyCostUSD * 0.50, 2)
+
+            # Generate split KQL suggestion
+            $splitSuggestion = New-SplitKql -TableName $t.TableName `
+                                            -Rules $RulesData.Rules `
+                                            -HighValueFieldsDB $HighValueFields
+
+            $detail = "High-volume primary source ($($t.MonthlyGB) GB/mo) with $($t.TotalCoverage) detection(s). " +
+                      "Use a Sentinel split transform to route low-value events to Data Lake tier " +
+                      "while keeping detection-relevant events in Analytics."
+            if ($splitSuggestion.Source -ne 'none') {
+                $detail += " Split KQL suggestion available (source: $($splitSuggestion.Source))."
+            }
+
+            $recommendations.Add([PSCustomObject]@{
+                Priority        = 'Medium'
+                Type            = 'SplitCandidate'
+                TableName       = $t.TableName
+                Title           = "Consider split transform for $($t.TableName)"
+                Detail          = $detail
+                EstSavingsUSD   = $splitSavings
+                CurrentCost     = $t.EstMonthlyCostUSD
+                SplitSuggestion = $splitSuggestion
+            })
+        }
     }
 
     # Correlation data pass-through
@@ -266,6 +325,11 @@ function Invoke-Analysis {
     $retentionChecked         = $retentionCompliantCount + $retentionNonCompliant
     $retentionImprovableCount = @($tableAnalysis | Where-Object { $_.RetentionCanImprove -eq $true }).Count
 
+    # Transform stats
+    $tablesWithTransforms = @($tableAnalysis | Where-Object { $_.HasTransform }).Count
+    $splitTables          = @($tableAnalysis | Where-Object { $_.IsSplitTable }).Count
+    $transformDCRCount    = if ($DataTransforms) { $DataTransforms.RelevantDCRs.Count } else { 0 }
+
     [PSCustomObject]@{
         TableAnalysis       = $tableAnalysis
         Recommendations     = @($sortedRecs)
@@ -273,6 +337,7 @@ function Invoke-Analysis {
         SocRecommendations  = $SocRecommendations
         CorrelationExcluded = $corrExcluded
         CorrelationIncluded = $corrIncluded
+        DataTransforms      = $DataTransforms
         Summary             = [PSCustomObject]@{
             TotalTables            = $tableAnalysis.Count
             PrimaryCount           = $primaryTables.Count
@@ -293,6 +358,9 @@ function Invoke-Analysis {
             RetentionNonCompliant  = $retentionNonCompliant
             RetentionChecked       = $retentionChecked
             RetentionImprovable    = $retentionImprovableCount
+            TablesWithTransforms   = $tablesWithTransforms
+            SplitTables            = $splitTables
+            TransformDCRs          = $transformDCRCount
         }
     }
 }

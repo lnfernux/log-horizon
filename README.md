@@ -5,7 +5,7 @@
 **Microsoft Sentinel SIEM Log Source Analyzer**
 
 ![PowerShell 7+](https://img.shields.io/badge/PowerShell-7%2B-blue)
-![Module Version](https://img.shields.io/badge/version-0.3.0-green)
+![Module Version](https://img.shields.io/badge/version-0.4.0-green)
 
 ---
 I've had to answer *"what are we actually getting out of these logs?"* or *"what is the recommended logs for Microsoft Sentinel"* more times than I can count. The answer always depend on so many things, but we can be generic. So I built this thingy right here.
@@ -26,6 +26,9 @@ I've had to answer *"what are we actually getting out of these logs?"* or *"what
 | **Retention Compliance** | Compares actual retention against recommended minimums based on industry standards and security best practices |
 | **SOC Optimisation** | Pulls Microsoft's own SOC improvement recommendations from the Security Insights API |
 | **Keyword Gap Analysis** | Flag tables you should be ingesting but aren't based on vendor/product keywords |
+| **Transform Discovery** | Discovers Data Collection Rules (DCRs) and classifies ingest-time transforms (filter, projection, enrichment, aggregation) |
+| **Split Table Detection** | Identifies `_SPLT_CL` split tables and links them back to parent tables in the classification engine |
+| **Split KQL Generator** | Generates portal-ready split KQL from a 15-table knowledge base and/or your analytics rules — condition-only format that pastes straight into the Sentinel split rule editor |
 | **Custom Classifications** | Provide your own JSON to add or override the built-in classification database |
 | **Interactive TUI** | Spectre.Console dashboard with menus, colour-coded tables, drill-downs, and ASCII art |
 | **Export** | JSON or Markdown report for sharing with the team |
@@ -164,6 +167,7 @@ Then the module generates recommendations:
 | **XDR Optimise** | XDR-streamed + 0 Sentinel rules + XDR rules exist | Stop streaming, use the unified XDR portal instead |
 | **Missing Coverage** | Primary + zero detections | Write analytics rules to get value from the data |
 | **Ingest-time Filter** | Primary + >20 GB + <=3 detections | Apply ingest-time transformation to cut volume |
+| **Split Candidate** | Primary + high volume + detections + no existing transform | Split the table — high-value rows stay on Analytics, the rest goes to Data Lake |
 | **Retention Shortfall** | Table retention below recommended minimum | Increase total/archive retention to meet regulatory guidance |
 
 ### 4. Interactive dashboard
@@ -171,10 +175,12 @@ Then the module generates recommendations:
 You land in a Spectre.Console TUI with a menu:
 
 - **Dashboard**: overview stats, top 10 costliest tables, coverage bar, retention compliance summary, correlation exclusion callout
-- **Recommendations**: prioritised actions with estimated monthly savings (including retention shortfalls)
+- **Recommendations**: prioritised actions with estimated monthly savings — expandable to show the full list when there are more than 10
 - **Detection Assessment**: per-table rule and hunting query coverage breakdown, correlation-excluded rule listing
 - **SOC Optimisation**: Microsoft's own improvement suggestions
 - **Retention Assessment**: tables below recommended minimums with current vs recommended retention, plan type, and shortfall
+- **Transforms**: DCR transform inventory with transform type classification
+- **Split KQL Suggestions**: per-table split KQL ready to paste into the portal, with source attribution (knowledge base, rule analysis, or combined)
 - **All Tables**: the full list with classification, cost, rules, retention (colour-coded), and assessment
 - **XDR Analysis**: Defender XDR integration (when you used `-IncludeDefenderXDR`)
 - **Export**: dump the report to JSON or Markdown right from the menu
@@ -311,28 +317,30 @@ The classification criteria were drawn from the following sources:
 ## Project layout
 
 ```
-LogHorizon.psd1              Module manifest (v0.3.0)
+LogHorizon.psd1              Module manifest (v0.4.0)
 LogHorizon.psm1              Module loader
 Public/
   Invoke-LogHorizon.ps1      Entry point, the main orchestrator
 Private/
   Connect-Sentinel.ps1       Azure auth + workspace resolution
   Get-TableUsage.ps1         KQL query for ingestion volumes
-  Get-AnalyticsRules.ps1     Analytics rules + table extraction + correlation tags
+  Get-AnalyticsRules.ps1     Analytics rules + table/field extraction + correlation tags
   Get-HuntingQueries.ps1     Hunting queries + table extraction
   Get-DataConnectors.ps1     Data connector inventory
+  Get-DataTransforms.ps1     DCR transform discovery, split KQL generation
   Get-DefenderXDR.ps1        Defender XDR analysis (optional)
   Get-SocOptimization.ps1    SOC improvement recommendations
   Get-TableRetention.ps1     Per-table retention, archive, and plan type
-  Invoke-Classification.ps1  Static DB + heuristic classification
-  Invoke-Analysis.ps1        Cost-value matrix + recommendations
+  Invoke-Classification.ps1  Static DB + heuristic classification + _SPLT_CL detection
+  Invoke-Analysis.ps1        Cost-value matrix + recommendations + split suggestions
   Write-Report.ps1           Spectre.Console TUI rendering
   Export-Report.ps1          JSON / Markdown serialisation
 Data/
   log-classifications.json              344-entry classification knowledge base
+  high-value-fields.json                15-table split KQL knowledge base with curated fields and split hints
   custom-classifications-example.json   Example custom classification override file
 Tests/
-  LogHorizon.Tests.ps1       Pester v5 unit tests (35 tests)
+  LogHorizon.Tests.ps1       Pester v5 unit tests (73 tests)
 ```
 
 ## Tests
@@ -349,6 +357,7 @@ MIT
 
 | Version | Date | Changes |
 |---|---|---|
+| 0.4.0 | 2026-04-02 | Transform discovery (DCR listing + transform type classification), split table detection (`_SPLT_CL`), split KQL helper with 15-table knowledge base (`high-value-fields.json`) + rule-analysis fallback, portal-ready condition-only KQL output, expandable recommendations list, split KQL suggestions TUI menu |
 | 0.3.0 | 2026-04-02 | Log retention compliance analysis (CISA M-21-31, NIST SP 800-92, NCSC-UK, ASD ACSC, NSA), correlation tag detection (`#DONT_CORR#`/`#INC_CORR#`), retention assessment menu view, retention column in All Tables, `recommendedRetentionDays` in classification schema |
 | 0.2.2 | 2026-04-02 | SOC optimization table hides Detail column on narrow consoles |
 | 0.2.1 | 2026-04-02 | Custom classification support (`-CustomClassificationPath`), enriched SOC optimization recommendations with API suggestions/drill-down, active-only default view, UTF-8 encoding warning suppression |
