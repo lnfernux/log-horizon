@@ -98,6 +98,10 @@ function Get-TablesFromKql {
     $matches3 = [regex]::Matches($Kql, '(?i)\bunion\s+(?:isfuzzy\s*=\s*\w+\s+)?([A-Z]\w+)')
     foreach ($m in $matches3) { [void]$tables.Add($m.Groups[1].Value) }
 
+    # Pattern 4: table after let assignment (let x = TableName | ...)
+    $matches4 = [regex]::Matches($Kql, '(?im)^\s*let\s+\w+\s*=\s*([A-Z]\w+)\s*[\|\n;]')
+    foreach ($m in $matches4) { [void]$tables.Add($m.Groups[1].Value) }
+
     # Filter out KQL functions/keywords that might false-positive
     $kqlKeywords = @(
         'let', 'where', 'project', 'extend', 'summarize', 'render', 'sort',
