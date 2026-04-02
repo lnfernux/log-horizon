@@ -25,6 +25,15 @@ function Write-Report {
                           -ExportFormat $ExportFormat -ExportPath $ExportPath
 }
 
+function Get-ConsoleWidth {
+    try { $Host.UI.RawUI.WindowSize.Width } catch { 120 }
+}
+
+function Get-SafeEscapedText ([string]$Value) {
+    if ([string]::IsNullOrEmpty($Value)) { return '-' }
+    Get-SpectreEscapedText $Value
+}
+
 # Banner
 function Write-LogHorizonBanner {
     $art = @'
@@ -65,15 +74,26 @@ function Write-Dashboard {
     $bar = "[${coverageColor}]$('█' * $filled)[/][grey]$('░' * $empty)[/] $($s.CoveragePercent)%"
 
     $overviewLines = @(
-        "[bold]Workspace:[/]        [deepskyblue1]$(Get-SpectreEscapedText $WorkspaceName)[/]"
+        "[bold]Workspace:[/]        [deepskyblue1]$(Get-SafeEscapedText $WorkspaceName)[/]"
         "[bold]Scanned:[/]          $(Get-Date -Format 'yyyy-MM-dd')"
         ""
         "[bold]Tables:[/]           $($s.TotalTables)  [dim]([green]$($s.PrimaryCount) primary[/] [yellow]$($s.SecondaryCount) secondary[/]$(if ($s.UnknownCount -gt 0) { " [red]$($s.UnknownCount) unknown[/]" }))[/]"
         "[bold]Ingestion:[/]        $($s.TotalMonthlyGB) GB/mo"
         "[bold]Est. Cost:[/]        [bold]`$$($s.TotalMonthlyCost)/mo[/] [dim]@ `$$($s.PricePerGB)/GB[/]"
-        "[bold]Rules:[/]            $($s.EnabledRules) active  |  [bold]Hunting:[/] $($s.HuntingQueries)"
+        "[bold]Rules:[/]            $($s.EnabledRules) active  |  [bold]Hunting:[/] $($s.HuntingQueries)$(if ($s.DontCorrCount -gt 0) { "  |  [yellow]$($s.DontCorrCount) excluded from correlation[/]" })"
         "[bold]Coverage:[/]         $bar"
     )
+
+    if ($s.RetentionChecked -gt 0) {
+        $retColor = if ($s.RetentionNonCompliant -eq 0) { 'green' } elseif ($s.RetentionNonCompliant -le 5) { 'yellow' } else { 'red' }
+        $overviewLines += "[bold]Retention:[/]        [${retColor}]$($s.RetentionCompliant) of $($s.RetentionChecked) Analytics tables >= 90d[/]"
+        if ($s.RetentionImprovable -gt 0) {
+            $overviewLines += "                    [dim]$($s.RetentionImprovable) table(s) could benefit from extended retention[/]"
+        }
+    }
+    if ($s.WorkspaceRetentionDays -gt 0 -and $s.WorkspaceRetentionDays -lt 90) {
+        $overviewLines += "[bold yellow]:warning: Workspace default retention is $($s.WorkspaceRetentionDays)d - increase to 90d[/]"
+    }
 
     if ($s.EstTotalSavings -gt 0) {
         $overviewLines += "[bold]Savings Potential:[/] [green]`$$($s.EstTotalSavings)/mo[/]"
@@ -115,7 +135,7 @@ function Write-Dashboard {
 
         $table += [PSCustomObject]@{
             '#'          = $rank
-            'Table'      = Get-SpectreEscapedText $t.TableName
+            'Table'      = Get-SafeEscapedText $t.TableName
             'GB/mo'      = $t.MonthlyGB
             'Cost/mo'    = $costStr
             'Class'      = $clsMarkup
@@ -145,6 +165,7 @@ function Write-InteractiveMenu {
         'View Recommendations'          = 'recommendations'
         'View Detection Assessment'     = 'detection'
         'View SOC Optimization'         = 'soc'
+        'View Retention Assessment'     = 'retention'
         'View All Tables'               = 'tables'
     }
 
@@ -172,6 +193,7 @@ function Write-InteractiveMenu {
             'recommendations' { Write-Recommendations -Analysis $Analysis }
             'detection'       { Write-DetectionAssessment -Analysis $Analysis }
             'soc'             { Write-SocOptimization -Analysis $Analysis }
+            'retention'       { Write-RetentionAssessment -Analysis $Analysis }
             'tables'          { Write-AllTables -Analysis $Analysis }
             'xdr'             { Write-XDRAnalysis -Analysis $Analysis -DefenderXDR $DefenderXDR }
             'export'          {
@@ -190,8 +212,9 @@ function Write-InteractiveMenu {
         }
     }
 
+    $moduleVersion = (Import-PowerShellDataFile "$PSScriptRoot\..\LogHorizon.psd1").ModuleVersion
     Write-SpectreHost ""
-    Write-SpectreHost "[dim]Log Horizon v0.2.0 | $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss UTC' -AsUTC)[/]"
+    Write-SpectreHost "[dim]Log Horizon v${moduleVersion} | $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss UTC' -AsUTC)[/]"
     Write-SpectreHost ""
 }
 
@@ -225,8 +248,8 @@ function Write-Recommendations {
         $savings = if ($rec.EstSavingsUSD -gt 0) { "  [green]~`$$($rec.EstSavingsUSD)/mo savings[/]" } else { '' }
         $num = ($i + 1).ToString().PadLeft(2)
 
-        $lines += "[bold]$num.[/] $prioIcon  [bold]$(Get-SpectreEscapedText $rec.Title)[/]$savings"
-        $lines += "      [dim]$(Get-SpectreEscapedText $rec.Detail)[/]"
+        $lines += "[bold]$num.[/] $prioIcon  [bold]$(Get-SafeEscapedText $rec.Title)[/]$savings"
+        $lines += "      [dim]$(Get-SafeEscapedText $rec.Detail)[/]"
         $lines += ""
     }
 
@@ -254,7 +277,7 @@ function Write-DetectionAssessment {
         foreach ($grp in $wellCovered) {
             $tableList = ($grp.Group | ForEach-Object { $_.TableName }) -join ', '
             $totalRules = ($grp.Group | Measure-Object TotalCoverage -Sum).Sum
-            $lines += "  [green]●[/] $(Get-SpectreEscapedText $grp.Name): $(Get-SpectreEscapedText $tableList) [dim]($totalRules rules)[/]"
+            $lines += "  [green]●[/] $(Get-SafeEscapedText $grp.Name): $(Get-SafeEscapedText $tableList) [dim]($totalRules rules)[/]"
         }
         $lines += ""
     }
@@ -266,7 +289,7 @@ function Write-DetectionAssessment {
     if ($gaps) {
         $lines += "[yellow][bold]Gaps Detected[/][/]"
         foreach ($g in $gaps) {
-            $lines += "  [yellow]●[/] $(Get-SpectreEscapedText $g.TableName) - $($g.MonthlyGB) GB/mo, only $($g.TotalCoverage) rule(s)"
+            $lines += "  [yellow]●[/] $(Get-SafeEscapedText $g.TableName) - $($g.MonthlyGB) GB/mo, only $($g.TotalCoverage) rule(s)"
         }
         $lines += ""
     }
@@ -278,7 +301,7 @@ function Write-DetectionAssessment {
     if ($noCoverage) {
         $lines += "[red][bold]Primary Sources With Zero Detections[/][/]"
         foreach ($n in $noCoverage) {
-            $lines += "  [red]●[/] $(Get-SpectreEscapedText $n.TableName) - $(Get-SpectreEscapedText $n.Category)"
+            $lines += "  [red]●[/] $(Get-SafeEscapedText $n.TableName) - $(Get-SafeEscapedText $n.Category)"
         }
         $lines += ""
     }
@@ -287,7 +310,17 @@ function Write-DetectionAssessment {
     if ($Analysis.KeywordGaps.Count -gt 0) {
         $lines += "[red][bold]Not Ingesting (recommended based on keywords)[/][/]"
         foreach ($kg in $Analysis.KeywordGaps) {
-            $lines += "  [red]●[/] $(Get-SpectreEscapedText $kg.TableName) - $(Get-SpectreEscapedText $kg.Description)"
+            $lines += "  [red]●[/] $(Get-SafeEscapedText $kg.TableName) - $(Get-SafeEscapedText $kg.Description)"
+        }
+        $lines += ""
+    }
+
+    # Correlation excluded rules
+    if ($Analysis.CorrelationExcluded -and $Analysis.CorrelationExcluded.Count -gt 0) {
+        $lines += "[yellow][bold]Rules Excluded From Correlation (#DONT_CORR#)[/][/]"
+        foreach ($cr in $Analysis.CorrelationExcluded) {
+            $tables = if ($cr.Tables) { ($cr.Tables -join ', ') } else { '-' }
+            $lines += "  [yellow]●[/] $(Get-SafeEscapedText $cr.RuleName)  [dim]$(Get-SafeEscapedText $cr.Kind) | Tables: $(Get-SafeEscapedText $tables)[/]"
         }
         $lines += ""
     }
@@ -314,7 +347,7 @@ function Write-SocOptimization {
     $inactive = $Analysis.SocRecommendations | Where-Object { $_.State -ne 'Active' } | Sort-Object Title
 
     # Detect console width to decide whether to show Detail column
-    $showDetail = ($Host.UI.RawUI.WindowSize.Width -ge 121)
+    $showDetail = ((Get-ConsoleWidth) -ge 121)
 
     # Show active recommendations
     if ($active.Count -gt 0) {
@@ -326,13 +359,13 @@ function Write-SocOptimization {
                 $detail = Get-SocRecommendationDetail -Recommendation $sr
                 $table += [PSCustomObject]@{
                     '#'      = $num
-                    'Title'  = Get-SpectreEscapedText $sr.Title
-                    'Detail' = Get-SpectreEscapedText ($detail.Length -gt 120 ? $detail.Substring(0, 117) + '...' : $detail)
+                    'Title'  = Get-SafeEscapedText $sr.Title
+                    'Detail' = Get-SafeEscapedText ($detail.Length -gt 120 ? $detail.Substring(0, 117) + '...' : $detail)
                 }
             } else {
                 $table += [PSCustomObject]@{
                     '#'      = $num
-                    'Title'  = Get-SpectreEscapedText $sr.Title
+                    'Title'  = Get-SafeEscapedText $sr.Title
                 }
             }
         }
@@ -360,13 +393,13 @@ function Write-SocOptimization {
                 $detail = Get-SocRecommendationDetail -Recommendation $sr
                 $inactiveTable += [PSCustomObject]@{
                     '#'      = $inum
-                    'Title'  = Get-SpectreEscapedText $sr.Title
-                    'Detail' = Get-SpectreEscapedText ($detail.Length -gt 120 ? $detail.Substring(0, 117) + '...' : $detail)
+                    'Title'  = Get-SafeEscapedText $sr.Title
+                    'Detail' = Get-SafeEscapedText ($detail.Length -gt 120 ? $detail.Substring(0, 117) + '...' : $detail)
                 }
             } else {
                 $inactiveTable += [PSCustomObject]@{
                     '#'      = $inum
-                    'Title'  = Get-SpectreEscapedText $sr.Title
+                    'Title'  = Get-SafeEscapedText $sr.Title
                 }
             }
         }
@@ -399,21 +432,21 @@ function Write-SocRecommendationDrillDown {
 
     $rec = $Recommendation
     Write-SpectreHost ""
-    Write-SpectreHost "[dodgerblue2]$(Get-SpectreEscapedText $rec.Title)[/]"
+    Write-SpectreHost "[dodgerblue2]$(Get-SafeEscapedText $rec.Title)[/]"
     if ($rec.Description) {
-        Write-SpectreHost "[white]$(Get-SpectreEscapedText $rec.Description)[/]"
+        Write-SpectreHost "[white]$(Get-SafeEscapedText $rec.Description)[/]"
     }
     if ($rec.Suggestions -and $rec.Suggestions.Count -gt 0) {
         Write-SpectreHost ""
         Write-SpectreHost "[deepskyblue1]Suggestions:[/]"
         foreach ($s in $rec.Suggestions) {
             $title = if ($s.Title) { $s.Title } else { $s.TypeId }
-            Write-SpectreHost "  [yellow]>[/] [white]$(Get-SpectreEscapedText $title)[/]"
+            Write-SpectreHost "  [yellow]>[/] [white]$(Get-SafeEscapedText $title)[/]"
             if ($s.Description) {
-                Write-SpectreHost "    [dim]$(Get-SpectreEscapedText $s.Description)[/]"
+                Write-SpectreHost "    [dim]$(Get-SafeEscapedText $s.Description)[/]"
             }
             if ($s.Action) {
-                Write-SpectreHost "    [green]Action:[/] [white]$(Get-SpectreEscapedText $s.Action)[/]"
+                Write-SpectreHost "    [green]Action:[/] [white]$(Get-SafeEscapedText $s.Action)[/]"
             }
         }
     }
@@ -421,7 +454,7 @@ function Write-SocRecommendationDrillDown {
         Write-SpectreHost ""
         Write-SpectreHost "[deepskyblue1]Additional context:[/]"
         foreach ($key in $rec.AdditionalProperties.PSObject.Properties.Name) {
-            Write-SpectreHost "  [dim]${key}:[/] [white]$(Get-SpectreEscapedText "$($rec.AdditionalProperties.$key)")[/]"
+            Write-SpectreHost "  [dim]${key}:[/] [white]$(Get-SafeEscapedText "$($rec.AdditionalProperties.$key)")[/]"
         }
     }
     Write-SpectreHost ""
@@ -430,6 +463,10 @@ function Write-SocRecommendationDrillDown {
 # All tables
 function Write-AllTables {
     param([PSCustomObject]$Analysis)
+
+    $width = Get-ConsoleWidth
+    $showRetention = ($width -ge 140)
+    $showHunting   = ($width -ge 120)
 
     $sorted = $Analysis.TableAnalysis | Sort-Object EstMonthlyCostUSD -Descending
 
@@ -457,20 +494,145 @@ function Write-AllTables {
 
         $costStr = if ($t.IsFree) { '[deepskyblue1]FREE[/]' } else { "`$$($t.EstMonthlyCostUSD)" }
 
-        $table += [PSCustomObject]@{
+        # Retention column: green >= recommended, yellow >= 90 but below recommended, red < 90
+        $retStr = if ($null -eq $t.ActualRetentionDays) {
+            '[grey]-[/]'
+        } elseif ($t.RetentionCompliant -eq $false) {
+            "[red]$($t.ActualRetentionDays)d[/]"
+        } elseif ($t.RetentionCanImprove) {
+            "[yellow]$($t.ActualRetentionDays)d[/]"
+        } elseif ($t.RetentionCompliant) {
+            "[green]$($t.ActualRetentionDays)d[/]"
+        } else {
+            "[grey]$($t.ActualRetentionDays)d[/]"
+        }
+        if ($t.TablePlan -and $t.TablePlan -ne 'Analytics') {
+            $retStr += " [dim]($($t.TablePlan))[/]"
+        }
+
+        $row = [ordered]@{
             '#'          = $rank
-            'Table'      = Get-SpectreEscapedText $t.TableName
+            'Table'      = Get-SafeEscapedText $t.TableName
             'GB/mo'      = $t.MonthlyGB
             'Cost/mo'    = $costStr
             'Class'      = $clsMarkup
             'Rules'      = $t.AnalyticsRules
-            'Hunting'    = $t.HuntingQueries
-            'Assessment' = $assessMarkup
         }
+        if ($showHunting)   { $row['Hunting']   = $t.HuntingQueries }
+        if ($showRetention) { $row['Retention'] = $retStr }
+        $row['Assessment'] = $assessMarkup
+
+        $table += [PSCustomObject]$row
     }
 
     $table | Format-SpectreTable -Border Rounded -Color DodgerBlue2 -HeaderColor DodgerBlue2 -AllowMarkup
     Write-SpectreHost "[dim]  $($sorted.Count) total tables.[/]"
+}
+
+# Retention assessment
+function Write-RetentionAssessment {
+    param([PSCustomObject]$Analysis)
+
+    $s = $Analysis.Summary
+    if ($s.RetentionChecked -eq 0) {
+        Write-SpectreHost "[dim]No retention data available. Tables API may not have returned results.[/]"
+        return
+    }
+
+    # Tables with category recommendation above 90d (regardless of current retention)
+    $extendedRecTables = @($Analysis.TableAnalysis |
+        Where-Object { $_.RecommendedRetentionDays -gt 90 -and $null -ne $_.RetentionCompliant })
+
+    # Overview panel
+    $lines = @()
+    if ($s.WorkspaceRetentionDays -gt 0) {
+        $wsColor = if ($s.WorkspaceRetentionDays -ge 90) { 'green' } else { 'red' }
+        $lines += "[bold]Workspace Default:[/] [${wsColor}]$($s.WorkspaceRetentionDays)d[/]$(if ($s.WorkspaceRetentionDays -lt 90) { ' [yellow](increase to 90d)[/]' })"
+    }
+    $lines += "[bold]Baseline (>=90d):[/]  [green]$($s.RetentionCompliant)[/] of $($s.RetentionChecked) Analytics tables"
+    if ($s.RetentionNonCompliant -gt 0) {
+        $lines += "[bold]Below Baseline:[/]   [red]$($s.RetentionNonCompliant)[/] table(s) below 90d"
+    }
+    if ($extendedRecTables.Count -gt 0) {
+        $lines += "[bold]Extended (>90d):[/]  [deepskyblue1]$($extendedRecTables.Count)[/] table(s) recommended for 180d+ retention"
+    }
+    $lines += ""
+
+    $body = $lines -join "`n"
+    $body | Format-SpectrePanel -Header "[dodgerblue2] RETENTION OVERVIEW [/]" -Border Rounded -Color DodgerBlue2
+    Write-SpectreHost ""
+
+    # Non-compliant tables (below 90d)
+    $nonCompliant = $Analysis.TableAnalysis |
+        Where-Object { $_.RetentionCompliant -eq $false } |
+        Sort-Object ActualRetentionDays
+
+    if ($nonCompliant.Count -gt 0) {
+        $table = @()
+        foreach ($t in $nonCompliant) {
+            $shortfall = 90 - $t.ActualRetentionDays
+            $planStr = if ($t.TablePlan) { $t.TablePlan } else { '-' }
+
+            $table += [PSCustomObject]@{
+                'Table'     = Get-SafeEscapedText $t.TableName
+                'Plan'      = $planStr
+                'Current'   = "$($t.ActualRetentionDays)d"
+                'Baseline'  = '90d'
+                'Shortfall' = "[red]+${shortfall}d needed[/]"
+            }
+        }
+
+        $table | Format-SpectreTable -Border Rounded -Color Red -HeaderColor Red -AllowMarkup
+        Write-SpectreHost ""
+    } else {
+        Write-SpectreHost "[green]All Analytics tables meet the 90-day baseline.[/]"
+        Write-SpectreHost ""
+    }
+
+    Write-SpectreHost "[dim]  Baseline: 90 days. Extended recommendations based on a combined set of industry standards, regulatory baselines, and security best practices.[/]"
+    Write-SpectreHost ""
+
+    # Submenu
+    $choices = @('Back')
+    if ($extendedRecTables.Count -gt 0) {
+        $choices = @("Show extended retention recommendations ($($extendedRecTables.Count) tables)", 'Back')
+    }
+
+    $pick = Read-SpectreSelection -Title "[deepskyblue1]Select an option:[/]" -Choices $choices -Color DodgerBlue2
+
+    if ($pick -ne 'Back') {
+        Write-SpectreHost ""
+
+        $sorted = $extendedRecTables | Sort-Object RecommendedRetentionDays -Descending
+
+        $impTable = @()
+        foreach ($t in $sorted) {
+            $currentStr = if ($null -ne $t.ActualRetentionDays) { "$($t.ActualRetentionDays)d" } else { '-' }
+            $statusMarkup = if ($null -ne $t.ActualRetentionDays -and $t.ActualRetentionDays -ge $t.RecommendedRetentionDays) {
+                '[green]Met[/]'
+            } elseif ($t.RetentionCompliant) {
+                '[yellow]Baseline only[/]'
+            } else {
+                '[red]Below baseline[/]'
+            }
+
+            $impTable += [PSCustomObject]@{
+                'Table'       = Get-SafeEscapedText $t.TableName
+                'Category'    = Get-SafeEscapedText $t.Category
+                'Current'     = $currentStr
+                'Recommended' = "[deepskyblue1]$($t.RecommendedRetentionDays)d[/]"
+                'Status'      = $statusMarkup
+            }
+        }
+
+        $impTable | Format-SpectreTable -Border Rounded -Color DodgerBlue2 -HeaderColor DodgerBlue2 -AllowMarkup
+
+        Write-SpectreHost ""
+        Write-SpectreHost "[deepskyblue1][bold]Tip:[/] Use the Data Lake (Auxiliary) tier for retention beyond 90 days.[/]"
+        Write-SpectreHost "[dim]  Keep 90 days in the Analytics tier for active hunting and detections,[/]"
+        Write-SpectreHost "[dim]  then archive to the Data Lake tier for long-term compliance retention.[/]"
+        Write-SpectreHost "[dim]  Data Lake storage costs ~95% less than Analytics tier ingestion.[/]"
+    }
 }
 
 # Defender XDR analysis
@@ -491,7 +653,7 @@ function Write-XDRAnalysis {
 
     $xdrStreaming = $Analysis.TableAnalysis | Where-Object IsXDRStreaming
     if ($xdrStreaming) {
-        $streamingNames = ($xdrStreaming | ForEach-Object { Get-SpectreEscapedText $_.TableName }) -join ', '
+        $streamingNames = ($xdrStreaming | ForEach-Object { Get-SafeEscapedText $_.TableName }) -join ', '
         $lines += "[bold]Streaming to Sentinel:[/] $streamingNames"
     }
 
@@ -500,8 +662,8 @@ function Write-XDRAnalysis {
         $lines += ""
         $lines += "[yellow][bold]Optimization Opportunities:[/][/]"
         foreach ($xr in $xdrRecs) {
-            $lines += "  [yellow]>[/] $(Get-SpectreEscapedText $xr.Title)"
-            $lines += "    [dim]$(Get-SpectreEscapedText $xr.Detail)[/]"
+            $lines += "  [yellow]>[/] $(Get-SafeEscapedText $xr.Title)"
+            $lines += "    [dim]$(Get-SafeEscapedText $xr.Detail)[/]"
         }
     }
 
@@ -540,5 +702,5 @@ function Invoke-ExportFromMenu {
                   -WorkspaceName $WorkspaceName `
                   -DefenderXDR $DefenderXDR
 
-    Write-SpectreHost "[green]Report exported to [bold]$(Get-SpectreEscapedText $ExportPath)[/][/]"
+    Write-SpectreHost "[green]Report exported to [bold]$(Get-SafeEscapedText $ExportPath)[/][/]"
 }

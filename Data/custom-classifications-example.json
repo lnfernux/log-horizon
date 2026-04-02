@@ -8,7 +8,8 @@
     "keywords": ["custom", "internal", "audit"],
     "mitreSources": [],
     "recommendedTier": "analytics",
-    "isFree": false
+    "isFree": false,
+    "recommendedRetentionDays": 180
   },
   {
     "tableName": "AzureMetrics",
@@ -19,6 +20,7 @@
     "keywords": ["metrics", "azure", "infrastructure", "monitoring"],
     "mitreSources": [],
     "recommendedTier": "analytics",
-    "isFree": false
+    "isFree": false,
+    "recommendedRetentionDays": 365
   }
 ]

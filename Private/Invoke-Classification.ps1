@@ -46,15 +46,16 @@ function Invoke-Classification {
         if ($lookup.ContainsKey($name)) {
             $entry = $lookup[$name]
             $classified[$name] = [PSCustomObject]@{
-                TableName       = $name
-                Classification  = $entry.classification
-                Category        = $entry.category
-                Description     = $entry.description
-                RecommendedTier = $entry.recommendedTier
-                IsFree          = $entry.isFree
-                Source          = 'database'
-                Connector       = $entry.connector
-                MitreSources    = $entry.mitreSources
+                TableName              = $name
+                Classification         = $entry.classification
+                Category               = $entry.category
+                Description            = $entry.description
+                RecommendedTier        = $entry.recommendedTier
+                IsFree                 = $entry.isFree
+                Source                 = 'database'
+                Connector              = $entry.connector
+                MitreSources           = $entry.mitreSources
+                RecommendedRetentionDays = if ($entry.recommendedRetentionDays) { [int]$entry.recommendedRetentionDays } else { 90 }
             }
         }
         else {
@@ -163,14 +164,15 @@ function Resolve-DynamicClassification {
     }
 
     [PSCustomObject]@{
-        TableName       = $TableName
-        Classification  = $classification
-        Category        = $category
-        Description     = $reason
-        RecommendedTier = $tier
-        IsFree          = $false
-        Source          = 'heuristic'
-        Connector       = 'Unknown'
-        MitreSources    = @()
+        TableName              = $TableName
+        Classification         = $classification
+        Category               = $category
+        Description            = $reason
+        RecommendedTier        = $tier
+        IsFree                 = $false
+        Source                 = 'heuristic'
+        Connector              = 'Unknown'
+        MitreSources           = @()
+        RecommendedRetentionDays = 90
     }
 }

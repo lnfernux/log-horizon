@@ -23,13 +23,30 @@ function Get-DataConnectors {
     } while ($uri)
 
     $connectors = foreach ($c in $allConnectors) {
+        # Determine connection status from known connector state properties
+        $connected = $false
+        $props = $c.properties
+        if ($props) {
+            if ($null -ne $props.dataTypes) {
+                # Check if any dataType has a non-null/non-disconnected state
+                $connected = $props.dataTypes.PSObject.Properties.Value |
+                    Where-Object { $_.state -and $_.state -ne 'Disabled' } |
+                    Select-Object -First 1
+                $connected = [bool]$connected
+            } elseif ($null -ne $props.connectorUiConfig) {
+                $connected = $true
+            } else {
+                $connected = $true
+            }
+        }
+
         [PSCustomObject]@{
             Id            = $c.id
             Name          = $c.name
             Kind          = $c.kind
-            DisplayName   = $c.properties.displayName
+            DisplayName   = $props.displayName
             ConnectorType = $c.kind
-            IsConnected   = ($null -ne $c.properties)
+            IsConnected   = $connected
         }
     }
 

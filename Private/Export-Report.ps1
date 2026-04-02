@@ -12,19 +12,24 @@ function Export-Report {
         [PSCustomObject]$DefenderXDR
     )
 
+    $moduleVersion = (Import-PowerShellDataFile "$PSScriptRoot\..\LogHorizon.psd1").ModuleVersion
+
     switch ($Format) {
         'json' {
             $export = [ordered]@{
                 metadata = [ordered]@{
                     tool      = 'Log Horizon'
-                    version   = '0.1.0'
+                    version   = $moduleVersion
                     workspace = $WorkspaceName
                     generated = (Get-Date -Format 'o')
                 }
-                summary         = $Analysis.Summary
-                tableAnalysis   = $Analysis.TableAnalysis
-                recommendations = $Analysis.Recommendations
-                keywordGaps     = $Analysis.KeywordGaps
+                summary              = $Analysis.Summary
+                tableAnalysis        = $Analysis.TableAnalysis
+                recommendations      = $Analysis.Recommendations
+                keywordGaps          = $Analysis.KeywordGaps
+                correlationExcluded  = $Analysis.CorrelationExcluded
+                correlationIncluded  = $Analysis.CorrelationIncluded
+                socRecommendations   = $Analysis.SocRecommendations
             }
             if ($DefenderXDR) {
                 $export.defenderXDR = [ordered]@{

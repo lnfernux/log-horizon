@@ -14,6 +14,8 @@ function Invoke-Analysis {
         [Parameter(Mandatory)][PSCustomObject]$HuntingData,
         [PSCustomObject]$DefenderXDR,
         [array]$SocRecommendations,
+        [array]$TableRetention,
+        [int]$WorkspaceRetentionDays = 0,
         [decimal]$PricePerGB = 5.59
     )
 
@@ -22,6 +24,14 @@ function Invoke-Analysis {
     $huntCoverage   = $HuntingData.TableCoverage          # hashtable: table -> count
     $xdrCoverage    = if ($DefenderXDR) { $DefenderXDR.XDRTableCoverage } else { @{} }
     $xdrStreaming   = if ($DefenderXDR) { $DefenderXDR.StreamingTables } else { @() }
+
+    # Build retention lookup from Tables API data
+    $retentionMap = @{}
+    if ($TableRetention) {
+        foreach ($tr in $TableRetention) {
+            $retentionMap[$tr.TableName] = $tr
+        }
+    }
 
     # Per-table analysis
     $tableAnalysis = foreach ($table in $TableUsage) {
@@ -61,22 +71,39 @@ function Invoke-Analysis {
 
         $isXDRStreaming = $name -in $xdrStreaming
 
+        # Retention data
+        $ret = $retentionMap[$name]
+        $recommendedRetention = if ($cls -and $null -ne $cls.RecommendedRetentionDays -and $cls.RecommendedRetentionDays -gt 0) { [int]$cls.RecommendedRetentionDays } else { 90 }
+        $actualTotal = if ($ret) { [int]$ret.TotalRetentionInDays } else { $null }
+        $actualInteractive = if ($ret) { [int]$ret.RetentionInDays } else { $null }
+        $tablePlan = if ($ret) { $ret.Plan } else { $null }
+        # Compliant = at least 90 days total retention (baseline)
+        $retentionCompliant = if ($null -ne $actualTotal -and $tablePlan -eq 'Analytics') { $actualTotal -ge 90 } else { $null }
+        # Can improve = meets 90d baseline but below category-specific recommendation
+        $retentionCanImprove = if ($retentionCompliant -and $recommendedRetention -gt 90) { $actualTotal -lt $recommendedRetention } else { $false }
+
         [PSCustomObject]@{
-            TableName          = $name
-            Classification     = $classification
-            Category           = if ($cls) { $cls.Category } else { 'Unknown' }
-            MonthlyGB          = $table.MonthlyGB
-            EstMonthlyCostUSD  = $table.EstMonthlyCostUSD
-            IsFree             = $table.IsFree
-            AnalyticsRules     = $ruleCount
-            HuntingQueries     = $huntCount
-            XDRRules           = $xdrRuleCount
-            TotalCoverage      = $totalCoverage
-            CostTier           = $costTier
-            DetectionTier      = $detectionTier
-            Assessment         = $assessment
-            IsXDRStreaming     = $isXDRStreaming
-            RecommendedTier    = if ($cls) { $cls.RecommendedTier } else { 'analytics' }
+            TableName                    = $name
+            Classification               = $classification
+            Category                     = if ($cls) { $cls.Category } else { 'Unknown' }
+            MonthlyGB                    = $table.MonthlyGB
+            EstMonthlyCostUSD            = $table.EstMonthlyCostUSD
+            IsFree                       = $table.IsFree
+            AnalyticsRules               = $ruleCount
+            HuntingQueries               = $huntCount
+            XDRRules                     = $xdrRuleCount
+            TotalCoverage                = $totalCoverage
+            CostTier                     = $costTier
+            DetectionTier                = $detectionTier
+            Assessment                   = $assessment
+            IsXDRStreaming               = $isXDRStreaming
+            RecommendedTier              = if ($cls) { $cls.RecommendedTier } else { 'analytics' }
+            ActualRetentionDays          = $actualTotal
+            ActualInteractiveRetentionDays = $actualInteractive
+            RecommendedRetentionDays     = $recommendedRetention
+            TablePlan                    = $tablePlan
+            RetentionCompliant           = $retentionCompliant
+            RetentionCanImprove          = $retentionCanImprove
         }
     }
 
@@ -167,7 +194,57 @@ function Invoke-Analysis {
         }
     }
 
-    # Sort recommendations by estimated savings descending
+    # Correlation data pass-through
+    $corrExcluded = @($RulesData.Rules | Where-Object ExcludedFromCorrelation)
+    $corrIncluded = @($RulesData.Rules | Where-Object IncludedInCorrelation)
+
+    # 6. Workspace retention check
+    if ($WorkspaceRetentionDays -gt 0 -and $WorkspaceRetentionDays -lt 90) {
+        $recommendations.Add([PSCustomObject]@{
+            Priority      = 'High'
+            Type          = 'RetentionShortfall'
+            TableName     = '(workspace default)'
+            Title         = "Workspace default retention is $($WorkspaceRetentionDays)d — increase to at least 90d"
+            Detail        = "The workspace default retention is $($WorkspaceRetentionDays) days. " +
+                            "A 90-day minimum is recommended as a security baseline. " +
+                            "Tables inheriting the default will not meet compliance requirements."
+            EstSavingsUSD = 0
+            CurrentCost   = 0
+        })
+    }
+
+    # 7. Per-table retention below 90d baseline
+    foreach ($t in $tableAnalysis) {
+        if ($null -eq $t.RetentionCompliant -or $t.RetentionCompliant) { continue }
+
+        $prio = if ($t.Classification -eq 'primary') { 'High' } else { 'Medium' }
+        $recommendations.Add([PSCustomObject]@{
+            Priority      = $prio
+            Type          = 'RetentionShortfall'
+            TableName     = $t.TableName
+            Title         = "$($t.TableName) retention below 90d baseline ($($t.ActualRetentionDays)d)"
+            Detail        = "Total retention is $($t.ActualRetentionDays) days. A 90-day minimum is the recommended " +
+                            "security baseline. Increase total retention or add archive retention."
+            EstSavingsUSD = 0
+            CurrentCost   = $t.EstMonthlyCostUSD
+        })
+    }
+
+    # 8. Retention improvement opportunities (meets 90d but below category recommendation)
+    foreach ($t in $tableAnalysis) {
+        if (-not $t.RetentionCanImprove) { continue }
+
+        $recommendations.Add([PSCustomObject]@{
+            Priority      = 'Low'
+            Type          = 'RetentionImprovement'
+            TableName     = $t.TableName
+            Title         = "$($t.TableName) could benefit from $($t.RecommendedRetentionDays)d retention (currently $($t.ActualRetentionDays)d)"
+            Detail        = "Meets the 90-day baseline but best-practice guidance recommends $($t.RecommendedRetentionDays) days " +
+                            "for $($t.Category) tables."
+            EstSavingsUSD = 0
+            CurrentCost   = $t.EstMonthlyCostUSD
+        })
+    }
     $sortedRecs = $recommendations | Sort-Object EstSavingsUSD -Descending
 
     # Summary stats
@@ -184,24 +261,38 @@ function Invoke-Analysis {
         [math]::Round(($tablesWithRules / $tableAnalysis.Count) * 100, 0)
     } else { 0 }
 
+    $retentionCompliantCount  = @($tableAnalysis | Where-Object { $_.RetentionCompliant -eq $true }).Count
+    $retentionNonCompliant    = @($tableAnalysis | Where-Object { $_.RetentionCompliant -eq $false }).Count
+    $retentionChecked         = $retentionCompliantCount + $retentionNonCompliant
+    $retentionImprovableCount = @($tableAnalysis | Where-Object { $_.RetentionCanImprove -eq $true }).Count
+
     [PSCustomObject]@{
-        TableAnalysis    = $tableAnalysis
-        Recommendations  = @($sortedRecs)
-        KeywordGaps      = $Classifications.KeywordGaps
-        SocRecommendations = $SocRecommendations
-        Summary          = [PSCustomObject]@{
-            TotalTables      = $tableAnalysis.Count
-            PrimaryCount     = $primaryTables.Count
-            SecondaryCount   = $secondaryTables.Count
-            UnknownCount     = $unknownTables.Count
-            TotalMonthlyGB   = [math]::Round($totalMonthlyGB, 2)
-            TotalMonthlyCost = [math]::Round($totalMonthlyCost, 2)
-            TotalRules       = $RulesData.TotalRules
-            EnabledRules     = $RulesData.EnabledRules
-            HuntingQueries   = $HuntingData.TotalQueries
-            CoveragePercent  = $coveragePercent
-            EstTotalSavings  = [math]::Round($totalSavings, 2)
-            PricePerGB       = $PricePerGB
+        TableAnalysis       = $tableAnalysis
+        Recommendations     = @($sortedRecs)
+        KeywordGaps         = $Classifications.KeywordGaps
+        SocRecommendations  = $SocRecommendations
+        CorrelationExcluded = $corrExcluded
+        CorrelationIncluded = $corrIncluded
+        Summary             = [PSCustomObject]@{
+            TotalTables            = $tableAnalysis.Count
+            PrimaryCount           = $primaryTables.Count
+            SecondaryCount         = $secondaryTables.Count
+            UnknownCount           = $unknownTables.Count
+            TotalMonthlyGB         = [math]::Round($totalMonthlyGB, 2)
+            TotalMonthlyCost       = [math]::Round($totalMonthlyCost, 2)
+            TotalRules             = $RulesData.TotalRules
+            EnabledRules           = $RulesData.EnabledRules
+            DontCorrCount          = $RulesData.DontCorrCount
+            IncCorrCount           = $RulesData.IncCorrCount
+            HuntingQueries         = $HuntingData.TotalQueries
+            CoveragePercent        = $coveragePercent
+            EstTotalSavings        = [math]::Round($totalSavings, 2)
+            PricePerGB             = $PricePerGB
+            WorkspaceRetentionDays = $WorkspaceRetentionDays
+            RetentionCompliant     = $retentionCompliantCount
+            RetentionNonCompliant  = $retentionNonCompliant
+            RetentionChecked       = $retentionChecked
+            RetentionImprovable    = $retentionImprovableCount
         }
     }
 }

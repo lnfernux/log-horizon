@@ -12,17 +12,18 @@ function Get-TableUsage {
         [decimal]$PricePerGB = 5.59
     )
 
-    $freeTables = @(
-        'SecurityAlert', 'SecurityIncident', 'AzureActivity',
-        'OfficeActivity', 'SentinelHealth', 'SentinelAudit'
-    )
+    # Load free table list from classification DB
+    $dbPath = Join-Path $PSScriptRoot '..\Data\log-classifications.json'
+    $freeTables = @((Get-Content $dbPath -Raw | ConvertFrom-Json) |
+        Where-Object { $_.isFree -eq $true } |
+        ForEach-Object { $_.tableName })
 
     $query = @"
 Usage
 | where TimeGenerated > ago(${DaysBack}d)
 | where IsBillable == true
 | summarize DataGB = sum(Quantity) / 1024.0,
-            RecordCount = sum(ResourceUri == ResourceUri)
+            RecordCount = count()
   by DataType
 | sort by DataGB desc
 "@

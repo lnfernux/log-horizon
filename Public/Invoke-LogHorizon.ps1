@@ -86,6 +86,9 @@ function Invoke-LogHorizon {
         # SOC Optimization
         $result.SocRecs = Get-SocOptimization -Context $ctx
 
+        # Table retention configuration
+        $result.TableRetention = Get-TableRetention -Context $ctx
+
         [PSCustomObject]$result
     }
 
@@ -93,9 +96,11 @@ function Invoke-LogHorizon {
     $tableUsage  = $collectResult.TableUsage
     $rulesData   = $collectResult.RulesData
     $huntingData = $collectResult.HuntingData
-    $connectors  = $collectResult.Connectors
     $defenderXDR = $collectResult.DefenderXDR
     $socRecs     = $collectResult.SocRecs
+    $tableRetentionResult = $collectResult.TableRetention
+    $tableRetention = $tableRetentionResult.Tables
+    $workspaceRetentionDays = $tableRetentionResult.WorkspaceRetentionDays
 
     # Phase 2 - Classification
     $classifications = Invoke-SpectreCommandWithStatus -Title "[deepskyblue1]Classifying log sources...[/]" -Spinner Dots -ScriptBlock {
@@ -113,6 +118,8 @@ function Invoke-LogHorizon {
                         -HuntingData $huntingData `
                         -DefenderXDR $defenderXDR `
                         -SocRecommendations $socRecs `
+                        -TableRetention $tableRetention `
+                        -WorkspaceRetentionDays $workspaceRetentionDays `
                         -PricePerGB $PricePerGB
     }
 

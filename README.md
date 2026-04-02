@@ -5,7 +5,7 @@
 **Microsoft Sentinel SIEM Log Source Analyzer**
 
 ![PowerShell 7+](https://img.shields.io/badge/PowerShell-7%2B-blue)
-![Module Version](https://img.shields.io/badge/version-0.2.2-green)
+![Module Version](https://img.shields.io/badge/version-0.3.0-green)
 
 ---
 I've had to answer *"what are we actually getting out of these logs?"* or *"what is the recommended logs for Microsoft Sentinel"* more times than I can count. The answer always depend on so many things, but we can be generic. So I built this thingy right here.
@@ -20,8 +20,10 @@ Jumping straight into it:
 
 - Classifies all your ingesting tables against a **344-entry knowledge base** (190+ connectors). Primary tables are security-relevant, secondary ones are supporting telemetry
 - Builds a **cost-vs-detection matrix** so you can see which tables are worth the spend
-- Generates **prioritised recommendations**: data lake candidates, tables with zero detections, XDR streaming waste, ingest-time filtering opportunities
+- Generates **prioritised recommendations**: data lake candidates, tables with zero detections, XDR streaming waste, ingest-time filtering opportunities, retention shortfalls
 - Maps **analytics rules, hunting queries, and XDR detections** to each table so you can spot coverage gaps
+- Detects **correlation exclusion tags** (`#DONT_CORR#` / `#INC_CORR#`) in analytics rule descriptions and highlights rules excluded from Defender correlation
+- Performs **log retention compliance analysis** comparing actual workspace retention against recommended minimums based on regulatory guidance (CISA M-21-31, NIST SP 800-92, NCSC-UK, ASD ACSC, NSA)
 - Pulls in **Microsoft's own SOC optimisation recommendations** from the Security Insights API
 - Runs **keyword gap analysis**. Tell it you use CrowdStrike or Okta, and it'll flag tables you should probably be ingesting but aren't
 - Wraps everything in a **Spectre.Console TUI**: coloured tables, menus, ASCII art banner, the works
@@ -123,10 +125,11 @@ The module connects to Azure and pulls data from the Log Analytics and Security 
 | Data Source | API | What we grab |
 |---|---|---|
 | Table usage | `Usage` table (KQL) | Ingestion volume per table over your query window |
-| Analytics rules | Security Insights REST | Active detection rules + which tables they hit |
+| Analytics rules | Security Insights REST | Active detection rules + which tables they hit + correlation tags |
 | Hunting queries | Security Insights REST | Saved hunting queries + referenced tables |
 | Data connectors | Security Insights REST | Installed connector inventory |
 | SOC optimisation | Security Insights REST | Microsoft's built-in SOC recommendations |
+| Table retention | Azure Tables REST | Per-table retention, archive, and plan (Analytics/Basic) |
 | Defender XDR | Security Insights REST | XDR custom detections and streaming config (optional) |
 
 ### 2. Classification
@@ -160,16 +163,18 @@ Then the module generates recommendations:
 | **XDR Optimise** | XDR-streamed + 0 Sentinel rules + XDR rules exist | Stop streaming, use the unified XDR portal instead |
 | **Missing Coverage** | Primary + zero detections | Write analytics rules to get value from the data |
 | **Ingest-time Filter** | Primary + >20 GB + <=3 detections | Apply ingest-time transformation to cut volume |
+| **Retention Shortfall** | Table retention below recommended minimum | Increase total/archive retention to meet regulatory guidance |
 
 ### 4. Interactive dashboard
 
 You land in a Spectre.Console TUI with a menu:
 
-- **Dashboard**: overview stats, top 10 costliest tables, coverage bar
-- **Recommendations**: prioritised actions with estimated monthly savings
-- **Detection Assessment**: per-table rule and hunting query coverage breakdown
+- **Dashboard**: overview stats, top 10 costliest tables, coverage bar, retention compliance summary, correlation exclusion callout
+- **Recommendations**: prioritised actions with estimated monthly savings (including retention shortfalls)
+- **Detection Assessment**: per-table rule and hunting query coverage breakdown, correlation-excluded rule listing
 - **SOC Optimisation**: Microsoft's own improvement suggestions
-- **All Tables**: the full list with classification, cost, rules, and assessment
+- **Retention Assessment**: tables below recommended minimums with current vs recommended retention, plan type, and shortfall
+- **All Tables**: the full list with classification, cost, rules, retention (colour-coded), and assessment
 - **XDR Analysis**: Defender XDR integration (when you used `-IncludeDefenderXDR`)
 - **Export**: dump the report to JSON or Markdown right from the menu
 
@@ -191,6 +196,7 @@ Sitting at `Data/log-classifications.json`. **344 entries**, **190 connectors**,
 | `keywords` | Terms for keyword gap analysis matching |
 | `mitreSources` | MITRE ATT&CK data source mappings |
 | `recommendedTier` | `analytics` (hot tier) or `datalake` (auxiliary candidate) |
+| `recommendedRetentionDays` | Minimum recommended total retention in days (regulatory guidance) |
 | `isFree` | Whether Microsoft ingests this one for free |
 
 ### Primary vs secondary security data
@@ -304,18 +310,19 @@ The classification criteria were drawn from the following sources:
 ## Project layout
 
 ```
-LogHorizon.psd1              Module manifest (v0.2.2)
+LogHorizon.psd1              Module manifest (v0.3.0)
 LogHorizon.psm1              Module loader
 Public/
   Invoke-LogHorizon.ps1      Entry point, the main orchestrator
 Private/
   Connect-Sentinel.ps1       Azure auth + workspace resolution
   Get-TableUsage.ps1         KQL query for ingestion volumes
-  Get-AnalyticsRules.ps1     Analytics rules + table extraction
+  Get-AnalyticsRules.ps1     Analytics rules + table extraction + correlation tags
   Get-HuntingQueries.ps1     Hunting queries + table extraction
   Get-DataConnectors.ps1     Data connector inventory
   Get-DefenderXDR.ps1        Defender XDR analysis (optional)
   Get-SocOptimization.ps1    SOC improvement recommendations
+  Get-TableRetention.ps1     Per-table retention, archive, and plan type
   Invoke-Classification.ps1  Static DB + heuristic classification
   Invoke-Analysis.ps1        Cost-value matrix + recommendations
   Write-Report.ps1           Spectre.Console TUI rendering
@@ -341,6 +348,7 @@ MIT
 
 | Version | Date | Changes |
 |---|---|---|
+| 0.3.0 | 2026-04-02 | Log retention compliance analysis (CISA M-21-31, NIST SP 800-92, NCSC-UK, ASD ACSC, NSA), correlation tag detection (`#DONT_CORR#`/`#INC_CORR#`), retention assessment menu view, retention column in All Tables, `recommendedRetentionDays` in classification schema |
 | 0.2.2 | 2026-04-02 | SOC optimization table hides Detail column on narrow consoles |
 | 0.2.1 | 2026-04-02 | Custom classification support (`-CustomClassificationPath`), enriched SOC optimization recommendations with API suggestions/drill-down, active-only default view, UTF-8 encoding warning suppression |
 | 0.2.0 | - | Initial public release with classification engine, cost-value scoring, Spectre.Console TUI, export to JSON/Markdown |

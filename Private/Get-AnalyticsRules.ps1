@@ -29,13 +29,16 @@ function Get-AnalyticsRules {
         $query = $null
         $displayName = $rule.properties.displayName
         $enabled = $rule.properties.enabled
+        $description = $rule.properties.description
+
+        # Parse Defender correlation tags from description
+        $dontCorr = $description -match '(?i)#DONT_CORR#'
+        $incCorr  = $description -match '(?i)#INC_CORR#'
 
         switch ($kind) {
             'Scheduled'           { $query = $rule.properties.query }
             'NRT'                 { $query = $rule.properties.query }
             'MicrosoftSecurityIncidentCreation' {
-                # These don't have KQL but reference a product
-                $product = $rule.properties.productFilter
                 $query = $null
             }
             'Fusion' { $query = $null }
@@ -52,11 +55,14 @@ function Get-AnalyticsRules {
         }
 
         [PSCustomObject]@{
-            RuleName   = $displayName
-            Kind       = $kind
-            Enabled    = $enabled
-            Tables     = $tables
-            HasQuery   = [bool]$query
+            RuleName                = $displayName
+            Kind                    = $kind
+            Enabled                 = $enabled
+            Tables                  = $tables
+            HasQuery                = [bool]$query
+            Description             = $description
+            ExcludedFromCorrelation = $dontCorr
+            IncludedInCorrelation   = $incCorr
         }
     }
 
@@ -65,6 +71,8 @@ function Get-AnalyticsRules {
         TableCoverage = $tableCoverage
         TotalRules    = $allRules.Count
         EnabledRules  = @($rules | Where-Object Enabled).Count
+        DontCorrCount = @($rules | Where-Object ExcludedFromCorrelation).Count
+        IncCorrCount  = @($rules | Where-Object IncludedInCorrelation).Count
     }
 }
 
@@ -75,15 +83,6 @@ function Get-TablesFromKql {
     #>
     [CmdletBinding()]
     param([string]$Kql)
-
-    # Known Sentinel/LA table name patterns - PascalCase or with underscores
-    # Match table names at the start of lines or after join/union keywords
-    $patterns = @(
-        '(?m)^\s*(\w+)\s*\|'                                     # TableName | ...
-        '(?i)\bjoin\s+(?:kind\s*=\s*\w+\s+)?\(?\s*(\w+)\s*\|'   # join (Table |
-        '(?i)\bunion\s+(?:isfuzzy\s*=\s*\w+\s+)?(\w+)'           # union Table
-        '(?i)\bdatatable\s*\('                                     # skip datatable
-    )
 
     $tables = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
 
@@ -104,8 +103,13 @@ function Get-TablesFromKql {
         'let', 'where', 'project', 'extend', 'summarize', 'render', 'sort',
         'top', 'take', 'count', 'distinct', 'evaluate', 'parse', 'invoke',
         'limit', 'sample', 'search', 'find', 'print', 'range', 'datatable',
-        'materialize', 'toscalar', 'bag_unpack', 'True', 'False'
+        'materialize', 'toscalar', 'bag_unpack', 'True', 'False',
+        'set', 'alias', 'restrict', 'declare', 'pattern', 'tabular',
+        'database', 'cluster', 'contains', 'has', 'startswith', 'endswith'
     )
 
-    $tables | Where-Object { $_ -notin $kqlKeywords -and $_.Length -gt 2 }
+    # Remove tables that are actually let-statement identifiers
+    $letNames = [regex]::Matches($Kql, '(?im)^\s*let\s+(\w+)\s*=') |
+        ForEach-Object { $_.Groups[1].Value }
+    $tables | Where-Object { $_ -notin $kqlKeywords -and $_ -notin $letNames -and $_.Length -gt 2 }
 }
