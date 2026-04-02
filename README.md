@@ -14,20 +14,21 @@ I've had to answer *"what are we actually getting out of these logs?"* or *"what
 
 > **Important**: This is a generic approach. If you know a log source is important to your environment, that context always takes precedence over what this tool tells you. The classifications are a starting point, not gospel.
 
-## What it does
+## Features
 
-Jumping straight into it:
-
-- Classifies all your ingesting tables against a **344-entry knowledge base** (190+ connectors). Primary tables are security-relevant, secondary ones are supporting telemetry
-- Builds a **cost-vs-detection matrix** so you can see which tables are worth the spend
-- Generates **prioritised recommendations**: data lake candidates, tables with zero detections, XDR streaming waste, ingest-time filtering opportunities, retention shortfalls
-- Maps **analytics rules, hunting queries, and XDR detections** to each table so you can spot coverage gaps
-- Detects **correlation exclusion tags** (`#DONT_CORR#` / `#INC_CORR#`) in analytics rule descriptions and highlights rules excluded from Defender correlation
-- Performs **log retention compliance analysis** comparing actual workspace retention against recommended minimums based on regulatory guidance (CISA M-21-31, NIST SP 800-92, NCSC-UK, ASD ACSC, NSA)
-- Pulls in **Microsoft's own SOC optimisation recommendations** from the Security Insights API
-- Runs **keyword gap analysis**. Tell it you use CrowdStrike or Okta, and it'll flag tables you should probably be ingesting but aren't
-- Wraps everything in a **Spectre.Console TUI**: coloured tables, menus, ASCII art banner, the works
-- **Exports** to JSON or Markdown when you need to share findings with the team
+| Feature | Description |
+|---|---|
+| **Classification Engine** | 344-entry knowledge base covering 190+ connectors, 21 categories, with automatic heuristic fallback for unknown tables |
+| **Cost-Value Scoring** | Per-table cost tier vs detection tier matrix with combined assessment (High Value → Low Value) |
+| **Recommendations** | Prioritised actions: data lake candidates, zero-detection tables, XDR streaming waste, ingest-time filtering, retention shortfalls |
+| **Detection Mapping** | Maps analytics rules, hunting queries, and XDR detections to each table to spot coverage gaps |
+| **Correlation Tags** | Detects `#DONT_CORR#` / `#INC_CORR#` tags in rule descriptions and flags rules excluded from Defender correlation |
+| **Retention Compliance** | Compares actual retention against recommended minimums based on industry standards and security best practices |
+| **SOC Optimisation** | Pulls Microsoft's own SOC improvement recommendations from the Security Insights API |
+| **Keyword Gap Analysis** | Flag tables you should be ingesting but aren't based on vendor/product keywords |
+| **Custom Classifications** | Provide your own JSON to add or override the built-in classification database |
+| **Interactive TUI** | Spectre.Console dashboard with menus, colour-coded tables, drill-downs, and ASCII art |
+| **Export** | JSON or Markdown report for sharing with the team |
 
 ## Prerequisites
 
@@ -331,7 +332,7 @@ Data/
   log-classifications.json              344-entry classification knowledge base
   custom-classifications-example.json   Example custom classification override file
 Tests/
-  LogHorizon.Tests.ps1       Pester v5 unit tests (26 tests)
+  LogHorizon.Tests.ps1       Pester v5 unit tests (35 tests)
 ```
 
 ## Tests
