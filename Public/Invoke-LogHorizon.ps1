@@ -44,7 +44,11 @@ function Invoke-LogHorizon {
         [int]$DaysBack = 90,
 
         [Alias('ppgb')]
-        [decimal]$PricePerGB = 5.59
+        [decimal]$PricePerGB = 5.59,
+
+        [ValidateScript({ Test-Path $_ -PathType Leaf })]
+        [Alias('clf')]
+        [string]$CustomClassificationPath
     )
 
     $ErrorActionPreference = 'Stop'
@@ -97,7 +101,8 @@ function Invoke-LogHorizon {
     $classifications = Invoke-SpectreCommandWithStatus -Title "[deepskyblue1]Classifying log sources...[/]" -Spinner Dots -ScriptBlock {
         Invoke-Classification -TableUsage $tableUsage `
                               -RuleTableCoverage $rulesData.TableCoverage `
-                              -Keywords $Keywords
+                              -Keywords $Keywords `
+                              -CustomClassificationPath $CustomClassificationPath
     }
 
     # Phase 3 - Analysis

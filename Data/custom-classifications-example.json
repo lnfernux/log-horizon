@@ -1,0 +1,24 @@
+[
+  {
+    "tableName": "MyCustomApp_CL",
+    "connector": "Custom Logs (DCR)",
+    "classification": "primary",
+    "category": "Application Logs",
+    "description": "Security-relevant audit events from an internal application",
+    "keywords": ["custom", "internal", "audit"],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "isFree": false
+  },
+  {
+    "tableName": "AzureMetrics",
+    "connector": "Azure Monitor",
+    "classification": "primary",
+    "category": "Infrastructure Diag",
+    "description": "Override: promoted to primary because we detect on Azure resource metrics in this environment",
+    "keywords": ["metrics", "azure", "infrastructure", "monitoring"],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "isFree": false
+  }
+]

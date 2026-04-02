@@ -10,7 +10,8 @@ function Invoke-Classification {
     param(
         [Parameter(Mandatory)][array]$TableUsage,
         [Parameter(Mandatory)][hashtable]$RuleTableCoverage,
-        [string[]]$Keywords
+        [string[]]$Keywords,
+        [string]$CustomClassificationPath
     )
 
     # Load static classification DB
@@ -20,6 +21,20 @@ function Invoke-Classification {
     $lookup = @{}
     foreach ($entry in $db) {
         $lookup[$entry.tableName] = $entry
+    }
+
+    # Merge custom classifications (add or override)
+    $customCount = 0
+    if ($CustomClassificationPath) {
+        $customDb = Get-Content $CustomClassificationPath -Raw | ConvertFrom-Json
+        foreach ($entry in $customDb) {
+            if (-not $entry.tableName) { continue }
+            $lookup[$entry.tableName] = $entry
+            $customCount++
+        }
+        # Rebuild $db from the merged lookup so keyword gap analysis includes custom entries
+        $db = $lookup.Values
+        Write-Verbose "Merged $customCount custom classification(s) from '$CustomClassificationPath'"
     }
 
     # Classify each ingesting table
@@ -87,9 +102,10 @@ function Invoke-Classification {
     }
 
     [PSCustomObject]@{
-        Classifications = $classified
-        KeywordGaps     = $gaps
-        DatabaseEntries = $db.Count
+        Classifications      = $classified
+        KeywordGaps          = $gaps
+        DatabaseEntries      = $db.Count
+        CustomEntries        = $customCount
     }
 }
 

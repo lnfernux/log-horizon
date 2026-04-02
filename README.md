@@ -5,7 +5,7 @@
 **Microsoft Sentinel SIEM Log Source Analyzer**
 
 ![PowerShell 7+](https://img.shields.io/badge/PowerShell-7%2B-blue)
-![Module Version](https://img.shields.io/badge/version-0.2.0-green)
+![Module Version](https://img.shields.io/badge/version-0.2.1-green)
 
 ---
 I've had to answer *"what are we actually getting out of these logs?"* or *"what is the recommended logs for Microsoft Sentinel"* more times than I can count. The answer always depend on so many things, but we can be generic. So I built this thingy right here.
@@ -108,6 +108,7 @@ Invoke-LogHorizon -SubscriptionId '...' -ResourceGroup 'rg' -WorkspaceName 'ws' 
 | `-IncludeDefenderXDR` | switch | No | - | Include Defender XDR custom detection analysis |
 | `-DaysBack` | int | No | 90 | Query window for usage data (1-365 days) |
 | `-PricePerGB` | decimal | No | 5.59 | Sentinel ingestion price per GB |
+| `-CustomClassificationPath` | string | No | - | Path to a custom JSON file to add or override classifications |
 
 ---
 
@@ -225,6 +226,46 @@ Sitting at `Data/log-classifications.json`. **344 entries**, **190 connectors**,
 | Configuration Mgmt | 6 | `ConfigurationData`, `ESIExchangeOnlineConfig_CL` |
 | Storage Access | 5 | `StorageBlobLogs`, `StorageFileLogs`, `AWSS3ServerAccess` |
 
+### Custom classifications
+
+You can provide your own classification file to **add** entries for tables not in the built-in database, or **override** existing entries when the defaults don't match your environment. Custom entries take precedence over built-in ones when the same `tableName` appears in both.
+
+```powershell
+Invoke-LogHorizon -SubscriptionId '...' -ResourceGroup 'rg' -WorkspaceName 'ws' `
+    -CustomClassificationPath './my-classifications.json'
+```
+
+The custom file uses the same schema as `Data/log-classifications.json` — an array of objects:
+
+```json
+[
+  {
+    "tableName": "MyCustomApp_CL",
+    "connector": "Custom Logs (DCR)",
+    "classification": "primary",
+    "category": "Application Logs",
+    "description": "Security-relevant audit events from an internal application",
+    "keywords": ["custom", "internal", "audit"],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "isFree": false
+  },
+  {
+    "tableName": "AzureMetrics",
+    "connector": "Azure Monitor",
+    "classification": "primary",
+    "category": "Infrastructure Diag",
+    "description": "Override: promoted to primary because we detect on Azure resource metrics in this environment",
+    "keywords": ["metrics", "azure", "infrastructure", "monitoring"],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "isFree": false
+  }
+]
+```
+
+See `Data/custom-classifications-example.json` for a ready-to-use template.
+
 ### How the classifications were built
 
 The primary/secondary grading was done by feeding Microsoft's data connector and table definitions into AI, using Microsoft best practices and industry standards as the classification criteria. On manual review it's a solid baseline and starting point, but AI can still make mistakes. If something looks off for your environment, trust your own context over the tool.
@@ -263,7 +304,7 @@ The classification criteria were drawn from the following sources:
 ## Project layout
 
 ```
-LogHorizon.psd1              Module manifest (v0.2.0)
+LogHorizon.psd1              Module manifest (v0.2.1)
 LogHorizon.psm1              Module loader
 Public/
   Invoke-LogHorizon.ps1      Entry point, the main orchestrator
@@ -280,7 +321,8 @@ Private/
   Write-Report.ps1           Spectre.Console TUI rendering
   Export-Report.ps1          JSON / Markdown serialisation
 Data/
-  log-classifications.json   344-entry classification knowledge base
+  log-classifications.json              344-entry classification knowledge base
+  custom-classifications-example.json   Example custom classification override file
 Tests/
   LogHorizon.Tests.ps1       Pester v5 unit tests (26 tests)
 ```
@@ -294,6 +336,18 @@ Invoke-Pester ./Tests/LogHorizon.Tests.ps1 -Output Detailed
 ## License
 
 MIT
+
+## Known issues
+
+### PwshSpectreConsole UTF-8 encoding warning
+
+To enable UTF-8 output in your terminal, add the following line at the top of your PowerShell `$PROFILE` file and restart the terminal:
+
+```powershell
+$OutputEncoding = [console]::InputEncoding = [console]::OutputEncoding = [System.Text.UTF8Encoding]::new()
+```
+
+The module sets this automatically on import, but depending on your session the warning may still appear. It's cosmetic and doesn't affect functionality.
 
 ## Disclaimer
 

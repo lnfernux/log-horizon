@@ -1,5 +1,6 @@
 # LogHorizon module loader
-# Ensure UTF-8 for Spectre.Console Unicode/emoji support
+# Ensure UTF-8 for Spectre.Console Unicode/emoji support and suppress the PwshSpectreConsole encoding warning
+$env:IgnoreSpectreEncoding = $true
 $OutputEncoding = [console]::InputEncoding = [console]::OutputEncoding = [System.Text.UTF8Encoding]::new()
 
 # Dot-source all private and public functions
