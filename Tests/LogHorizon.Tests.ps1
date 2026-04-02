@@ -53,6 +53,20 @@ SigninLogs
         $result | Should -Contain 'SigninLogs'
         $result | Should -Not -Contain 'let'
     }
+
+    It 'filters out let-statement variable names' {
+        $kql = @"
+let DisabledAccounts = SigninLogs | where ResultType == 50057;
+let SuspiciousIPs = AuditLogs | where OperationName == "Add member to role";
+DisabledAccounts
+| join kind=inner SuspiciousIPs on IPAddress
+"@
+        $result = Get-TablesFromKql -Kql $kql
+        $result | Should -Contain 'SigninLogs'
+        $result | Should -Contain 'AuditLogs'
+        $result | Should -Not -Contain 'DisabledAccounts'
+        $result | Should -Not -Contain 'SuspiciousIPs'
+    }
 }
 
 Describe 'Resolve-DynamicClassification' {
@@ -79,6 +93,11 @@ Describe 'Resolve-DynamicClassification' {
     It 'marks custom tables with _CL suffix in category' {
         $result = Resolve-DynamicClassification -TableName 'MyApp_CL' -RuleCount 0 -MonthlyGB 0.5
         $result.Category | Should -Match 'Custom Log'
+    }
+
+    It 'includes RecommendedRetentionDays defaulting to 90' {
+        $result = Resolve-DynamicClassification -TableName 'SomeTable_CL' -RuleCount 0 -MonthlyGB 1
+        $result.RecommendedRetentionDays | Should -Be 90
     }
 }
 
@@ -129,6 +148,14 @@ Describe 'Invoke-Classification' {
         )
         $result = Invoke-Classification -TableUsage $tableUsage -RuleTableCoverage @{}
         $result.Classifications['WeirdTable_CL'].Source | Should -Be 'heuristic'
+    }
+
+    It 'propagates RecommendedRetentionDays from database' {
+        $tableUsage = @(
+            [PSCustomObject]@{ TableName = 'SigninLogs'; MonthlyGB = 5; IsFree = $false }
+        )
+        $result = Invoke-Classification -TableUsage $tableUsage -RuleTableCoverage @{}
+        $result.Classifications['SigninLogs'].RecommendedRetentionDays | Should -Be 365
     }
 
     It 'finds keyword gaps' {
@@ -204,6 +231,84 @@ Describe 'Invoke-Analysis' {
     }
 }
 
+Describe 'Invoke-Analysis retention logic' {
+    BeforeAll {
+        $tableUsage = @(
+            [PSCustomObject]@{ TableName = 'SigninLogs'; DataGB = 10; MonthlyGB = 3.3; RecordCount = 50000; EstMonthlyCostUSD = 18.45; IsFree = $false }
+            [PSCustomObject]@{ TableName = 'AzureDiagnostics'; DataGB = 20; MonthlyGB = 6.7; RecordCount = 100000; EstMonthlyCostUSD = 37.45; IsFree = $false }
+        )
+
+        $classMap = @{
+            'SigninLogs'       = [PSCustomObject]@{ Classification = 'primary'; Category = 'Identity & Access'; RecommendedTier = 'analytics'; IsFree = $false; RecommendedRetentionDays = 365 }
+            'AzureDiagnostics' = [PSCustomObject]@{ Classification = 'secondary'; Category = 'Infrastructure Diagnostics'; RecommendedTier = 'datalake'; IsFree = $false; RecommendedRetentionDays = 90 }
+        }
+        $classifications = [PSCustomObject]@{
+            Classifications = $classMap
+            KeywordGaps     = @()
+            DatabaseEntries = 2
+        }
+
+        $rulesData = [PSCustomObject]@{
+            Rules         = @()
+            TableCoverage = @{ 'SigninLogs' = 5 }
+            TotalRules    = 5
+            EnabledRules  = 5
+            DontCorrCount = 0
+            IncCorrCount  = 0
+        }
+
+        $huntingData = [PSCustomObject]@{
+            Queries       = @()
+            TableCoverage = @{}
+            TotalQueries  = 0
+        }
+
+        $tableRetention = @(
+            [PSCustomObject]@{ TableName = 'SigninLogs'; RetentionInDays = 90; TotalRetentionInDays = 90; ArchiveRetentionInDays = 0; Plan = 'Analytics' }
+            [PSCustomObject]@{ TableName = 'AzureDiagnostics'; RetentionInDays = 30; TotalRetentionInDays = 30; ArchiveRetentionInDays = 0; Plan = 'Analytics' }
+        )
+
+        $script:retResult = Invoke-Analysis -TableUsage $tableUsage `
+                                             -Classifications $classifications `
+                                             -RulesData $rulesData `
+                                             -HuntingData $huntingData `
+                                             -TableRetention $tableRetention `
+                                             -WorkspaceRetentionDays 90 `
+                                             -SocRecommendations @()
+    }
+
+    It 'marks SigninLogs as compliant but improvable to 365d' {
+        $sl = $script:retResult.TableAnalysis | Where-Object TableName -eq 'SigninLogs'
+        $sl.RetentionCompliant | Should -Be $true
+        $sl.RetentionCanImprove | Should -Be $true
+        $sl.RecommendedRetentionDays | Should -Be 365
+    }
+
+    It 'marks AzureDiagnostics as non-compliant (below 90d)' {
+        $ad = $script:retResult.TableAnalysis | Where-Object TableName -eq 'AzureDiagnostics'
+        $ad.RetentionCompliant | Should -Be $false
+        $ad.RetentionCanImprove | Should -Be $false
+    }
+
+    It 'generates RetentionShortfall recommendation for below-90d table' {
+        $rec = $script:retResult.Recommendations | Where-Object { $_.TableName -eq 'AzureDiagnostics' -and $_.Type -eq 'RetentionShortfall' }
+        $rec | Should -Not -BeNullOrEmpty
+    }
+
+    It 'generates RetentionImprovement recommendation for SigninLogs' {
+        $rec = $script:retResult.Recommendations | Where-Object { $_.TableName -eq 'SigninLogs' -and $_.Type -eq 'RetentionImprovement' }
+        $rec | Should -Not -BeNullOrEmpty
+        $rec.Title | Should -Match '365'
+    }
+
+    It 'reports retention summary correctly' {
+        $script:retResult.Summary.RetentionChecked | Should -Be 2
+        $script:retResult.Summary.RetentionCompliant | Should -Be 1
+        $script:retResult.Summary.RetentionNonCompliant | Should -Be 1
+        $script:retResult.Summary.RetentionImprovable | Should -Be 1
+    }
+}
+
 Describe 'Classification database integrity' {
     BeforeAll {
         $dbPath = Join-Path $PSScriptRoot '..\Data\log-classifications.json'
@@ -220,6 +325,12 @@ Describe 'Classification database integrity' {
             $entry.classification  | Should -BeIn @('primary', 'secondary')
             $entry.category        | Should -Not -BeNullOrEmpty
             $entry.recommendedTier | Should -BeIn @('analytics', 'datalake')
+        }
+    }
+
+    It 'every entry has recommendedRetentionDays of 90, 180, or 365' {
+        foreach ($entry in $script:db) {
+            $entry.recommendedRetentionDays | Should -BeIn @(90, 180, 365) -Because "$($entry.tableName) should have a valid retention recommendation"
         }
     }
 
