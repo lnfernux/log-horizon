@@ -539,7 +539,6 @@ function Write-DataTransforms {
     if ($splitTables.Count -gt 0) {
         $splitRows = @()
         foreach ($t in $splitTables) {
-            $parentGB = $null
             $parentEntry = $Analysis.TableAnalysis | Where-Object { $_.TableName -eq $t.ParentTable } | Select-Object -First 1
             $parentGBStr = if ($parentEntry) { "$($parentEntry.MonthlyGB)" } else { '-' }
 

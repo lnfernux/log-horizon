@@ -149,4 +149,10 @@ function Invoke-LogHorizon {
                  -DefenderXDR $defenderXDR `
                  -ExportFormat $Output `
                  -ExportPath $OutputPath
+
+    # Phase 5 - Cleanup
+    if ($null -ne $ctx) {
+        $ctx.ArmToken = $null
+        $ctx.LaToken = $null
+    }
 }

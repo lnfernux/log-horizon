@@ -15,12 +15,19 @@ function Get-AnalyticsRules {
            "/providers/Microsoft.SecurityInsights/alertRules?api-version=2024-03-01"
 
     $allRules = [System.Collections.Generic.List[object]]::new()
+    $maxPages = 1000
+    $pageCount = 0
 
     # handle paging
     do {
+        $pageCount++
         $response = Invoke-RestMethod -Uri $uri -Headers $headers -ErrorAction Stop
         foreach ($r in $response.value) { $allRules.Add($r) }
         $uri = $response.nextLink
+        if ($pageCount -ge $maxPages) {
+            Write-Warning "Pagination limit reached fetching Analytics Rules. Terminating to avoid infinite loop."
+            break
+        }
     } while ($uri)
 
     $tableCoverage = @{}
@@ -87,37 +94,36 @@ function Get-TablesFromKql {
 
     $tables = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
 
-    # Pattern 1: table at start of expression (before pipe)
-    $matches1 = [regex]::Matches($Kql, '(?m)^\s*([A-Z]\w+)\s*\n?\|')
-    foreach ($m in $matches1) { [void]$tables.Add($m.Groups[1].Value) }
+    try {
+        $timeout = [timespan]::FromSeconds(2)
+        $optsI = [System.Text.RegularExpressions.RegexOptions]::IgnoreCase
+        $optsM = [System.Text.RegularExpressions.RegexOptions]::Multiline
 
-    # Pattern 2: table in join
-    $matches2 = [regex]::Matches($Kql, '(?i)\bjoin\s+(?:kind\s*=\s*\w+\s+)?\(?\s*([A-Z]\w+)')
-    foreach ($m in $matches2) { [void]$tables.Add($m.Groups[1].Value) }
+        # Pattern 1: table at start of expression (before pipe)
+        $regex1 = [regex]::new('^\s*([A-Z]\w+)\s*\n?\|', $optsM, $timeout)
+        foreach ($m in $regex1.Matches($Kql)) { [void]$tables.Add($m.Groups[1].Value) }
 
-    # Pattern 3: table in union
-    $matches3 = [regex]::Matches($Kql, '(?i)\bunion\s+(?:isfuzzy\s*=\s*\w+\s+)?([A-Z]\w+)')
-    foreach ($m in $matches3) { [void]$tables.Add($m.Groups[1].Value) }
+        # Pattern 2: table in join
+        $regex2 = [regex]::new('\bjoin\s+(?:kind\s*=\s*\w+\s+)?\(?\s*([A-Z]\w+)', $optsI, $timeout)
+        foreach ($m in $regex2.Matches($Kql)) { [void]$tables.Add($m.Groups[1].Value) }
 
-    # Pattern 4: table after let assignment (let x = TableName | ...)
-    $matches4 = [regex]::Matches($Kql, '(?im)^\s*let\s+\w+\s*=\s*([A-Z]\w+)\s*[\|\n;]')
-    foreach ($m in $matches4) { [void]$tables.Add($m.Groups[1].Value) }
+        # Pattern 3: table in union
+        $regex3 = [regex]::new('\bunion\s+(?:isfuzzy\s*=\s*\w+\s+)?([A-Z]\w+)', $optsI, $timeout)
+        foreach ($m in $regex3.Matches($Kql)) { [void]$tables.Add($m.Groups[1].Value) }
+
+        # Pattern 4: table after let assignment (let x = TableName | ...)
+        $regex4 = [regex]::new('^\s*let\s+\w+\s*=\s*([A-Z]\w+)\s*[\|\n;]', $optsI -bor $optsM, $timeout)
+        foreach ($m in $regex4.Matches($Kql)) { [void]$tables.Add($m.Groups[1].Value) }
+
+        # Remove tables that are actually let-statement identifiers
+        $letRegex = [regex]::new('^\s*let\s+(\w+)\s*=', $optsI -bor $optsM, $timeout)
+        $letNames = $letRegex.Matches($Kql) | ForEach-Object { $_.Groups[1].Value }
+    } catch [System.Text.RegularExpressions.RegexMatchTimeoutException] {
+        Write-Warning "Regex execution timed out while parsing KQL. Some tables might not be mapped."
+        $letNames = @()
+    }
 
     # Pattern 5: table in datatable() or externaldata() — skip, not real tables
-
-    # Filter out KQL functions/keywords that might false-positive
-    $kqlKeywords = @(
-        'let', 'where', 'project', 'extend', 'summarize', 'render', 'sort',
-        'top', 'take', 'count', 'distinct', 'evaluate', 'parse', 'invoke',
-        'limit', 'sample', 'search', 'find', 'print', 'range', 'datatable',
-        'materialize', 'toscalar', 'bag_unpack', 'True', 'False',
-        'set', 'alias', 'restrict', 'declare', 'pattern', 'tabular',
-        'database', 'cluster', 'contains', 'has', 'startswith', 'endswith'
-    )
-
-    # Remove tables that are actually let-statement identifiers
-    $letNames = [regex]::Matches($Kql, '(?im)^\s*let\s+(\w+)\s*=') |
-        ForEach-Object { $_.Groups[1].Value }
     $tables | Where-Object { $_ -notin $kqlKeywords -and $_ -notin $letNames -and $_.Length -gt 2 }
 }
 

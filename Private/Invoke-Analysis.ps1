@@ -46,9 +46,9 @@ function Invoke-Analysis {
         $name = $table.TableName
         $cls  = $classMap[$name]
 
-        $ruleCount    = [int]($ruleCoverage[$name])
-        $huntCount    = [int]($huntCoverage[$name])
-        $xdrRuleCount = [int]($xdrCoverage[$name])
+        $ruleCount    = if ($ruleCoverage.ContainsKey($name)) { [int]$ruleCoverage[$name] } else { 0 }
+        $huntCount    = if ($huntCoverage.ContainsKey($name)) { [int]$huntCoverage[$name] } else { 0 }
+        $xdrRuleCount = if ($xdrCoverage.ContainsKey($name)) { [int]$xdrCoverage[$name] } else { 0 }
         $totalCoverage = $ruleCount + $huntCount
 
         # Cost tier
@@ -74,7 +74,6 @@ function Invoke-Analysis {
         $assessment = Get-Assessment -Classification $classification `
                                       -CostTier $costTier `
                                       -DetectionTier $detectionTier `
-                                      -RuleCount $ruleCount `
                                       -IsFree $table.IsFree
 
         $isXDRStreaming = $name -in $xdrStreaming
@@ -229,7 +228,7 @@ function Invoke-Analysis {
             $splitSavings = [math]::Round($t.EstMonthlyCostUSD * 0.50, 2)
 
             # Generate split KQL suggestion
-            $splitSuggestion = New-SplitKql -TableName $t.TableName `
+            $splitSuggestion = Get-SplitKql -TableName $t.TableName `
                                             -Rules $RulesData.Rules `
                                             -HighValueFieldsDB $HighValueFields
 
@@ -370,7 +369,6 @@ function Get-Assessment {
         [string]$Classification,
         [string]$CostTier,
         [string]$DetectionTier,
-        [int]$RuleCount,
         [bool]$IsFree
     )
 

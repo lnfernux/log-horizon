@@ -15,11 +15,18 @@ function Get-DataConnectors {
            "/providers/Microsoft.SecurityInsights/dataConnectors?api-version=2024-03-01"
 
     $allConnectors = [System.Collections.Generic.List[object]]::new()
+    $maxPages = 1000
+    $pageCount = 0
 
     do {
+        $pageCount++
         $response = Invoke-RestMethod -Uri $uri -Headers $headers -ErrorAction Stop
         foreach ($c in $response.value) { $allConnectors.Add($c) }
         $uri = $response.nextLink
+        if ($pageCount -ge $maxPages) {
+            Write-Warning "Pagination limit reached fetching Data Connectors. Terminating to avoid infinite loop."
+            break
+        }
     } while ($uri)
 
     $connectors = foreach ($c in $allConnectors) {

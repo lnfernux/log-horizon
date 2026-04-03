@@ -37,8 +37,7 @@ Usage
     $uri = "https://api.loganalytics.io/v1/workspaces/$($Context.WorkspaceId)/query"
     $response = Invoke-RestMethod -Uri $uri -Method Post -Headers $headers -Body $body -ErrorAction Stop
 
-    $columns = $response.tables[0].columns
-    $rows    = $response.tables[0].rows
+    $rows = $response.tables[0].rows
 
     $results = foreach ($row in $rows) {
         $tableName = $row[0]

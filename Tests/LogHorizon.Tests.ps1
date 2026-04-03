@@ -582,7 +582,7 @@ SigninLogs
     }
 }
 
-Describe 'New-SplitKql' {
+Describe 'Get-SplitKql' {
     It 'generates split KQL from knowledge base' {
         $hvFields = @{
             'SecurityEvent' = [PSCustomObject]@{
@@ -597,7 +597,7 @@ Describe 'New-SplitKql' {
             }
         }
 
-        $result = New-SplitKql -TableName 'SecurityEvent' -HighValueFieldsDB $hvFields
+        $result = Get-SplitKql -TableName 'SecurityEvent' -HighValueFieldsDB $hvFields
         $result.SplitKql | Should -Be 'EventID in (4624, 4625, 4688)'
         $result.Source | Should -Be 'knowledge-base'
         $result.HighValueFields | Should -Contain 'TimeGenerated'
@@ -614,7 +614,7 @@ Describe 'New-SplitKql' {
             }
         )
 
-        $result = New-SplitKql -TableName 'CustomTable_CL' -Rules $rules
+        $result = Get-SplitKql -TableName 'CustomTable_CL' -Rules $rules
         $result.Source | Should -Be 'rule-analysis'
         $result.RuleFields | Should -Contain 'Status'
         $result.SplitKql | Should -Not -BeNullOrEmpty
@@ -643,7 +643,7 @@ Describe 'New-SplitKql' {
             }
         )
 
-        $result = New-SplitKql -TableName 'SigninLogs' -Rules $rules -HighValueFieldsDB $hvFields
+        $result = Get-SplitKql -TableName 'SigninLogs' -Rules $rules -HighValueFieldsDB $hvFields
         $result.Source | Should -Be 'combined'
         $result.SplitKql | Should -Be 'ResultType != 0'
         $result.RuleFields.Count | Should -BeGreaterThan 0
@@ -651,7 +651,7 @@ Describe 'New-SplitKql' {
     }
 
     It 'returns source=none when no data available' {
-        $result = New-SplitKql -TableName 'UnknownTable_CL'
+        $result = Get-SplitKql -TableName 'UnknownTable_CL'
         $result.Source | Should -Be 'none'
         $result.SplitKql | Should -BeNullOrEmpty
         $result.RuleFields.Count | Should -Be 0
@@ -666,7 +666,7 @@ Describe 'New-SplitKql' {
             }
         }
 
-        $result = New-SplitKql -TableName 'SecurityEvent' -HighValueFieldsDB $hvFields
+        $result = Get-SplitKql -TableName 'SecurityEvent' -HighValueFieldsDB $hvFields
         $result.ProjectKql | Should -Not -BeNullOrEmpty
         $result.ProjectKql | Should -Match 'source'
         $result.ProjectKql | Should -Match 'project'

@@ -14,13 +14,27 @@ function Export-Report {
 
     $moduleVersion = (Import-PowerShellDataFile "$PSScriptRoot\..\LogHorizon.psd1").ModuleVersion
 
+    # Validate output path
+    $resolvedPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($OutputPath)
+    if (-not (Test-Path -Path (Split-Path -Path $resolvedPath -Parent) -IsValid)) {
+        throw "Invalid output path: $OutputPath"
+    }
+
+    # Helper function to prevent XSS and Markdown injection
+    function ConvertTo-SafeMarkdown([string]$Text) {
+        if ([string]::IsNullOrWhiteSpace($Text)) { return "" }
+        return $Text -replace '([\\`*_{}[\]()#+-.!])', '\$1' -replace '<', '&lt;' -replace '>', '&gt;'
+    }
+    
+    $safeWorkspaceName = ConvertTo-SafeMarkdown $WorkspaceName
+
     switch ($Format) {
         'json' {
             $export = [ordered]@{
                 metadata = [ordered]@{
                     tool      = 'Log Horizon'
                     version   = $moduleVersion
-                    workspace = $WorkspaceName
+                    workspace = $safeWorkspaceName
                     generated = (Get-Date -Format 'o')
                 }
                 summary              = $Analysis.Summary
@@ -39,7 +53,7 @@ function Export-Report {
             }
 
             $export | ConvertTo-Json -Depth 10 | Set-Content -Path $OutputPath -Encoding utf8
-            Write-Host "JSON report written to $OutputPath"
+            Write-Output "JSON report written to $OutputPath"
         }
 
         'markdown' {
@@ -48,7 +62,7 @@ function Export-Report {
 
             [void]$sb.AppendLine('# Log Horizon - Sentinel Log Analysis Report')
             [void]$sb.AppendLine('')
-            [void]$sb.AppendLine("**Workspace:** $WorkspaceName  ")
+            [void]$sb.AppendLine("**Workspace:** $safeWorkspaceName  ")
             [void]$sb.AppendLine("**Generated:** $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss UTC' -AsUTC)  ")
             [void]$sb.AppendLine('')
 
@@ -123,7 +137,7 @@ function Export-Report {
             }
 
             $sb.ToString() | Set-Content -Path $OutputPath -Encoding utf8
-            Write-Host "Markdown report written to $OutputPath"
+            Write-Output "Markdown report written to $OutputPath"
         }
     }
 }

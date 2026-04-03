@@ -37,7 +37,9 @@ function Get-DataTransforms {
             $dcrs += @($wsResponse.value)
         }
     }
-    catch { }
+    catch { 
+        Write-Verbose "Could not check workspace-level DCRs."
+    }
 
     # Parse transforms from DCR dataFlows
     $transforms = [System.Collections.Generic.List[PSCustomObject]]::new()
@@ -147,7 +149,7 @@ function Get-TransformType {
     'Custom'
 }
 
-function New-SplitKql {
+function Get-SplitKql {
     <#
     .SYNOPSIS
         Generates a recommended split transform KQL for a table based on analytics
