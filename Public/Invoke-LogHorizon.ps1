@@ -29,11 +29,13 @@ function Invoke-LogHorizon {
 
         [string]$WorkspaceId,
 
-        [ValidateSet('json', 'markdown')]
+        [ValidateSet('json', 'markdown', 'md', 'html')]
         [Alias('o')]
         [string]$Output,
 
         [string]$OutputPath,
+
+        [switch]$NonInteractive,
 
         [Alias('kw')]
         [string[]]$Keywords,
@@ -144,11 +146,28 @@ function Invoke-LogHorizon {
     Write-SpectreHost ""
 
     # Phase 4 - Output
-    Write-Report -Analysis $analysis `
-                 -WorkspaceName $ctx.WorkspaceName `
-                 -DefenderXDR $defenderXDR `
-                 -ExportFormat $Output `
-                 -ExportPath $OutputPath
+    if ($NonInteractive) {
+        if ($Output) {
+            if (-not $OutputPath) {
+                $OutputPath = $PWD.Path
+            }
+            Write-SpectreHost "[deepskyblue1]Non-interactive mode: exporting directly to $OutputPath[/]"
+            Export-Report -Analysis $analysis `
+                          -Format $Output `
+                          -OutputPath $OutputPath `
+                          -WorkspaceName $ctx.WorkspaceName `
+                          -DefenderXDR $defenderXDR
+        } else {
+            Write-Warning "NonInteractive switch was provided but -Output was omitted. Returning data to pipeline."
+            $analysis
+        }
+    } else {
+        Write-Report -Analysis $analysis `
+                     -WorkspaceName $ctx.WorkspaceName `
+                     -DefenderXDR $defenderXDR `
+                     -ExportFormat $Output `
+                     -ExportPath $OutputPath
+    }
 
     # Phase 5 - Cleanup
     if ($null -ne $ctx) {

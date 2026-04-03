@@ -100,6 +100,10 @@ function Invoke-Analysis {
         $isSplitTable = if ($cls) { [bool]$cls.IsSplitTable } else { $false }
         $parentTable = if ($cls) { $cls.ParentTable } else { $null }
 
+        $splitSuggestion = Get-SplitKql -TableName $name `
+                                        -Rules $RulesData.Rules `
+                                        -HighValueFieldsDB $HighValueFields
+
         [PSCustomObject]@{
             TableName                    = $name
             Classification               = $classification
@@ -128,6 +132,7 @@ function Invoke-Analysis {
             TransformKql                 = $transformKql
             IsSplitTable                 = $isSplitTable
             ParentTable                  = $parentTable
+            SplitSuggestion              = $splitSuggestion
         }
     }
 
@@ -227,10 +232,8 @@ function Invoke-Analysis {
 
             $splitSavings = [math]::Round($t.EstMonthlyCostUSD * 0.50, 2)
 
-            # Generate split KQL suggestion
-            $splitSuggestion = Get-SplitKql -TableName $t.TableName `
-                                            -Rules $RulesData.Rules `
-                                            -HighValueFieldsDB $HighValueFields
+            # Use cached split KQL suggestion
+            $splitSuggestion = $t.SplitSuggestion
 
             $detail = "High-volume primary source ($($t.MonthlyGB) GB/mo) with $($t.TotalCoverage) detection(s). " +
                       "Use a Sentinel split transform to route low-value events to Data Lake tier " +

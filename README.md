@@ -5,7 +5,7 @@
 **Microsoft Sentinel SIEM Log Source Analyzer**
 
 ![PowerShell 7+](https://img.shields.io/badge/PowerShell-7%2B-blue)
-![Module Version](https://img.shields.io/badge/version-0.4.1-green)
+![Module Version](https://img.shields.io/badge/version-0.5.0-green)
 
 ---
 I've had to answer *"what are we actually getting out of these logs?"* or *"what is the recommended logs for Microsoft Sentinel"* more times than I can count. The answer always depend on so many things, but we can be generic. So I built this thingy right here.
@@ -31,7 +31,7 @@ I've had to answer *"what are we actually getting out of these logs?"* or *"what
 | **Split KQL Generator** | Generates portal-ready split KQL from a 15-table knowledge base and/or your analytics rules — condition-only format that pastes straight into the Sentinel split rule editor |
 | **Custom Classifications** | Provide your own JSON to add or override the built-in classification database |
 | **Interactive TUI** | Spectre.Console dashboard with menus, colour-coded tables, drill-downs, and ASCII art |
-| **Export** | JSON or Markdown report for sharing with the team |
+| **Export** | JSON, Markdown, or static HTML report for sharing with the team |
 
 ## Prerequisites
 
@@ -90,7 +90,27 @@ Invoke-LogHorizon -SubscriptionId '...' -ResourceGroup 'rg' -WorkspaceName 'ws' 
 
 # Markdown
 Invoke-LogHorizon -SubscriptionId '...' -ResourceGroup 'rg' -WorkspaceName 'ws' -Output markdown -OutputPath ./report.md
+
+# Static HTML (self-contained, no JS, works offline)
+Invoke-LogHorizon -SubscriptionId '...' -ResourceGroup 'rg' -WorkspaceName 'ws' -Output html -OutputPath ./report.html
+
+# Auto-generate timestamped filename by pointing at a directory
+Invoke-LogHorizon -SubscriptionId '...' -ResourceGroup 'rg' -WorkspaceName 'ws' -Output html -OutputPath ./reports/
 ```
+
+### Non-interactive / CI mode
+
+Skip the interactive TUI and export straight to a file — useful for pipelines or scheduled runs:
+
+```powershell
+Invoke-LogHorizon -SubscriptionId '...' -ResourceGroup 'rg' -WorkspaceName 'ws' -NonInteractive -Output json -OutputPath ./reports/
+```
+
+If you omit `-Output`, the analysis object is returned to the pipeline so you can pipe it into your own logic.
+
+### Split KQL Suggestions
+
+The interactive TUI includes a **Split KQL Suggestions** menu that generates portal-ready split KQL for tables that are good candidates for splitting. It shows per-table KQL you can paste straight into the Sentinel split rule editor, with source attribution (knowledge base, rule analysis, or combined).
 
 ### Custom pricing
 
@@ -108,12 +128,13 @@ Invoke-LogHorizon -SubscriptionId '...' -ResourceGroup 'rg' -WorkspaceName 'ws' 
 | `-ResourceGroup` | string | Yes | - | Resource group containing the Sentinel workspace |
 | `-WorkspaceName` | string | Yes | - | Log Analytics workspace name |
 | `-WorkspaceId` | string | No | - | Workspace ID (auto-resolved if omitted) |
-| `-Output` | string | No | - | Export format: `json` or `markdown` |
-| `-OutputPath` | string | No | - | File path for export |
+| `-Output` | string | No | - | Export format: `json`, `markdown` / `md`, or `html` |
+| `-OutputPath` | string | No | - | File or directory path for export (auto-generates timestamped filename when a directory) |
 | `-Keywords` | string[] | No | - | Keywords for gap analysis (e.g. `'AWS','CrowdStrike'`) |
 | `-IncludeDefenderXDR` | switch | No | - | Include Defender XDR custom detection analysis |
 | `-DaysBack` | int | No | 90 | Query window for usage data (1-365 days) |
 | `-PricePerGB` | decimal | No | 5.59 | Sentinel ingestion price per GB |
+| `-NonInteractive` | switch | No | - | Skip the TUI dashboard and export directly (or return data to pipeline if `-Output` is omitted) |
 | `-CustomClassificationPath` | string | No | - | Path to a custom JSON file to add or override classifications |
 
 ---
@@ -317,7 +338,7 @@ The classification criteria were drawn from the following sources:
 ## Project layout
 
 ```
-LogHorizon.psd1              Module manifest (v0.4.0)
+LogHorizon.psd1              Module manifest (v0.5.0)
 LogHorizon.psm1              Module loader
 Public/
   Invoke-LogHorizon.ps1      Entry point, the main orchestrator
@@ -334,13 +355,14 @@ Private/
   Invoke-Classification.ps1  Static DB + heuristic classification + _SPLT_CL detection
   Invoke-Analysis.ps1        Cost-value matrix + recommendations + split suggestions
   Write-Report.ps1           Spectre.Console TUI rendering
-  Export-Report.ps1          JSON / Markdown serialisation
+  Export-Report.ps1          JSON / Markdown / static HTML export with shared section renderer
 Data/
   log-classifications.json              344-entry classification knowledge base
   high-value-fields.json                15-table split KQL knowledge base with curated fields and split hints
   custom-classifications-example.json   Example custom classification override file
+  ReportTemplate.html                   Static HTML report template (pure-CSS tabs, zero JS)
 Tests/
-  LogHorizon.Tests.ps1       Pester v5 unit tests (73 tests)
+  LogHorizon.Tests.ps1       Pester v5 unit tests (106 tests)
 ```
 
 ## Tests
@@ -357,6 +379,7 @@ MIT
 
 | Version | Date | Changes |
 |---|---|---|
+| 0.5.0 | 2026-04-03 | Static HTML export with pure-CSS tabs (zero JS, no CDN, fully self-contained), unified MD/HTML section renderer, complete JSON data capture (dataTransforms, correlationExcluded/Included, streamingTables), `-NonInteractive` switch for CI/pipeline usage, `md` format alias, datetime-stamped auto-filenames, full KQL display in DCR transforms (no truncation), multiline KQL handling in markdown tables, fixed regex `$`-backreference corruption in HTML token replacement, renamed internal helpers to avoid PowerShell alias conflicts (`h`→`hEnc`, `md`→`mdEsc`), 33 new Pester tests (106 total) |
 | 0.4.1 | 2026-04-03 | Security & stability fixes - added token memory sanitization, output path validation & XSS protection, REST API pagination limits, fixed module loader error masking, and resolved PSScriptAnalyzer warnings |
 | 0.4.0 | 2026-04-02 | Transform discovery (DCR listing + transform type classification), split table detection (`_SPLT_CL`), split KQL helper with 15-table knowledge base (`high-value-fields.json`) + rule-analysis fallback, portal-ready condition-only KQL output, expandable recommendations list, split KQL suggestions TUI menu |
 | 0.3.0 | 2026-04-02 | Log retention compliance analysis (CISA M-21-31, NIST SP 800-92, NCSC-UK, ASD ACSC, NSA), correlation tag detection (`#DONT_CORR#`/`#INC_CORR#`), retention assessment menu view, retention column in All Tables, `recommendedRetentionDays` in classification schema |

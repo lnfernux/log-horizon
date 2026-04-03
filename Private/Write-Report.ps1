@@ -176,6 +176,7 @@ function Write-InteractiveMenu {
         'View Retention Assessment'     = 'retention'
         'View Data Transforms'          = 'transforms'
         'View Split KQL Suggestions'    = 'splitkql'
+        'Evaluate specific table (KQL)' = 'tableKql'
         'View All Tables'               = 'tables'
     }
 
@@ -206,6 +207,7 @@ function Write-InteractiveMenu {
             'retention'       { Write-RetentionAssessment -Analysis $Analysis }
             'transforms'      { Write-DataTransforms -Analysis $Analysis }
             'splitkql'        { Write-SplitKqlSuggestions -Analysis $Analysis }
+            'tableKql'        { Write-TableKqlSuggestion -Analysis $Analysis }
             'tables'          { Write-AllTables -Analysis $Analysis }
             'xdr'             { Write-XDRAnalysis -Analysis $Analysis -DefenderXDR $DefenderXDR }
             'export'          {
@@ -698,6 +700,69 @@ function Write-SplitKqlSuggestions {
     }
 }
 
+# Generate KQL for specific table
+function Write-TableKqlSuggestion {
+    param([PSCustomObject]$Analysis)
+
+    $allTables = @($Analysis.TableAnalysis | Sort-Object TableName)
+    if ($allTables.Count -eq 0) { return }
+
+    $choices = @('Back') + @($allTables | ForEach-Object { $_.TableName })
+    $pick = Read-SpectreSelection -Title "Type to search or select a table to evaluate KQL suggestions:" `
+                                  -Choices $choices `
+                                  -Color DodgerBlue2 `
+                                  -EnableSearch
+
+    if ($pick -ne 'Back') {
+        $table = $allTables | Where-Object { $_.TableName -eq $pick } | Select-Object -First 1
+        $s = $table.SplitSuggestion
+
+        Write-SpectreHost ""
+        Write-SpectreHost "[dodgerblue2][bold]$($table.TableName)[/] — Target Field and KQL Evaluation[/]"
+
+        if (-not $s -or $s.Source -eq 'none') {
+            Write-SpectreHost "[dim]No KQL suggestions could be automatically generated for this table (no knowledge-base hits or mapped analytics rules).[/]"
+            return
+        }
+
+        if ($s.Description) {
+            Write-SpectreHost "[dim]$(Get-SafeEscapedText $s.Description)[/]"
+        }
+        Write-SpectreHost ""
+
+        # Show split KQL
+        if ($s.SplitKql) {
+            Write-SpectreHost "[bold]Split Transform KQL[/] [dim](condition-only — the portal prepends 'source | where' automatically)[/]"
+            Write-SpectreHost "[deepskyblue1]$(Get-SafeEscapedText $s.SplitKql)[/]"
+            Write-SpectreHost ""
+        }
+
+        # Show projection KQL
+        if ($s.ProjectKql) {
+            Write-SpectreHost "[bold]Column Reduction KQL[/] [dim](keeps only detection-relevant fields)[/]"
+            Write-SpectreHost "[deepskyblue1]$(Get-SafeEscapedText $s.ProjectKql)[/]"
+            Write-SpectreHost ""
+        }
+
+        # Show field analysis
+        if ($s.RuleFields.Count -gt 0) {
+            $ruleFieldStr = ($s.RuleFields | Sort-Object) -join ', '
+            Write-SpectreHost "[bold]Fields from analytics rules ($($s.RuleFields.Count)):[/]"
+            Write-SpectreHost "  [white]$(Get-SafeEscapedText $ruleFieldStr)[/]"
+            Write-SpectreHost ""
+        }
+
+        if ($s.HighValueFields.Count -gt 0) {
+            $hvFieldStr = ($s.HighValueFields | Sort-Object) -join ', '
+            Write-SpectreHost "[bold]Fields from knowledge base ($($s.HighValueFields.Count)):[/]"
+            Write-SpectreHost "  [white]$(Get-SafeEscapedText $hvFieldStr)[/]"
+            Write-SpectreHost ""
+        }
+
+        Write-SpectreHost "[dim]Source: $($s.Source) | $($s.RuleCount) mapped rule(s) | $($s.ConditionCount) condition(s) extracted[/]"
+    }
+}
+
 # All tables
 function Write-AllTables {
     param([PSCustomObject]$Analysis)
@@ -922,7 +987,7 @@ function Invoke-ExportFromMenu {
     # If format wasn't pre-selected, ask the user
     if (-not $ExportFormat) {
         $formatChoice = Read-SpectreSelection -Title "Export format:" `
-                          -Choices @('JSON', 'Markdown', 'Cancel') `
+                          -Choices @('JSON', 'Markdown', 'HTML', 'Cancel') `
                           -Color DodgerBlue2
 
         if ($formatChoice -eq 'Cancel') { return }
@@ -930,8 +995,7 @@ function Invoke-ExportFromMenu {
     }
 
     if (-not $ExportPath) {
-        $ext = switch ($ExportFormat) { 'json' { '.json' } 'markdown' { '.md' } }
-        $ExportPath = "log-horizon-report-$(Get-Date -Format 'yyyyMMdd-HHmmss')$ext"
+        $ExportPath = $PWD.Path
     }
 
     Export-Report -Analysis $Analysis `

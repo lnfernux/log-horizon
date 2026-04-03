@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Log Horizon - Security &amp; SIEM Analysis Report</title>
+    <style>
+        /* === Reset & Base === */
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        html { font-size: 16px; line-height: 1.6; -webkit-text-size-adjust: 100%; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif; color: #1a1a2e; background: #f8f9fa; padding: 2rem 1rem; }
+        main { max-width: 1100px; margin: 0 auto; }
+
+        /* === Header === */
+        .report-header { border-bottom: 2px solid #1e90ff; padding-bottom: 1rem; margin-bottom: 2rem; }
+        .report-header h1 { font-size: 1.8rem; color: #1e90ff; margin-bottom: 0.25rem; }
+        .report-header p { font-size: 0.85rem; color: #666; }
+
+        /* === Summary Grid === */
+        .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 0.75rem; margin-bottom: 2rem; }
+        .metric-card { background: #fff; padding: 1.25rem; border-radius: 8px; text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,0.08); border: 1px solid #e9ecef; }
+        .metric-value { font-size: 1.6rem; font-weight: 700; color: #1e90ff; }
+        .metric-value.savings { color: #2e7d32; }
+        .metric-label { font-size: 0.75rem; text-transform: uppercase; font-weight: 600; color: #888; margin-top: 0.25rem; }
+
+        /* === Pure-CSS Tabs (radio buttons) === */
+        .tab-radio { display: none; }
+        .tabs-wrapper { margin-bottom: 2rem; }
+        .tab-bar { display: flex; gap: 0; border-bottom: 2px solid #dee2e6; margin-bottom: 0; overflow-x: auto; flex-wrap: nowrap; scrollbar-width: none; -ms-overflow-style: none; }
+        .tab-bar::-webkit-scrollbar { display: none; }
+        .tab-label { display: inline-block; padding: 0.6rem 1.2rem; cursor: pointer; font-weight: 600; font-size: 0.85rem; color: #666; border-bottom: 2px solid transparent; margin-bottom: -2px; white-space: nowrap; transition: color 0.15s, border-color 0.15s; }
+        .tab-label:hover { color: #1e90ff; }
+        .tab-pane { display: none; padding: 1.5rem 0; }
+
+        /* Show the active tab label + pane via radio sibling combinator */
+        .tab-radio:nth-of-type(1):checked ~ .tab-bar .tab-label:nth-of-type(1),
+        .tab-radio:nth-of-type(2):checked ~ .tab-bar .tab-label:nth-of-type(2),
+        .tab-radio:nth-of-type(3):checked ~ .tab-bar .tab-label:nth-of-type(3),
+        .tab-radio:nth-of-type(4):checked ~ .tab-bar .tab-label:nth-of-type(4),
+        .tab-radio:nth-of-type(5):checked ~ .tab-bar .tab-label:nth-of-type(5),
+        .tab-radio:nth-of-type(6):checked ~ .tab-bar .tab-label:nth-of-type(6),
+        .tab-radio:nth-of-type(7):checked ~ .tab-bar .tab-label:nth-of-type(7),
+        .tab-radio:nth-of-type(8):checked ~ .tab-bar .tab-label:nth-of-type(8),
+        .tab-radio:nth-of-type(9):checked ~ .tab-bar .tab-label:nth-of-type(9) {
+            color: #1e90ff; border-bottom-color: #1e90ff;
+        }
+        .tab-radio:nth-of-type(1):checked ~ .tab-pane:nth-of-type(1),
+        .tab-radio:nth-of-type(2):checked ~ .tab-pane:nth-of-type(2),
+        .tab-radio:nth-of-type(3):checked ~ .tab-pane:nth-of-type(3),
+        .tab-radio:nth-of-type(4):checked ~ .tab-pane:nth-of-type(4),
+        .tab-radio:nth-of-type(5):checked ~ .tab-pane:nth-of-type(5),
+        .tab-radio:nth-of-type(6):checked ~ .tab-pane:nth-of-type(6),
+        .tab-radio:nth-of-type(7):checked ~ .tab-pane:nth-of-type(7),
+        .tab-radio:nth-of-type(8):checked ~ .tab-pane:nth-of-type(8),
+        .tab-radio:nth-of-type(9):checked ~ .tab-pane:nth-of-type(9) {
+            display: block;
+        }
+
+        /* === Tables === */
+        .table-wrap { overflow-x: auto; margin-bottom: 1rem; }
+        table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+        th, td { padding: 0.5rem 0.75rem; border-bottom: 1px solid #e9ecef; text-align: left; }
+        th { background: #f1f3f5; font-weight: 600; color: #495057; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.03em; }
+        tbody tr:hover { background: #f8f9fa; }
+        .num { text-align: right; font-variant-numeric: tabular-nums; }
+
+        /* === Badges === */
+        .badge { display: inline-block; padding: 0.2em 0.55em; font-size: 0.7rem; font-weight: 700; color: #fff; background: #1e90ff; border-radius: 3px; margin-right: 0.3rem; vertical-align: middle; }
+        .badge-high { background: #e53935; }
+        .badge-medium { background: #fb8c00; }
+        .badge-low { background: #43a047; }
+        .badge-savings { background: #2e7d32; }
+
+        /* === Classification colors === */
+        .cls-primary { color: #2e7d32; font-weight: 600; }
+        .cls-secondary { color: #fb8c00; font-weight: 600; }
+        .cls-unknown { color: #e53935; font-weight: 600; }
+        .bad { color: #e53935; font-weight: 600; }
+
+        /* === Cards / Articles === */
+        .rec-card { background: #fff; border: 1px solid #e9ecef; border-radius: 8px; margin-bottom: 1rem; overflow: hidden; }
+        .rec-header { padding: 0.75rem 1rem; border-bottom: 1px solid #e9ecef; background: #fafbfc; }
+        .rec-card p { padding: 0.75rem 1rem; margin: 0; font-size: 0.9rem; color: #444; }
+        .warning { background: #fff3cd; border: 1px solid #ffc107; border-radius: 6px; padding: 0.75rem 1rem; margin-bottom: 1rem; font-size: 0.9rem; }
+
+        /* === KQL code blocks === */
+        .kql-block { background: #1e1e1e; color: #d4d4d4; padding: 1rem; border-radius: 4px; overflow-x: auto; font-family: 'Cascadia Code', 'Fira Code', Consolas, monospace; font-size: 0.8rem; white-space: pre-wrap; word-break: break-word; }
+        code.kql { background: #f1f3f5; padding: 0.15em 0.4em; border-radius: 3px; font-size: 0.8rem; font-family: 'Cascadia Code', Consolas, monospace; word-break: break-all; }
+
+        h3 { font-size: 1.1rem; color: #343a40; margin: 1.5rem 0 0.75rem 0; }
+
+        /* === Footer === */
+        .report-footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid #dee2e6; font-size: 0.75rem; color: #888; text-align: center; }
+
+        /* === Print === */
+        @media print {
+            .tab-pane { display: block !important; page-break-inside: avoid; }
+            .tab-bar, .tab-radio { display: none; }
+            body { padding: 0; background: #fff; }
+        }
+    </style>
+</head>
+<body>
+    <main>
+        <header class="report-header">
+            <h1>Log Horizon Report</h1>
+            <p><strong>Workspace:</strong> __WORKSPACE__</p>
+            <p>Generated: __GENERATED__ &middot; Version __VERSION__</p>
+        </header>
+
+        <div class="tabs-wrapper">
+__TAB_NAVIGATION__
+            <div class="tab-bar">
+__TAB_LABELS__
+            </div>
+
+__TAB_PANES__
+        </div>
+
+        <footer class="report-footer">
+            Log Horizon &middot; Microsoft Sentinel SIEM Log Source Analyzer &middot; created by infernux.no
+        </footer>
+    </main>
+</body>
+</html>

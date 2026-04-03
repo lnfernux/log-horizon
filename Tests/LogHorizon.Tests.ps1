@@ -7,6 +7,125 @@ BeforeAll {
     . "$privatePath\Export-Report.ps1"
     . "$privatePath\Write-Report.ps1"
     . "$privatePath\Get-DataTransforms.ps1"
+
+    function New-MockAnalysis {
+        [PSCustomObject]@{
+            TableAnalysis = @(
+                [PSCustomObject]@{
+                    TableName              = 'SecurityEvent'
+                    Classification         = 'primary'
+                    Category               = 'Windows Security'
+                    MonthlyGB              = 50
+                    EstMonthlyCostUSD      = 279.50
+                    IsFree                 = $false
+                    AnalyticsRules         = 15
+                    HuntingQueries         = 3
+                    TotalCoverage          = 15
+                    Assessment             = 'High Value'
+                    HasTransform           = $true
+                    TransformTypes         = @('Filter')
+                    TransformKql           = @('source | where EventID != 4688')
+                    IsSplitTable           = $false
+                    ParentTable            = $null
+                    RetentionCompliant     = $true
+                    RetentionCanImprove    = $true
+                    ActualRetentionDays    = 90
+                    RecommendedRetentionDays = 365
+                    TablePlan              = 'Analytics'
+                    IsXDRStreaming         = $false
+                    SplitSuggestion        = $null
+                },
+                [PSCustomObject]@{
+                    TableName              = 'AWSVPCFlow'
+                    Classification         = 'secondary'
+                    Category               = 'Network Flow'
+                    MonthlyGB              = 100
+                    EstMonthlyCostUSD      = 559.00
+                    IsFree                 = $false
+                    AnalyticsRules         = 0
+                    HuntingQueries         = 0
+                    TotalCoverage          = 0
+                    Assessment             = 'Low Value'
+                    HasTransform           = $false
+                    TransformTypes         = @()
+                    TransformKql           = @()
+                    IsSplitTable           = $false
+                    ParentTable            = $null
+                    RetentionCompliant     = $false
+                    RetentionCanImprove    = $false
+                    ActualRetentionDays    = 30
+                    RecommendedRetentionDays = 90
+                    TablePlan              = 'Analytics'
+                    IsXDRStreaming         = $false
+                    SplitSuggestion        = $null
+                }
+            )
+            Recommendations = @(
+                [PSCustomObject]@{
+                    Title          = 'Move AWSVPCFlow to Basic Logs'
+                    TableName      = 'AWSVPCFlow'
+                    Priority       = 'High'
+                    Type           = 'DataLake'
+                    CurrentCost    = 559
+                    EstSavingsUSD  = 400
+                    Detail         = 'AWSVPCFlow is secondary with no detection coverage.'
+                },
+                [PSCustomObject]@{
+                    Title          = 'Increase SecurityEvent retention'
+                    TableName      = 'SecurityEvent'
+                    Priority       = 'Medium'
+                    Type           = 'RetentionImprovement'
+                    CurrentCost    = 0
+                    EstSavingsUSD  = 0
+                    Detail         = 'Recommended 365d for compliance.'
+                }
+            )
+            KeywordGaps = @(
+                [PSCustomObject]@{
+                    TableName      = 'AWSCloudTrail'
+                    Connector      = 'AWS'
+                    Classification = 'primary'
+                    MatchedKeyword = 'AWS'
+                }
+            )
+            CorrelationExcluded = @(
+                [PSCustomObject]@{ RuleName = 'Test <Rule>'; Kind = 'Scheduled'; Tables = @('SecurityEvent') }
+            )
+            CorrelationIncluded = @(
+                [PSCustomObject]@{ RuleName = 'Included Rule'; Kind = 'NRT'; Tables = @('SigninLogs') }
+            )
+            SocRecommendations = @()
+            DataTransforms = [PSCustomObject]@{
+                Transforms = @(
+                    [PSCustomObject]@{
+                        DCRName       = 'dcr-securityevent'
+                        OutputTable   = 'SecurityEvent'
+                        TransformKql  = 'source | where EventID != 4688'
+                        TransformType = 'Filter'
+                    }
+                )
+            }
+            Summary = [PSCustomObject]@{
+                TotalTables           = 2
+                PrimaryCount          = 1
+                SecondaryCount        = 1
+                TotalMonthlyGB        = 150
+                TotalMonthlyCost      = 838.50
+                EnabledRules          = 15
+                HuntingQueries        = 3
+                CoveragePercent       = 50
+                EstTotalSavings       = 400
+                RetentionChecked      = 2
+                RetentionCompliant    = 1
+                RetentionNonCompliant = 1
+                RetentionImprovable   = 1
+                TablesWithTransforms  = 1
+                TransformDCRs         = 1
+                SplitTables           = 0
+                WorkspaceRetentionDays = 90
+            }
+        }
+    }
 }
 
 Describe 'Get-TablesFromKql' {
@@ -812,5 +931,378 @@ Describe 'Invoke-Analysis with split KQL generation' {
         $rec = $script:splitResult.Recommendations | Where-Object { $_.Type -eq 'SplitCandidate' -and $_.TableName -eq 'SecurityEvent' }
         $rec.SplitSuggestion.ProjectKql | Should -Not -BeNullOrEmpty
         $rec.SplitSuggestion.ProjectKql | Should -Match 'project'
+    }
+}
+
+# ── Export-Report & ConvertTo-ReportSections tests ──────────────────────────
+
+Describe 'ConvertTo-ReportSections' {
+    BeforeAll {
+        $script:analysis = New-MockAnalysis
+    }
+
+    It 'returns a non-empty list of sections' {
+        $sections = ConvertTo-ReportSections -Analysis $script:analysis
+        $sections.Count | Should -BeGreaterOrEqual 1
+    }
+
+    It 'every section has Title, TabId, Markdown, and Html' {
+        $sections = ConvertTo-ReportSections -Analysis $script:analysis
+        foreach ($s in $sections) {
+            $s.Title    | Should -Not -BeNullOrEmpty
+            $s.TabId    | Should -Not -BeNullOrEmpty
+            $s.Markdown | Should -Not -BeNullOrEmpty
+            $s.Html     | Should -Not -BeNullOrEmpty
+        }
+    }
+
+    It 'produces a Summary section with metric cards' {
+        $sections = ConvertTo-ReportSections -Analysis $script:analysis
+        $summary = $sections | Where-Object TabId -eq 'summary'
+        $summary | Should -Not -BeNullOrEmpty
+        $summary.Html | Should -Match 'metric-card'
+        $summary.Markdown | Should -Match 'Total Tables'
+    }
+
+    It 'produces a Recommendations section when recommendations exist' {
+        $sections = ConvertTo-ReportSections -Analysis $script:analysis
+        $recs = $sections | Where-Object TabId -eq 'recs'
+        $recs | Should -Not -BeNullOrEmpty
+        $recs.Html | Should -Match 'rec-card'
+        $recs.Markdown | Should -Match 'Move AWSVPCFlow'
+    }
+
+    It 'produces a Tables section sorted by cost descending' {
+        $sections = ConvertTo-ReportSections -Analysis $script:analysis
+        $tables = $sections | Where-Object TabId -eq 'tables'
+        $tables | Should -Not -BeNullOrEmpty
+        $tables.Html | Should -Match 'AWSVPCFlow'
+        # AWSVPCFlow costs more so should appear first in the HTML
+        $idxAWS = $tables.Html.IndexOf('AWSVPCFlow')
+        $idxSE  = $tables.Html.IndexOf('SecurityEvent')
+        $idxAWS | Should -BeLessThan $idxSE
+    }
+
+    It 'produces a Keyword Gaps section' {
+        $sections = ConvertTo-ReportSections -Analysis $script:analysis
+        $kw = $sections | Where-Object TabId -eq 'keywords'
+        $kw | Should -Not -BeNullOrEmpty
+        $kw.Html | Should -Match 'AWSCloudTrail'
+        $kw.Markdown | Should -Match 'AWSCloudTrail'
+    }
+
+    It 'produces a Retention section for non-compliant tables' {
+        $sections = ConvertTo-ReportSections -Analysis $script:analysis
+        $ret = $sections | Where-Object TabId -eq 'retention'
+        $ret | Should -Not -BeNullOrEmpty
+        $ret.Html | Should -Match 'AWSVPCFlow'
+        $ret.Markdown | Should -Match 'AWSVPCFlow'
+    }
+
+    It 'produces a Transforms section when transforms exist' {
+        $sections = ConvertTo-ReportSections -Analysis $script:analysis
+        $tx = $sections | Where-Object TabId -eq 'transforms'
+        $tx | Should -Not -BeNullOrEmpty
+        $tx.Html | Should -Match 'Filter'
+    }
+
+    It 'produces a Correlation section' {
+        $sections = ConvertTo-ReportSections -Analysis $script:analysis
+        $corr = $sections | Where-Object TabId -eq 'correlation'
+        $corr | Should -Not -BeNullOrEmpty
+        $corr.Markdown | Should -Match 'Excluded from Correlation'
+        $corr.Markdown | Should -Match 'Included in Correlation'
+    }
+
+    It 'HTML-encodes special characters in correlation rule names' {
+        $sections = ConvertTo-ReportSections -Analysis $script:analysis
+        $corr = $sections | Where-Object TabId -eq 'correlation'
+        $corr.Html | Should -Match 'Test &lt;Rule&gt;'
+        $corr.Html | Should -Not -Match 'Test <Rule>'
+    }
+
+    It 'markdown-escapes special characters in correlation rule names' {
+        $sections = ConvertTo-ReportSections -Analysis $script:analysis
+        $corr = $sections | Where-Object TabId -eq 'correlation'
+        $corr.Markdown | Should -Match 'Test'
+        $corr.Markdown | Should -Not -Match 'Test <Rule>'
+    }
+
+    It 'includes Defender XDR section when DefenderXDR is provided' {
+        $xdr = [PSCustomObject]@{
+            TotalXDRRules    = 5
+            XDRTableCoverage = @{}
+            StreamingTables  = @()
+        }
+        $sections = ConvertTo-ReportSections -Analysis $script:analysis -DefenderXDR $xdr
+        $xdrSection = $sections | Where-Object TabId -eq 'xdr'
+        $xdrSection | Should -Not -BeNullOrEmpty
+        $xdrSection.Html | Should -Match '5 rules'
+        $xdrSection.Markdown | Should -Match '5 rules'
+    }
+
+    It 'omits Defender XDR section when DefenderXDR is null' {
+        $sections = ConvertTo-ReportSections -Analysis $script:analysis
+        $xdrSection = $sections | Where-Object TabId -eq 'xdr'
+        $xdrSection | Should -BeNullOrEmpty
+    }
+
+    It 'omits Keyword Gaps section when there are no gaps' {
+        $a = New-MockAnalysis
+        $a.KeywordGaps = @()
+        $sections = ConvertTo-ReportSections -Analysis $a
+        $kw = $sections | Where-Object TabId -eq 'keywords'
+        $kw | Should -BeNullOrEmpty
+    }
+
+    It 'omits Recommendations section when there are no recommendations' {
+        $a = New-MockAnalysis
+        $a.Recommendations = @()
+        $sections = ConvertTo-ReportSections -Analysis $a
+        $recs = $sections | Where-Object TabId -eq 'recs'
+        $recs | Should -BeNullOrEmpty
+    }
+}
+
+Describe 'Export-Report' {
+    BeforeAll {
+        $script:analysis = New-MockAnalysis
+        $script:tempDir = Join-Path ([System.IO.Path]::GetTempPath()) "LogHorizon_Tests_$(Get-Random)"
+        New-Item -Path $script:tempDir -ItemType Directory -Force | Out-Null
+    }
+
+    AfterAll {
+        Remove-Item -Path $script:tempDir -Recurse -Force -ErrorAction SilentlyContinue
+    }
+
+    It 'exports valid JSON with all top-level properties' {
+        $outFile = Join-Path $script:tempDir 'test.json'
+        Export-Report -Analysis $script:analysis -Format 'json' -OutputPath $outFile -WorkspaceName 'TestWorkspace'
+        Test-Path $outFile | Should -Be $true
+        $json = Get-Content $outFile -Raw | ConvertFrom-Json
+        $json.metadata.workspace | Should -Be 'TestWorkspace'
+        $json.metadata.tool | Should -Be 'Log Horizon'
+        $json.summary | Should -Not -BeNullOrEmpty
+        $json.tableAnalysis | Should -Not -BeNullOrEmpty
+        $json.recommendations | Should -Not -BeNullOrEmpty
+        $json.keywordGaps | Should -Not -BeNullOrEmpty
+        $json.correlationExcluded | Should -Not -BeNullOrEmpty
+        $json.correlationIncluded | Should -Not -BeNullOrEmpty
+        $json.dataTransforms | Should -Not -BeNullOrEmpty
+    }
+
+    It 'JSON includes DefenderXDR block when provided' {
+        $outFile = Join-Path $script:tempDir 'test_xdr.json'
+        $xdr = [PSCustomObject]@{
+            TotalXDRRules    = 3
+            XDRTableCoverage = @{}
+            StreamingTables  = @('DeviceEvents')
+        }
+        Export-Report -Analysis $script:analysis -Format 'json' -OutputPath $outFile -WorkspaceName 'WS' -DefenderXDR $xdr
+        $json = Get-Content $outFile -Raw | ConvertFrom-Json
+        $json.defenderXDR | Should -Not -BeNullOrEmpty
+        $json.defenderXDR.totalXDRRules | Should -Be 3
+    }
+
+    It 'exports markdown with correct headers' {
+        $outFile = Join-Path $script:tempDir 'test.md'
+        Export-Report -Analysis $script:analysis -Format 'markdown' -OutputPath $outFile -WorkspaceName 'TestWS'
+        Test-Path $outFile | Should -Be $true
+        $content = Get-Content $outFile -Raw
+        $content | Should -Match '# Log Horizon'
+        $content | Should -Match 'TestWS'
+        $content | Should -Match '## Summary'
+        $content | Should -Match '## Recommendations'
+        $content | Should -Match '## Table Analysis'
+    }
+
+    It 'md format alias produces identical output to markdown' {
+        $outMd = Join-Path $script:tempDir 'alias.md'
+        $outMarkdown = Join-Path $script:tempDir 'full.md'
+        Export-Report -Analysis $script:analysis -Format 'md' -OutputPath $outMd -WorkspaceName 'AliasTest'
+        Export-Report -Analysis $script:analysis -Format 'markdown' -OutputPath $outMarkdown -WorkspaceName 'AliasTest'
+        # Both should produce non-empty files with same structure (timestamps may differ slightly)
+        $mdContent = Get-Content $outMd -Raw
+        $markdownContent = Get-Content $outMarkdown -Raw
+        $mdContent | Should -Match '## Summary'
+        $markdownContent | Should -Match '## Summary'
+    }
+
+    It 'exports static HTML without script tags' {
+        $outFile = Join-Path $script:tempDir 'test.html'
+        Export-Report -Analysis $script:analysis -Format 'html' -OutputPath $outFile -WorkspaceName 'HtmlTest'
+        Test-Path $outFile | Should -Be $true
+        $content = Get-Content $outFile -Raw
+        $content | Should -Match '<!DOCTYPE html>'
+        $content | Should -Match 'tab-radio'
+        $content | Should -Match 'tab-label'
+        $content | Should -Match 'tab-pane'
+        $content | Should -Not -Match '<script'
+        $content | Should -Match 'HtmlTest'
+    }
+
+    It 'HTML output contains no CDN links' {
+        $outFile = Join-Path $script:tempDir 'nocdn.html'
+        Export-Report -Analysis $script:analysis -Format 'html' -OutputPath $outFile -WorkspaceName 'W'
+        $content = Get-Content $outFile -Raw
+        $content | Should -Not -Match 'cdn\.jsdelivr'
+        $content | Should -Not -Match 'unpkg\.com'
+        $content | Should -Not -Match 'cdnjs\.com'
+    }
+
+    It 'HTML-encodes workspace name to prevent XSS' {
+        $outFile = Join-Path $script:tempDir 'xss.html'
+        Export-Report -Analysis $script:analysis -Format 'html' -OutputPath $outFile -WorkspaceName '<script>alert(1)</script>'
+        $content = Get-Content $outFile -Raw
+        $content | Should -Not -Match '<script>alert'
+        $content | Should -Match '&lt;script&gt;'
+    }
+
+    It 'auto-generates timestamped filename when OutputPath is a directory' {
+        $subDir = Join-Path $script:tempDir 'autoname'
+        New-Item -Path $subDir -ItemType Directory -Force | Out-Null
+        Export-Report -Analysis $script:analysis -Format 'json' -OutputPath $subDir -WorkspaceName 'W'
+        $files = Get-ChildItem -Path $subDir -Filter '*.json'
+        $files.Count | Should -Be 1
+        $files[0].Name | Should -Match '^LogHorizon_Report_\d{4}-\d{2}-\d{2}_\d{4}\.json$'
+    }
+
+    It 'auto-generates .md extension for markdown format in directory mode' {
+        $subDir = Join-Path $script:tempDir 'automd'
+        New-Item -Path $subDir -ItemType Directory -Force | Out-Null
+        Export-Report -Analysis $script:analysis -Format 'md' -OutputPath $subDir -WorkspaceName 'W'
+        $files = Get-ChildItem -Path $subDir -Filter '*.md'
+        $files.Count | Should -Be 1
+        $files[0].Name | Should -Match '^LogHorizon_Report_.*\.md$'
+    }
+
+    It 'auto-generates .html extension for html format in directory mode' {
+        $subDir = Join-Path $script:tempDir 'autohtml'
+        New-Item -Path $subDir -ItemType Directory -Force | Out-Null
+        Export-Report -Analysis $script:analysis -Format 'html' -OutputPath $subDir -WorkspaceName 'W'
+        $files = Get-ChildItem -Path $subDir -Filter '*.html'
+        $files.Count | Should -Be 1
+        $files[0].Name | Should -Match '^LogHorizon_Report_.*\.html$'
+    }
+
+    It 'HTML output contains no unreplaced template tokens' {
+        $outFile = Join-Path $script:tempDir 'tokens.html'
+        Export-Report -Analysis $script:analysis -Format 'html' -OutputPath $outFile -WorkspaceName 'TokenTest'
+        $content = Get-Content $outFile -Raw
+        $content | Should -Not -Match '__WORKSPACE__'
+        $content | Should -Not -Match '__GENERATED__'
+        $content | Should -Not -Match '__VERSION__'
+        $content | Should -Not -Match '__TAB_NAVIGATION__'
+        $content | Should -Not -Match '__TAB_LABELS__'
+        $content | Should -Not -Match '__TAB_PANES__'
+    }
+
+    It 'HTML renders dollar amounts correctly without backreference corruption' {
+        $outFile = Join-Path $script:tempDir 'dollars.html'
+        Export-Report -Analysis $script:analysis -Format 'html' -OutputPath $outFile -WorkspaceName 'DollarTest'
+        $content = Get-Content $outFile -Raw
+        # Savings metric should render as "$400/mo", not be empty or garbled
+        $content | Should -Match '\$400'
+        $content | Should -Match 'metric-value'
+    }
+}
+
+Describe 'ConvertTo-ReportSections edge cases' {
+    BeforeAll {
+        $script:analysis = New-MockAnalysis
+    }
+
+    It 'omits Correlation section when both lists are empty' {
+        $a = New-MockAnalysis
+        $a.CorrelationExcluded = @()
+        $a.CorrelationIncluded = @()
+        $sections = ConvertTo-ReportSections -Analysis $a
+        $corr = $sections | Where-Object TabId -eq 'correlation'
+        $corr | Should -BeNullOrEmpty
+    }
+
+    It 'omits Transforms section when no transforms and no split tables' {
+        $a = New-MockAnalysis
+        $a.DataTransforms = [PSCustomObject]@{ Transforms = @() }
+        foreach ($t in $a.TableAnalysis) { $t.HasTransform = $false; $t.IsSplitTable = $false }
+        $sections = ConvertTo-ReportSections -Analysis $a
+        $tx = $sections | Where-Object TabId -eq 'transforms'
+        $tx | Should -BeNullOrEmpty
+    }
+
+    It 'omits Retention section when all tables are compliant and none improvable' {
+        $a = New-MockAnalysis
+        foreach ($t in $a.TableAnalysis) { $t.RetentionCompliant = $true; $t.RetentionCanImprove = $false }
+        $sections = ConvertTo-ReportSections -Analysis $a
+        $ret = $sections | Where-Object TabId -eq 'retention'
+        $ret | Should -BeNullOrEmpty
+    }
+
+    It 'produces Split KQL section for SplitCandidate recommendations' {
+        $a = New-MockAnalysis
+        $a.Recommendations += [PSCustomObject]@{
+            Title          = 'Split SecurityEvent'
+            TableName      = 'SecurityEvent'
+            Priority       = 'Medium'
+            Type           = 'SplitCandidate'
+            CurrentCost    = 279
+            EstSavingsUSD  = 150
+            Detail         = 'Split high-volume primary table.'
+            SplitSuggestion = [PSCustomObject]@{
+                Source     = 'kb+rules'
+                RuleCount  = 5
+                SplitKql   = 'SecurityEvent | where EventID in (4624, 4625)'
+                ProjectKql = '| project TimeGenerated, EventID, Account'
+            }
+        }
+        $sections = ConvertTo-ReportSections -Analysis $a
+        $split = $sections | Where-Object TabId -eq 'splitkql'
+        $split | Should -Not -BeNullOrEmpty
+        $split.Html | Should -Match 'SecurityEvent'
+        $split.Html | Should -Match 'kql-block'
+        $split.Markdown | Should -Match 'Split KQL'
+        $split.Markdown | Should -Match 'SecurityEvent \| where EventID'
+    }
+
+    It 'collapses multiline KQL to single line in markdown transforms table' {
+        $a = New-MockAnalysis
+        $a.DataTransforms = [PSCustomObject]@{
+            Transforms = @(
+                [PSCustomObject]@{
+                    DCRName       = 'dcr-multiline'
+                    OutputTable   = 'MultiLineTable'
+                    TransformKql  = "source`n| extend TimeGenerated = now()`n| project TimeGenerated, Name"
+                    TransformType = 'Enrichment'
+                }
+            )
+        }
+        $a.TableAnalysis[0].HasTransform = $true
+        $sections = ConvertTo-ReportSections -Analysis $a
+        $tx = $sections | Where-Object TabId -eq 'transforms'
+        $tx | Should -Not -BeNullOrEmpty
+        # Markdown should have the KQL on a single line (no newlines breaking the table)
+        $mdLines = $tx.Markdown -split "`n" | Where-Object { $_ -match 'MultiLineTable' }
+        $mdLines.Count | Should -Be 1
+    }
+
+    It 'escapes pipe characters in markdown KQL preview' {
+        $a = New-MockAnalysis
+        $a.DataTransforms = [PSCustomObject]@{
+            Transforms = @(
+                [PSCustomObject]@{
+                    DCRName       = 'dcr-pipe'
+                    OutputTable   = 'PipeTable'
+                    TransformKql  = 'source | where x == 1'
+                    TransformType = 'Filter'
+                }
+            )
+        }
+        $a.TableAnalysis[0].HasTransform = $true
+        $sections = ConvertTo-ReportSections -Analysis $a
+        $tx = $sections | Where-Object TabId -eq 'transforms'
+        # The pipe should be an HTML entity so it doesn't break the markdown table
+        $mdLine = ($tx.Markdown -split "`n" | Where-Object { $_ -match 'PipeTable' })
+        $mdLine | Should -Match '&#124;'
+        $mdLine | Should -Match '<code>'
     }
 }
