@@ -3,6 +3,7 @@
 </center>
 
 **Microsoft Sentinel SIEM Log Source Analyzer**
+*<br/>Author: [infernux](https://infernux.no)*
 
 ![PowerShell 7+](https://img.shields.io/badge/PowerShell-7%2B-blue)
 ![Module Version](https://img.shields.io/badge/version-0.5.0-green)
