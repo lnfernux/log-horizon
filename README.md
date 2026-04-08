@@ -2,8 +2,7 @@
   <img width="500"  src="https://github.com/user-attachments/assets/a1e00e5f-e566-47bd-ad08-2678ba07b7ee" />
 </center>
 
-**Microsoft Sentinel SIEM Log Source Analyzer**
-*<br/>Author: [infernux](https://infernux.no)*
+### Microsoft Sentinel SIEM Log Source Analyzer
 
 ![PowerShell 7+](https://img.shields.io/badge/PowerShell-7%2B-blue)
 ![Module Version](https://img.shields.io/badge/version-0.5.0-green)
@@ -411,3 +410,8 @@ The module sets this automatically on import, but depending on your session the 
 > By downloading, installing, or using this tool, you acknowledge that you have read, understood, and agree to these terms.
 >
 
+## Like the tool? 
+
+</br>
+<a href='https://ko-fi.com/B0B61XGLO7' target='_blank'><img height='36' style='border:0px;height:36px;' src='https://storage.ko-fi.com/cdn/kofi6.png?v=6' border='0' alt='Buy Me a Coffee at ko-fi.com' /></a>
+</br>
