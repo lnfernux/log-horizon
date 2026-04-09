@@ -14,6 +14,10 @@ I've had to answer *"what are we actually getting out of these logs?"* or *"what
 
 > **Important**: This is a generic approach. If you know a log source is important to your environment, that context always takes precedence over what this tool tells you. The classifications are a starting point, not gospel.
 
+**Want to read more? I have some posts about Log Horizon on my blog:**
+
+1. [Tool Release: Log Horizon](https://infernux.no/blog/loghorizon-toolrelease/)
+
 ## Features
 
 | Feature | Description |
