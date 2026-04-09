@@ -7,6 +7,7 @@ BeforeAll {
     . "$privatePath\Export-Report.ps1"
     . "$privatePath\Write-Report.ps1"
     . "$privatePath\Get-DataTransforms.ps1"
+    . "$privatePath\Invoke-FullControlEncounter.ps1"
 
     function New-MockAnalysis {
         [PSCustomObject]@{
@@ -792,6 +793,191 @@ Describe 'Get-SplitKql' {
         $result.AllFields | Should -Contain 'TimeGenerated'
         $result.AllFields | Should -Contain 'EventID'
         $result.AllFields | Should -Contain 'Account'
+    }
+}
+
+Describe 'Full Control Encounter decision logic' {
+    It 'loads exactly five top tools for each category from catalog' {
+        $catalog = Get-FceCategoryCatalog
+        $catalog.Count | Should -BeGreaterThan 0
+
+        foreach ($cat in $catalog) {
+            $cat.TopTools.Count | Should -Be 5 -Because "$($cat.Key) must expose exactly 5 top tools"
+        }
+    }
+
+    It 'exposes an other-tools list for each category' {
+        $catalog = Get-FceCategoryCatalog
+        foreach ($cat in $catalog) {
+            $cat.OtherTools.Count | Should -BeGreaterThan 0 -Because "$($cat.Key) should have additional tools when user picks Other"
+        }
+    }
+
+    It 'maps selected other tool entries to classifications' {
+        $db = @(
+            [PSCustomObject]@{
+                tableName = 'SigninLogs'
+                connector = 'Microsoft Entra ID'
+                classification = 'primary'
+                category = 'Identity & Access'
+                description = 'x'
+                keywords = @('signin')
+                mitreSources = @()
+                recommendedTier = 'analytics'
+                isFree = $false
+                recommendedRetentionDays = 365
+            }
+        )
+
+        $catalog = Get-FceCategoryCatalog
+        $state = @{
+            identity = [PSCustomObject]@{ Enabled = $true; Technologies = @('Other IdP'); IsBusinessCritical = $false }
+        }
+
+        $raw = New-FceRawOverrides -Database $db -Catalog $catalog -State $state
+        $raw.Count | Should -BeGreaterThan 0
+        $raw[0].tableName | Should -Be 'SigninLogs'
+    }
+
+    It 'promotes secondary tables when business critical and promotion is applied' {
+        $raw = @(
+            [PSCustomObject]@{
+                tableName = 'CommonSecurityLog'
+                connector = 'CEF'
+                category = 'Network Security'
+                description = 'test'
+                keywords = @('firewall')
+                mitreSources = @()
+                isFree = $false
+                recommendedRetentionDays = 365
+                baselineClassification = 'secondary'
+                baselineTier = 'datalake'
+                proposedClassification = 'primary'
+                proposedTier = 'analytics'
+                wouldPromote = $true
+                wizardCategory = 'Network security events'
+            }
+        )
+
+        $result = ConvertTo-FceFinalOverrides -RawOverrides $raw -ApplyPromotions
+        $result[0].classification | Should -Be 'primary'
+        $result[0].recommendedTier | Should -Be 'analytics'
+    }
+
+    It 'keeps baseline classification when promotion is not applied' {
+        $raw = @(
+            [PSCustomObject]@{
+                tableName = 'CommonSecurityLog'
+                connector = 'CEF'
+                category = 'Network Security'
+                description = 'test'
+                keywords = @('firewall')
+                mitreSources = @()
+                isFree = $false
+                recommendedRetentionDays = 365
+                baselineClassification = 'secondary'
+                baselineTier = 'datalake'
+                proposedClassification = 'primary'
+                proposedTier = 'analytics'
+                wouldPromote = $true
+                wizardCategory = 'Network security events'
+            }
+        )
+
+        $result = ConvertTo-FceFinalOverrides -RawOverrides $raw
+        $result[0].classification | Should -Be 'secondary'
+        $result[0].recommendedTier | Should -Be 'datalake'
+    }
+
+    It 'preserves already-primary tables' {
+        $raw = @(
+            [PSCustomObject]@{
+                tableName = 'SigninLogs'
+                connector = 'Entra ID'
+                category = 'Identity & Access'
+                description = 'test'
+                keywords = @('signin')
+                mitreSources = @()
+                isFree = $false
+                recommendedRetentionDays = 365
+                baselineClassification = 'primary'
+                baselineTier = 'analytics'
+                proposedClassification = 'primary'
+                proposedTier = 'analytics'
+                wouldPromote = $false
+                wizardCategory = 'Identity and authentication'
+            }
+        )
+
+        $result = ConvertTo-FceFinalOverrides -RawOverrides $raw -ApplyPromotions
+        $result[0].classification | Should -Be 'primary'
+        $result[0].recommendedTier | Should -Be 'analytics'
+    }
+
+    It 'exports JSON using Invoke-Classification compatible schema' {
+        $overrides = @(
+            [PSCustomObject]@{
+                tableName = 'SigninLogs'
+                connector = 'Microsoft Entra ID'
+                classification = 'primary'
+                category = 'Identity & Access'
+                description = 'fce test'
+                keywords = @('signin')
+                mitreSources = @()
+                recommendedTier = 'analytics'
+                isFree = $false
+                recommendedRetentionDays = 365
+            }
+        )
+
+        $export = Export-FceOverrides -Overrides $overrides -OutputPath $TestDrive
+        Test-Path $export.Path | Should -Be $true
+
+        $roundTrip = Get-Content $export.Path -Raw | ConvertFrom-Json
+        $roundTrip[0].tableName | Should -Be 'SigninLogs'
+        $roundTrip[0].classification | Should -Be 'primary'
+        $roundTrip[0].recommendedTier | Should -Be 'analytics'
+    }
+
+    It 'creates markdown summary only when switch is used' {
+        $db = @(
+            [PSCustomObject]@{
+                tableName = 'SigninLogs'
+                connector = 'Microsoft Entra ID'
+                classification = 'primary'
+                category = 'Identity & Access'
+                description = 'x'
+                keywords = @('signin')
+                mitreSources = @()
+                recommendedTier = 'analytics'
+                isFree = $false
+                recommendedRetentionDays = 365
+            }
+            [PSCustomObject]@{
+                tableName = 'CommonSecurityLog'
+                connector = 'CEF/Syslog'
+                classification = 'secondary'
+                category = 'Network Security'
+                description = 'x'
+                keywords = @('firewall')
+                mitreSources = @()
+                recommendedTier = 'datalake'
+                isFree = $false
+                recommendedRetentionDays = 365
+            }
+        )
+
+        $preset = @{
+            identity = @{ Enabled = $true; Technologies = @('Microsoft Entra ID'); IsBusinessCritical = $true }
+            network = @{ Enabled = $true; Technologies = @('Firewall logs'); IsBusinessCritical = $true }
+        }
+
+        $noSummary = Invoke-FullControlEncounter -OutputPath $TestDrive -PresetAnswers $preset -ClassificationDatabase $db
+        $noSummary.SummaryPath | Should -BeNullOrEmpty
+
+        $withSummary = Invoke-FullControlEncounter -OutputPath $TestDrive -PresetAnswers $preset -ClassificationDatabase $db -IncludeDecisionSummary
+        $withSummary.SummaryPath | Should -Not -BeNullOrEmpty
+        Test-Path $withSummary.SummaryPath | Should -Be $true
     }
 }
 

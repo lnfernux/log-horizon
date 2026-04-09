@@ -18,13 +18,13 @@ function Invoke-LogHorizon {
     #>
     [CmdletBinding()]
     param(
-        [Parameter(Mandatory, HelpMessage = 'Azure subscription ID')]
+        [Parameter(HelpMessage = 'Azure subscription ID')]
         [string]$SubscriptionId,
 
-        [Parameter(Mandatory, HelpMessage = 'Resource group containing the Sentinel workspace')]
+        [Parameter(HelpMessage = 'Resource group containing the Sentinel workspace')]
         [string]$ResourceGroup,
 
-        [Parameter(Mandatory, HelpMessage = 'Log Analytics workspace name')]
+        [Parameter(HelpMessage = 'Log Analytics workspace name')]
         [string]$WorkspaceName,
 
         [string]$WorkspaceId,
@@ -50,11 +50,31 @@ function Invoke-LogHorizon {
 
         [ValidateScript({ Test-Path $_ -PathType Leaf })]
         [Alias('clf')]
-        [string]$CustomClassificationPath
+        [string]$CustomClassificationPath,
+
+        [Alias('Shiroe')]
+        [switch]$Wizard,
+
+        [switch]$IncludeDecisionSummary
     )
 
     $ErrorActionPreference = 'Stop'
     $sw = [System.Diagnostics.Stopwatch]::StartNew()
+
+    if ($Wizard) {
+        if (-not $OutputPath) {
+            $OutputPath = $PWD.Path
+        }
+
+        Invoke-FullControlEncounter -OutputPath $OutputPath -IncludeDecisionSummary:$IncludeDecisionSummary
+        return
+    }
+
+    $requiredParams = @('SubscriptionId', 'ResourceGroup', 'WorkspaceName')
+    $missing = @($requiredParams | Where-Object { -not $PSBoundParameters.ContainsKey($_) -or [string]::IsNullOrWhiteSpace($PSBoundParameters[$_]) })
+    if ($missing.Count -gt 0) {
+        throw "Missing required parameter(s): $($missing -join ', '). Provide these for standard analysis mode, or run with -Wizard (-Shiroe) for the Full Control Encounter experience."
+    }
 
     # Phase 1 - Data collection
     $collectResult = Invoke-SpectreCommandWithStatus -Title "[deepskyblue1]Collecting data...[/]" -Spinner Dots -ScriptBlock {

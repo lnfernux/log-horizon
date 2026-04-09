@@ -1,0 +1,675 @@
+[
+  {
+    "categoryKey": "identity",
+    "top5Tools": [
+      {
+        "displayName": "Microsoft Entra ID",
+        "normalizedKey": "microsoft-entra-id",
+        "evidenceType": "adoption_proxy",
+        "evidenceSourceName": "Gartner Access Management + enterprise adoption",
+        "evidenceSourceUrl": "https://www.gartner.com/en/documents/",
+        "evidenceDate": "2024-2025",
+        "confidence": "high",
+        "matchingKeywords": ["entra", "aad", "signin", "auditlogs", "identity"]
+      },
+      {
+        "displayName": "Active Directory",
+        "normalizedKey": "active-directory",
+        "evidenceType": "adoption_proxy",
+        "evidenceSourceName": "Hybrid enterprise identity footprint",
+        "evidenceSourceUrl": "https://learn.microsoft.com/windows-server/identity/ad-ds/get-started/virtual-dc/active-directory-domain-services-overview",
+        "evidenceDate": "2024",
+        "confidence": "medium",
+        "matchingKeywords": ["active directory", "kerberos", "domain", "windows"]
+      },
+      {
+        "displayName": "Okta",
+        "normalizedKey": "okta",
+        "evidenceType": "adoption_proxy",
+        "evidenceSourceName": "IAM market adoption",
+        "evidenceSourceUrl": "https://www.g2.com/categories/identity-access-management-iam",
+        "evidenceDate": "2024",
+        "confidence": "medium",
+        "matchingKeywords": ["okta", "sso"]
+      },
+      {
+        "displayName": "Ping Identity",
+        "normalizedKey": "ping-identity",
+        "evidenceType": "adoption_proxy",
+        "evidenceSourceName": "IAM market adoption",
+        "evidenceSourceUrl": "https://www.g2.com/categories/identity-access-management-iam",
+        "evidenceDate": "2024",
+        "confidence": "medium",
+        "matchingKeywords": ["ping", "identity"]
+      },
+      {
+        "displayName": "Auth0",
+        "normalizedKey": "auth0",
+        "evidenceType": "adoption_proxy",
+        "evidenceSourceName": "Developer IAM adoption",
+        "evidenceSourceUrl": "https://www.datanyze.com/market-share/identity-and-access-management",
+        "evidenceDate": "2024",
+        "confidence": "medium",
+        "matchingKeywords": ["auth0", "ciam", "identity"]
+      }
+    ],
+    "otherTools": [
+      {
+        "displayName": "OneLogin",
+        "normalizedKey": "onelogin",
+        "matchingKeywords": ["onelogin"]
+      },
+      {
+        "displayName": "Cisco Duo",
+        "normalizedKey": "cisco-duo",
+        "matchingKeywords": ["duo", "cisco"]
+      },
+      {
+        "displayName": "SailPoint IdentityNow",
+        "normalizedKey": "sailpoint",
+        "matchingKeywords": ["sailpoint", "identity governance"]
+      },
+      {
+        "displayName": "Bitwarden",
+        "normalizedKey": "bitwarden",
+        "matchingKeywords": ["bitwarden", "vault"]
+      },
+      {
+        "displayName": "Other IdP",
+        "normalizedKey": "other-idp",
+        "matchingKeywords": ["identity", "auth"]
+      }
+    ]
+  },
+  {
+    "categoryKey": "privilege",
+    "top5Tools": [
+      {
+        "displayName": "CyberArk PAM",
+        "normalizedKey": "cyberark",
+        "evidenceType": "adoption_proxy",
+        "evidenceSourceName": "PAM leadership reports",
+        "evidenceSourceUrl": "https://www.gartner.com/en/documents/",
+        "evidenceDate": "2024",
+        "confidence": "high",
+        "matchingKeywords": ["cyberark", "pam", "privileged"]
+      },
+      {
+        "displayName": "Entra role management",
+        "normalizedKey": "entra-role-management",
+        "evidenceType": "adoption_proxy",
+        "evidenceSourceName": "Microsoft ecosystem adoption",
+        "evidenceSourceUrl": "https://learn.microsoft.com/entra/id-governance/privileged-identity-management/pim-configure",
+        "evidenceDate": "2024",
+        "confidence": "high",
+        "matchingKeywords": ["role", "directory", "audit", "entra"]
+      },
+      {
+        "displayName": "BeyondTrust",
+        "normalizedKey": "beyondtrust",
+        "evidenceType": "adoption_proxy",
+        "evidenceSourceName": "PAM market adoption",
+        "evidenceSourceUrl": "https://www.g2.com/categories/privileged-access-management-pam",
+        "evidenceDate": "2024",
+        "confidence": "medium",
+        "matchingKeywords": ["beyondtrust", "privileged"]
+      },
+      {
+        "displayName": "One Identity",
+        "normalizedKey": "one-identity",
+        "evidenceType": "adoption_proxy",
+        "evidenceSourceName": "PAM market adoption",
+        "evidenceSourceUrl": "https://www.g2.com/categories/privileged-access-management-pam",
+        "evidenceDate": "2024",
+        "confidence": "medium",
+        "matchingKeywords": ["one identity", "privileged"]
+      },
+      {
+        "displayName": "HashiCorp Vault",
+        "normalizedKey": "hashicorp-vault",
+        "evidenceType": "adoption_proxy",
+        "evidenceSourceName": "Secrets and privileged access adoption",
+        "evidenceSourceUrl": "https://www.vaultproject.io/",
+        "evidenceDate": "2024",
+        "confidence": "medium",
+        "matchingKeywords": ["vault", "secret", "credential"]
+      }
+    ],
+    "otherTools": [
+      {
+        "displayName": "Cloud IAM changes",
+        "normalizedKey": "cloud-iam",
+        "matchingKeywords": ["iam", "policy", "activity"]
+      },
+      {
+        "displayName": "Active Directory groups",
+        "normalizedKey": "ad-groups",
+        "matchingKeywords": ["group", "securityevent"]
+      },
+      {
+        "displayName": "Other entitlement system",
+        "normalizedKey": "other-entitlement",
+        "matchingKeywords": ["entitlement", "role"]
+      }
+    ]
+  },
+  {
+    "categoryKey": "admin",
+    "top5Tools": [
+      {
+        "displayName": "Azure control plane",
+        "normalizedKey": "azure-control-plane",
+        "evidenceType": "market_share",
+        "evidenceSourceName": "Cloud control-plane telemetry usage",
+        "evidenceSourceUrl": "https://learn.microsoft.com/azure/azure-monitor/essentials/activity-log",
+        "evidenceDate": "2024",
+        "confidence": "high",
+        "matchingKeywords": ["azureactivity", "policy", "control plane"]
+      },
+      {
+        "displayName": "AWS CloudTrail",
+        "normalizedKey": "aws-cloudtrail",
+        "evidenceType": "market_share",
+        "evidenceSourceName": "AWS audit log prevalence",
+        "evidenceSourceUrl": "https://docs.aws.amazon.com/awscloudtrail/latest/userguide/cloudtrail-user-guide.html",
+        "evidenceDate": "2024",
+        "confidence": "high",
+        "matchingKeywords": ["aws", "cloudtrail"]
+      },
+      {
+        "displayName": "Google Cloud audit",
+        "normalizedKey": "gcp-audit",
+        "evidenceType": "market_share",
+        "evidenceSourceName": "GCP audit coverage",
+        "evidenceSourceUrl": "https://cloud.google.com/logging/docs/audit",
+        "evidenceDate": "2024",
+        "confidence": "high",
+        "matchingKeywords": ["gcp", "google", "audit"]
+      },
+      {
+        "displayName": "Microsoft 365 audit",
+        "normalizedKey": "m365-audit",
+        "evidenceType": "adoption_proxy",
+        "evidenceSourceName": "M365 enterprise footprint",
+        "evidenceSourceUrl": "https://learn.microsoft.com/purview/audit-solutions-overview",
+        "evidenceDate": "2024",
+        "confidence": "high",
+        "matchingKeywords": ["officeactivity", "audit", "microsoft 365"]
+      },
+      {
+        "displayName": "GitHub audit logs",
+        "normalizedKey": "github-audit",
+        "evidenceType": "adoption_proxy",
+        "evidenceSourceName": "DevSecOps control-plane usage",
+        "evidenceSourceUrl": "https://docs.github.com/enterprise-cloud@latest/admin/monitoring-activity-in-your-enterprise/reviewing-audit-logs-for-your-enterprise",
+        "evidenceDate": "2024",
+        "confidence": "medium",
+        "matchingKeywords": ["github", "devops", "audit"]
+      }
+    ],
+    "otherTools": [
+      {
+        "displayName": "Sentinel platform audit",
+        "normalizedKey": "sentinel-audit",
+        "matchingKeywords": ["sentinel", "audit"]
+      },
+      {
+        "displayName": "Power Platform admin audit",
+        "normalizedKey": "power-platform-admin",
+        "matchingKeywords": ["power platform", "admin", "governance"]
+      },
+      {
+        "displayName": "Other admin audit source",
+        "normalizedKey": "other-admin-audit",
+        "matchingKeywords": ["admin", "control plane"]
+      }
+    ]
+  },
+  {
+    "categoryKey": "remote",
+    "top5Tools": [
+      {
+        "displayName": "Microsoft Defender for Endpoint",
+        "normalizedKey": "mde",
+        "evidenceType": "market_share",
+        "evidenceSourceName": "EDR/XDR analyst coverage",
+        "evidenceSourceUrl": "https://www.gartner.com/en/documents/",
+        "evidenceDate": "2024",
+        "confidence": "high",
+        "matchingKeywords": ["device", "mde", "defender"]
+      },
+      {
+        "displayName": "Windows security events",
+        "normalizedKey": "windows-security-events",
+        "evidenceType": "adoption_proxy",
+        "evidenceSourceName": "Windows estate prevalence",
+        "evidenceSourceUrl": "https://learn.microsoft.com/windows/security/threat-protection/auditing/basic-audit-logon-events",
+        "evidenceDate": "2024",
+        "confidence": "high",
+        "matchingKeywords": ["securityevent", "logon", "rdp"]
+      },
+      {
+        "displayName": "CrowdStrike Falcon",
+        "normalizedKey": "crowdstrike",
+        "evidenceType": "market_share",
+        "evidenceSourceName": "EDR market adoption",
+        "evidenceSourceUrl": "https://investors.crowdstrike.com/",
+        "evidenceDate": "2024",
+        "confidence": "high",
+        "matchingKeywords": ["crowdstrike", "endpoint"]
+      },
+      {
+        "displayName": "Palo Alto Cortex XDR",
+        "normalizedKey": "cortex-xdr",
+        "evidenceType": "market_share",
+        "evidenceSourceName": "XDR market adoption",
+        "evidenceSourceUrl": "https://www.paloaltonetworks.com/cortex/cortex-xdr",
+        "evidenceDate": "2024",
+        "confidence": "medium",
+        "matchingKeywords": ["cortex", "xdr", "endpoint"]
+      },
+      {
+        "displayName": "SentinelOne",
+        "normalizedKey": "sentinelone",
+        "evidenceType": "market_share",
+        "evidenceSourceName": "EDR market adoption",
+        "evidenceSourceUrl": "https://www.sentinelone.com/",
+        "evidenceDate": "2024",
+        "confidence": "medium",
+        "matchingKeywords": ["sentinelone", "endpoint"]
+      }
+    ],
+    "otherTools": [
+      {
+        "displayName": "VPN and firewall logs",
+        "normalizedKey": "vpn-firewall",
+        "matchingKeywords": ["vpn", "firewall", "commonsecuritylog"]
+      },
+      {
+        "displayName": "EDR telemetry",
+        "normalizedKey": "edr-telemetry",
+        "matchingKeywords": ["edr", "process", "network"]
+      },
+      {
+        "displayName": "Other remote access stack",
+        "normalizedKey": "other-remote-access",
+        "matchingKeywords": ["remote", "lateral"]
+      }
+    ]
+  },
+  {
+    "categoryKey": "endpoint",
+    "top5Tools": [
+      {
+        "displayName": "Microsoft Defender for Endpoint",
+        "normalizedKey": "mde",
+        "evidenceType": "market_share",
+        "evidenceSourceName": "EDR analyst reports",
+        "evidenceSourceUrl": "https://www.gartner.com/en/documents/",
+        "evidenceDate": "2024",
+        "confidence": "high",
+        "matchingKeywords": ["deviceprocess", "devicefile", "device"]
+      },
+      {
+        "displayName": "CrowdStrike Falcon",
+        "normalizedKey": "crowdstrike",
+        "evidenceType": "market_share",
+        "evidenceSourceName": "EDR analyst reports",
+        "evidenceSourceUrl": "https://investors.crowdstrike.com/",
+        "evidenceDate": "2024",
+        "confidence": "high",
+        "matchingKeywords": ["crowdstrike", "process", "endpoint"]
+      },
+      {
+        "displayName": "Palo Alto Cortex XDR",
+        "normalizedKey": "cortex-xdr",
+        "evidenceType": "market_share",
+        "evidenceSourceName": "XDR adoption",
+        "evidenceSourceUrl": "https://www.paloaltonetworks.com/cortex/cortex-xdr",
+        "evidenceDate": "2024",
+        "confidence": "medium",
+        "matchingKeywords": ["cortex", "xdr", "endpoint"]
+      },
+      {
+        "displayName": "SentinelOne",
+        "normalizedKey": "sentinelone",
+        "evidenceType": "market_share",
+        "evidenceSourceName": "EDR adoption",
+        "evidenceSourceUrl": "https://www.sentinelone.com/",
+        "evidenceDate": "2024",
+        "confidence": "medium",
+        "matchingKeywords": ["sentinelone", "process", "agent"]
+      },
+      {
+        "displayName": "Sophos Intercept X",
+        "normalizedKey": "sophos",
+        "evidenceType": "adoption_proxy",
+        "evidenceSourceName": "Endpoint protection adoption",
+        "evidenceSourceUrl": "https://www.sophos.com/",
+        "evidenceDate": "2024",
+        "confidence": "medium",
+        "matchingKeywords": ["sophos", "endpoint", "process"]
+      }
+    ],
+    "otherTools": [
+      {
+        "displayName": "Windows event logs",
+        "normalizedKey": "windows-event-logs",
+        "matchingKeywords": ["securityevent", "4688", "process"]
+      },
+      {
+        "displayName": "Linux endpoint telemetry",
+        "normalizedKey": "linux-endpoint",
+        "matchingKeywords": ["linux", "syslog"]
+      },
+      {
+        "displayName": "Other endpoint security",
+        "normalizedKey": "other-endpoint",
+        "matchingKeywords": ["endpoint"]
+      }
+    ]
+  },
+  {
+    "categoryKey": "network",
+    "top5Tools": [
+      {
+        "displayName": "Palo Alto Networks NGFW",
+        "normalizedKey": "palo-alto-ngfw",
+        "evidenceType": "market_share",
+        "evidenceSourceName": "NGFW market analysis",
+        "evidenceSourceUrl": "https://www.gartner.com/en/documents/",
+        "evidenceDate": "2024",
+        "confidence": "high",
+        "matchingKeywords": ["paloalto", "waf", "network", "firewall"]
+      },
+      {
+        "displayName": "Fortinet FortiGate",
+        "normalizedKey": "fortinet",
+        "evidenceType": "market_share",
+        "evidenceSourceName": "NGFW market analysis",
+        "evidenceSourceUrl": "https://www.gartner.com/en/documents/",
+        "evidenceDate": "2024",
+        "confidence": "high",
+        "matchingKeywords": ["fortinet", "firewall", "cef"]
+      },
+      {
+        "displayName": "Cisco Secure Firewall",
+        "normalizedKey": "cisco-firewall",
+        "evidenceType": "market_share",
+        "evidenceSourceName": "Network security market analysis",
+        "evidenceSourceUrl": "https://www.idc.com/research/",
+        "evidenceDate": "2024",
+        "confidence": "high",
+        "matchingKeywords": ["cisco", "firewall", "network"]
+      },
+      {
+        "displayName": "Azure Firewall",
+        "normalizedKey": "azure-firewall",
+        "evidenceType": "adoption_proxy",
+        "evidenceSourceName": "Azure native security adoption",
+        "evidenceSourceUrl": "https://learn.microsoft.com/azure/firewall/overview",
+        "evidenceDate": "2024",
+        "confidence": "high",
+        "matchingKeywords": ["azfw", "azure firewall", "network"]
+      },
+      {
+        "displayName": "Zscaler",
+        "normalizedKey": "zscaler",
+        "evidenceType": "market_share",
+        "evidenceSourceName": "SASE/SSE market analysis",
+        "evidenceSourceUrl": "https://www.gartner.com/en/documents/",
+        "evidenceDate": "2024",
+        "confidence": "medium",
+        "matchingKeywords": ["zscaler", "proxy", "zta"]
+      }
+    ],
+    "otherTools": [
+      {
+        "displayName": "Firewall logs",
+        "normalizedKey": "generic-firewall",
+        "matchingKeywords": ["firewall", "commonsecuritylog", "azfw"]
+      },
+      {
+        "displayName": "Proxy logs",
+        "normalizedKey": "generic-proxy",
+        "matchingKeywords": ["proxy", "squid", "zscaler"]
+      },
+      {
+        "displayName": "IDS/IPS",
+        "normalizedKey": "generic-ids-ips",
+        "matchingKeywords": ["ids", "ips", "snort", "suricata"]
+      },
+      {
+        "displayName": "WAF",
+        "normalizedKey": "generic-waf",
+        "matchingKeywords": ["waf", "application gateway"]
+      },
+      {
+        "displayName": "Other network telemetry",
+        "normalizedKey": "other-network",
+        "matchingKeywords": ["network", "flow"]
+      }
+    ]
+  },
+  {
+    "categoryKey": "alerts",
+    "top5Tools": [
+      {
+        "displayName": "Microsoft Sentinel incidents and alerts",
+        "normalizedKey": "microsoft-sentinel-alerts",
+        "evidenceType": "market_share",
+        "evidenceSourceName": "SIEM market analysis",
+        "evidenceSourceUrl": "https://www.gartner.com/en/documents/",
+        "evidenceDate": "2024",
+        "confidence": "high",
+        "matchingKeywords": ["securityalert", "securityincident", "sentinel"]
+      },
+      {
+        "displayName": "Defender XDR alerts",
+        "normalizedKey": "defender-xdr-alerts",
+        "evidenceType": "market_share",
+        "evidenceSourceName": "XDR market analysis",
+        "evidenceSourceUrl": "https://www.gartner.com/en/documents/",
+        "evidenceDate": "2024",
+        "confidence": "high",
+        "matchingKeywords": ["alertinfo", "alertevidence", "defender"]
+      },
+      {
+        "displayName": "CrowdStrike Falcon",
+        "normalizedKey": "crowdstrike-alerts",
+        "evidenceType": "market_share",
+        "evidenceSourceName": "EDR/XDR market analysis",
+        "evidenceSourceUrl": "https://investors.crowdstrike.com/",
+        "evidenceDate": "2024",
+        "confidence": "high",
+        "matchingKeywords": ["crowdstrike", "alert"]
+      },
+      {
+        "displayName": "AWS GuardDuty",
+        "normalizedKey": "aws-guardduty",
+        "evidenceType": "adoption_proxy",
+        "evidenceSourceName": "AWS security service adoption",
+        "evidenceSourceUrl": "https://docs.aws.amazon.com/guardduty/",
+        "evidenceDate": "2024",
+        "confidence": "medium",
+        "matchingKeywords": ["guardduty", "aws", "finding"]
+      },
+      {
+        "displayName": "Google Security Command Center",
+        "normalizedKey": "google-scc",
+        "evidenceType": "adoption_proxy",
+        "evidenceSourceName": "GCP security service adoption",
+        "evidenceSourceUrl": "https://cloud.google.com/security-command-center",
+        "evidenceDate": "2024",
+        "confidence": "medium",
+        "matchingKeywords": ["security command center", "scc", "gcp"]
+      }
+    ],
+    "otherTools": [
+      {
+        "displayName": "Third-party MDR/XDR",
+        "normalizedKey": "third-party-xdr",
+        "matchingKeywords": ["alert", "xdr", "mdr"]
+      },
+      {
+        "displayName": "Threat intelligence feeds",
+        "normalizedKey": "tip-feeds",
+        "matchingKeywords": ["threatintelligence", "indicator"]
+      },
+      {
+        "displayName": "Other alert source",
+        "normalizedKey": "other-alert-source",
+        "matchingKeywords": ["alert"]
+      }
+    ]
+  },
+  {
+    "categoryKey": "dataaccess",
+    "top5Tools": [
+      {
+        "displayName": "Microsoft 365 audit logs",
+        "normalizedKey": "m365-audit",
+        "evidenceType": "adoption_proxy",
+        "evidenceSourceName": "M365 enterprise adoption",
+        "evidenceSourceUrl": "https://learn.microsoft.com/purview/audit-solutions-overview",
+        "evidenceDate": "2024",
+        "confidence": "high",
+        "matchingKeywords": ["officeactivity", "audit"]
+      },
+      {
+        "displayName": "Microsoft Purview DLP",
+        "normalizedKey": "microsoft-purview-dlp",
+        "evidenceType": "market_share",
+        "evidenceSourceName": "DLP market adoption",
+        "evidenceSourceUrl": "https://www.gartner.com/en/documents/",
+        "evidenceDate": "2024",
+        "confidence": "medium",
+        "matchingKeywords": ["purview", "dlp", "sensitivity"]
+      },
+      {
+        "displayName": "Forcepoint DLP",
+        "normalizedKey": "forcepoint-dlp",
+        "evidenceType": "market_share",
+        "evidenceSourceName": "DLP market adoption",
+        "evidenceSourceUrl": "https://www.gartner.com/en/documents/",
+        "evidenceDate": "2024",
+        "confidence": "medium",
+        "matchingKeywords": ["forcepoint", "dlp"]
+      },
+      {
+        "displayName": "Varonis",
+        "normalizedKey": "varonis",
+        "evidenceType": "adoption_proxy",
+        "evidenceSourceName": "Data security operations adoption",
+        "evidenceSourceUrl": "https://www.varonis.com/",
+        "evidenceDate": "2024",
+        "confidence": "medium",
+        "matchingKeywords": ["varonis", "data security"]
+      },
+      {
+        "displayName": "Netskope DLP",
+        "normalizedKey": "netskope-dlp",
+        "evidenceType": "adoption_proxy",
+        "evidenceSourceName": "Cloud DLP adoption",
+        "evidenceSourceUrl": "https://www.netskope.com/",
+        "evidenceDate": "2024",
+        "confidence": "medium",
+        "matchingKeywords": ["netskope", "dlp", "cloud"]
+      }
+    ],
+    "otherTools": [
+      {
+        "displayName": "Database audit logs",
+        "normalizedKey": "database-audit",
+        "matchingKeywords": ["sql", "database", "snowflake", "mongo"]
+      },
+      {
+        "displayName": "Storage access logs",
+        "normalizedKey": "storage-access",
+        "matchingKeywords": ["storage", "blob", "access"]
+      },
+      {
+        "displayName": "Other data audit source",
+        "normalizedKey": "other-data-audit",
+        "matchingKeywords": ["data access", "audit"]
+      }
+    ]
+  },
+  {
+    "categoryKey": "email",
+    "top5Tools": [
+      {
+        "displayName": "Microsoft Defender for Office 365",
+        "normalizedKey": "mdo",
+        "evidenceType": "market_share",
+        "evidenceSourceName": "Email security market adoption",
+        "evidenceSourceUrl": "https://www.gartner.com/en/documents/",
+        "evidenceDate": "2024",
+        "confidence": "high",
+        "matchingKeywords": ["email", "exchange", "office", "mdo"]
+      },
+      {
+        "displayName": "Proofpoint",
+        "normalizedKey": "proofpoint",
+        "evidenceType": "market_share",
+        "evidenceSourceName": "Email security market adoption",
+        "evidenceSourceUrl": "https://www.proofpoint.com/us/resources/reports",
+        "evidenceDate": "2024",
+        "confidence": "high",
+        "matchingKeywords": ["proofpoint", "tap", "pod"]
+      },
+      {
+        "displayName": "Mimecast",
+        "normalizedKey": "mimecast",
+        "evidenceType": "market_share",
+        "evidenceSourceName": "Email security market adoption",
+        "evidenceSourceUrl": "https://www.g2.com/categories/email-security",
+        "evidenceDate": "2024",
+        "confidence": "medium",
+        "matchingKeywords": ["mimecast", "email"]
+      },
+      {
+        "displayName": "Cisco Email Security",
+        "normalizedKey": "cisco-email",
+        "evidenceType": "adoption_proxy",
+        "evidenceSourceName": "Enterprise secure email adoption",
+        "evidenceSourceUrl": "https://www.cisco.com/site/us/en/products/security/secure-email/index.html",
+        "evidenceDate": "2024",
+        "confidence": "medium",
+        "matchingKeywords": ["cisco", "email"]
+      },
+      {
+        "displayName": "Fortinet FortiMail",
+        "normalizedKey": "fortimail",
+        "evidenceType": "adoption_proxy",
+        "evidenceSourceName": "SMB email gateway adoption",
+        "evidenceSourceUrl": "https://www.fortinet.com/products/email-security/fortimail",
+        "evidenceDate": "2024",
+        "confidence": "low",
+        "matchingKeywords": ["fortinet", "mail"]
+      }
+    ],
+    "otherTools": [
+      {
+        "displayName": "Exchange and M365 email telemetry",
+        "normalizedKey": "exchange-m365",
+        "matchingKeywords": ["email", "exchange", "office"]
+      },
+      {
+        "displayName": "Secure email gateway",
+        "normalizedKey": "secure-email-gateway",
+        "matchingKeywords": ["proofpoint", "mimecast", "gateway"]
+      },
+      {
+        "displayName": "Collaboration audit",
+        "normalizedKey": "collaboration-audit",
+        "matchingKeywords": ["sharepoint", "teams", "collaboration"]
+      },
+      {
+        "displayName": "Other email/collab source",
+        "normalizedKey": "other-email",
+        "matchingKeywords": ["mail"]
+      }
+    ]
+  }
+]
