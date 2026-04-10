@@ -104,9 +104,9 @@ function Get-DefenderXDR {
         }
     }
 
-    # Fallback: Az token + raw REST only when Graph PowerShell cmdlets are unavailable.
-    # In interactive/user mode, prefer delegated Graph scopes and avoid app-scope confusion.
-    if (-not $fetched -and -not $mgCmd) {
+    # Fallback: if delegated Graph auth/request did not fetch results, try Az token + raw REST.
+    # This keeps delegated Graph as the preferred path while still supporting non-interactive/CI environments.
+    if (-not $fetched) {
         $graphToken = $null
         try {
             $tokenResult = $null
