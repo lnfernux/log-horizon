@@ -19,6 +19,18 @@ function Write-Report {
     # Dashboard (always shown first)
     Write-Dashboard -Analysis $Analysis -WorkspaceName $WorkspaceName -DefenderXDR $DefenderXDR
 
+    # Auto-export when -Output was specified (before showing menu)
+    if ($ExportFormat) {
+        if (-not $ExportPath) { $ExportPath = $PWD.Path }
+        Export-Report -Analysis $Analysis `
+                      -Format $ExportFormat `
+                      -OutputPath $ExportPath `
+                      -WorkspaceName $WorkspaceName `
+                      -DefenderXDR $DefenderXDR
+        Write-SpectreHost "[green]Report exported to [bold]$(Get-SafeEscapedText $ExportPath)[/][/]"
+        Write-SpectreHost ""
+    }
+
     # Interactive menu loop
     Write-InteractiveMenu -Analysis $Analysis -WorkspaceName $WorkspaceName `
                           -DefenderXDR $DefenderXDR `
@@ -1009,8 +1021,9 @@ function Write-RetentionAssessment {
                 '[red]Below baseline[/]'
             }
 
+            $tableLabel = if ($t.IsXDRStreaming) { "$(Get-SafeEscapedText $t.TableName) [dim](XDR)[/]" } else { Get-SafeEscapedText $t.TableName }
             $impTable += [PSCustomObject]@{
-                'Table'       = Get-SafeEscapedText $t.TableName
+                'Table'       = $tableLabel
                 'Category'    = Get-SafeEscapedText $t.Category
                 'Current'     = $currentStr
                 'Recommended' = "[deepskyblue1]$($t.RecommendedRetentionDays)d[/]"
@@ -1108,48 +1121,6 @@ function Write-DetectionAnalyzer {
     }
     Write-SpectreHost ""
 
-    # Prompt to show all if more than 15 rules
-    $showAll = $false
-    if ($metrics.Count -gt 15) {
-        $expandChoice = Read-SpectreSelection -Title "[deepskyblue1]Show all $($metrics.Count) rules?[/]" `
-                          -Choices @('No', "Show all $($metrics.Count) rules") `
-                          -Color DodgerBlue2
-
-        if ($expandChoice -ne 'No') {
-            $showAll = $true
-            Write-SpectreHost ""
-            $fullTable = @()
-            foreach ($r in $metrics) {
-                $scoreMarkup = if ($null -eq $r.NoisinessScore) {
-                    "[dim]N/A[/]"
-                } elseif ($r.NoisinessScore -ge 70) {
-                    "[red]$($r.NoisinessScore)[/]"
-                } elseif ($r.NoisinessScore -ge 50) {
-                    "[yellow]$($r.NoisinessScore)[/]"
-                } else {
-                    "[green]$($r.NoisinessScore)[/]"
-                }
-
-                $kindMarkup = switch ($r.RuleKind) {
-                    'CustomDetection' { '[deepskyblue1]CDR[/]' }
-                    'NRT'             { '[yellow]NRT[/]' }
-                    default           { $r.RuleKind }
-                }
-
-                $fullTable += [PSCustomObject]@{
-                    'Rule'        = Get-SafeEscapedText $r.RuleName
-                    'Kind'        = $kindMarkup
-                    'Incidents'   = $r.IncidentsTotal
-                    'AutoClose%'  = [math]::Round(($r.AutoCloseRatio * 100), 1)
-                    'FalsePos%'   = [math]::Round(($r.FalsePositiveRatio * 100), 1)
-                    'Score'       = $scoreMarkup
-                }
-            }
-            $fullTable | Format-SpectreTable -Border Rounded -Color DodgerBlue2 -HeaderColor DodgerBlue2 -AllowMarkup
-            Write-SpectreHost ""
-        }
-    }
-
     # Scoring formula explanation
     $formulaLines = @(
         "[bold]How is the Noisiness Score calculated?[/]"
@@ -1163,70 +1134,133 @@ function Write-DetectionAnalyzer {
     ($formulaLines -join "`n") | Format-SpectrePanel -Header "[dodgerblue2] SCORING FORMULA [/]" -Border Rounded -Color DodgerBlue2
     Write-SpectreHost ""
 
-    # Rule drill-down submenu
-    $drillDownPool = if ($showAll) { $metrics } else { $displayMetrics }
-    $ruleChoiceMap = @{}
-    foreach ($r in $drillDownPool) {
-        $display = Get-SafeEscapedText $r.RuleName
-        $ruleChoiceMap[$display] = $r.RuleName
-    }
+    # Submenu loop: Back / Show all / Browse details
+    $submenuContinue = $true
+    while ($submenuContinue) {
+        $choices = @('Back')
+        if ($metrics.Count -gt 15) {
+            $choices += "Show all $($metrics.Count) rules"
+        }
+        $choices += 'Browse rule details'
 
-    $ruleChoices = @('Back') + @($ruleChoiceMap.Keys)
-    $pick = Read-SpectreSelection -Title "[deepskyblue1]Select a rule for details, or Back:[/]" `
-                                  -Choices $ruleChoices `
-                                  -Color DodgerBlue2
+        $pick = Read-SpectreSelection -Title "[deepskyblue1]Select an option:[/]" `
+                                      -Choices $choices `
+                                      -Color DodgerBlue2
 
-    if ($pick -ne 'Back') {
-        $selectedRuleName = $ruleChoiceMap[$pick]
-        $selected = $metrics | Where-Object { $_.RuleName -eq $selectedRuleName } | Select-Object -First 1
-        if ($selected) {
-            Write-SpectreHost ""
+        switch ($pick) {
+            'Back' { $submenuContinue = $false }
 
-            $kindLabel = if ($selected.RuleKind -eq 'CustomDetection') { 'Custom Detection (CDR)' } else { $selected.RuleKind }
-            $sourceLabel = if ($selected.Source) { $selected.Source } else { 'Sentinel' }
+            { $_ -like 'Show all *' } {
+                Write-SpectreHost ""
+                $fullTable = @()
+                foreach ($r in $metrics) {
+                    $scoreMarkup = if ($null -eq $r.NoisinessScore) {
+                        "[dim]N/A[/]"
+                    } elseif ($r.NoisinessScore -ge 70) {
+                        "[red]$($r.NoisinessScore)[/]"
+                    } elseif ($r.NoisinessScore -ge 50) {
+                        "[yellow]$($r.NoisinessScore)[/]"
+                    } else {
+                        "[green]$($r.NoisinessScore)[/]"
+                    }
 
-            $detailLines = @(
-                "[bold]$(Get-SafeEscapedText $selected.RuleName)[/]  [dim]($kindLabel | $sourceLabel)[/]"
-                ""
-            )
+                    $kindMarkup = switch ($r.RuleKind) {
+                        'CustomDetection' { '[deepskyblue1]CDR[/]' }
+                        'NRT'             { '[yellow]NRT[/]' }
+                        default           { $r.RuleKind }
+                    }
 
-            # CDR-specific properties
-            if ($selected.RuleKind -eq 'CustomDetection') {
-                $enabledStr = if ($selected.Enabled) { '[green]Enabled[/]' } else { '[red]Disabled[/]' }
-                $detailLines += "[bold]Status:[/]           $enabledStr"
-                if ($selected.Frequency) {
-                    $detailLines += "[bold]Frequency:[/]        $($selected.Frequency)"
+                    $fullTable += [PSCustomObject]@{
+                        'Rule'        = Get-SafeEscapedText $r.RuleName
+                        'Kind'        = $kindMarkup
+                        'Incidents'   = $r.IncidentsTotal
+                        'AutoClose%'  = [math]::Round(($r.AutoCloseRatio * 100), 1)
+                        'FalsePos%'   = [math]::Round(($r.FalsePositiveRatio * 100), 1)
+                        'Score'       = $scoreMarkup
+                    }
                 }
-                if ($selected.Tables -and $selected.Tables.Count -gt 0) {
-                    $detailLines += "[bold]Tables Queried:[/]   $(($selected.Tables | ForEach-Object { Get-SafeEscapedText $_ }) -join ', ')"
-                }
-                $detailLines += ""
+                $fullTable | Format-SpectreTable -Border Rounded -Color DodgerBlue2 -HeaderColor DodgerBlue2 -AllowMarkup
+                Write-SpectreHost ""
             }
 
-            if ($selected.IncidentsTotal -gt 0) {
-                $detailLines += "[bold]Incidents:[/]        $($selected.IncidentsTotal) total  |  $($selected.IncidentsClosed) closed  |  $($selected.IncidentsAutoClosed) auto-closed"
-                $detailLines += "[bold]True Positive:[/]    $($selected.TruePositiveClosed)  |  [bold]False Positive:[/] $($selected.FalsePositiveClosed)  |  [bold]Benign:[/] $($selected.BenignPositiveClosed)"
-                $detailLines += "[bold]Auto-Close Ratio:[/] $([math]::Round($selected.AutoCloseRatio * 100, 1))%  |  [bold]False Pos Ratio:[/] $([math]::Round($selected.FalsePositiveRatio * 100, 1))%"
-                if ($null -ne $selected.AvgCloseMinutes) {
-                    $detailLines += "[bold]Avg Close Time:[/]   $($selected.AvgCloseMinutes) minutes"
-                }
-                $detailLines += ""
-                if ($null -ne $selected.NoisinessScore) {
-                    $scoreColor = if ($selected.NoisinessScore -ge 70) { 'red' } elseif ($selected.NoisinessScore -ge 50) { 'yellow' } else { 'green' }
-                    $detailLines += "[bold]Noisiness Score:[/]  [${scoreColor}]$($selected.NoisinessScore)[/]"
-                    $detailLines += "[dim]  Volume %ile: $($selected.PercentileVolume)  |  AutoClose %ile: $($selected.PercentileAutoClose)  |  FalsePos %ile: $($selected.PercentileFalsePositive)[/]"
-                }
-            } else {
-                $detailLines += "[dim]No correlated incidents found. Noisiness score not available.[/]"
-            }
+            'Browse rule details' {
+                $browseContinue = $true
+                while ($browseContinue) {
+                    $ruleChoiceMap = @{}
+                    foreach ($r in $metrics) {
+                        $display = Get-SafeEscapedText $r.RuleName
+                        $ruleChoiceMap[$display] = $r.RuleName
+                    }
 
-            if ($selected.LinkedAutomationRules -and $selected.LinkedAutomationRules.Count -gt 0) {
-                $detailLines += ""
-                $detailLines += "[bold]Auto-close automation:[/] $(Get-SafeEscapedText ($selected.LinkedAutomationRules -join ', '))"
+                    $ruleChoices = @('Back') + @($ruleChoiceMap.Keys)
+                    $rulePick = Read-SpectreSelection -Title "[deepskyblue1]Select a rule for details:[/]" `
+                                                      -Choices $ruleChoices `
+                                                      -Color DodgerBlue2
+
+                    if ($rulePick -eq 'Back') {
+                        $browseContinue = $false
+                    } else {
+                        $selectedRuleName = $ruleChoiceMap[$rulePick]
+                        $selected = $metrics | Where-Object { $_.RuleName -eq $selectedRuleName } | Select-Object -First 1
+                        if ($selected) {
+                            Write-DetectionAnalyzerRuleDetail -RuleMetric $selected
+                        }
+                    }
+                }
             }
-            ($detailLines -join "`n") | Format-SpectrePanel -Header "[dodgerblue2] RULE DETAIL [/]" -Border Rounded -Color DodgerBlue2
         }
     }
+}
+
+function Write-DetectionAnalyzerRuleDetail {
+    param([PSCustomObject]$RuleMetric)
+
+    $selected = $RuleMetric
+    Write-SpectreHost ""
+
+    $kindLabel = if ($selected.RuleKind -eq 'CustomDetection') { 'Custom Detection (CDR)' } else { $selected.RuleKind }
+    $sourceLabel = if ($selected.Source) { $selected.Source } else { 'Sentinel' }
+
+    $detailLines = @(
+        "[bold]$(Get-SafeEscapedText $selected.RuleName)[/]  [dim]($kindLabel | $sourceLabel)[/]"
+        ""
+    )
+
+    # CDR-specific properties
+    if ($selected.RuleKind -eq 'CustomDetection') {
+        $enabledStr = if ($selected.Enabled) { '[green]Enabled[/]' } else { '[red]Disabled[/]' }
+        $detailLines += "[bold]Status:[/]           $enabledStr"
+        if ($selected.Frequency) {
+            $detailLines += "[bold]Frequency:[/]        $($selected.Frequency)"
+        }
+        if ($selected.Tables -and $selected.Tables.Count -gt 0) {
+            $detailLines += "[bold]Tables Queried:[/]   $(($selected.Tables | ForEach-Object { Get-SafeEscapedText $_ }) -join ', ')"
+        }
+        $detailLines += ""
+    }
+
+    if ($selected.IncidentsTotal -gt 0) {
+        $detailLines += "[bold]Incidents:[/]        $($selected.IncidentsTotal) total  |  $($selected.IncidentsClosed) closed  |  $($selected.IncidentsAutoClosed) auto-closed"
+        $detailLines += "[bold]True Positive:[/]    $($selected.TruePositiveClosed)  |  [bold]False Positive:[/] $($selected.FalsePositiveClosed)  |  [bold]Benign:[/] $($selected.BenignPositiveClosed)"
+        $detailLines += "[bold]Auto-Close Ratio:[/] $([math]::Round($selected.AutoCloseRatio * 100, 1))%  |  [bold]False Pos Ratio:[/] $([math]::Round($selected.FalsePositiveRatio * 100, 1))%"
+        if ($null -ne $selected.AvgCloseMinutes) {
+            $detailLines += "[bold]Avg Close Time:[/]   $($selected.AvgCloseMinutes) minutes"
+        }
+        $detailLines += ""
+        if ($null -ne $selected.NoisinessScore) {
+            $scoreColor = if ($selected.NoisinessScore -ge 70) { 'red' } elseif ($selected.NoisinessScore -ge 50) { 'yellow' } else { 'green' }
+            $detailLines += "[bold]Noisiness Score:[/]  [${scoreColor}]$($selected.NoisinessScore)[/]"
+            $detailLines += "[dim]  Volume %ile: $($selected.PercentileVolume)  |  AutoClose %ile: $($selected.PercentileAutoClose)  |  FalsePos %ile: $($selected.PercentileFalsePositive)[/]"
+        }
+    } else {
+        $detailLines += "[dim]No correlated incidents found. Noisiness score not available.[/]"
+    }
+
+    if ($selected.LinkedAutomationRules -and $selected.LinkedAutomationRules.Count -gt 0) {
+        $detailLines += ""
+        $detailLines += "[bold]Auto-close automation:[/] $(Get-SafeEscapedText ($selected.LinkedAutomationRules -join ', '))"
+    }
+    ($detailLines -join "`n") | Format-SpectrePanel -Header "[dodgerblue2] RULE DETAIL [/]" -Border Rounded -Color DodgerBlue2
 }
 
 function Write-XDRChecker {

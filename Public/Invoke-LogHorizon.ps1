@@ -155,7 +155,8 @@ function Invoke-LogHorizon {
                         -DataTransforms $dataTransforms `
                         -HighValueFields $highValueFields `
                         -Incidents $incidents `
-                        -AutomationRules $automationRules
+                        -AutomationRules $automationRules `
+                        -IncludeDetectionAnalyzer:$IncludeDetectionAnalyzer
     }
 
     $sw.Stop()

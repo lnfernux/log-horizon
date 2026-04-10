@@ -692,8 +692,14 @@ function Get-XdrCheckerData {
     # A known XDR table may exist in the workspace (RetentionMap) with zero ingestion during the
     # lookback window, meaning it won't appear in TableAnalysis. Use the union of usage-based
     # and retention-based sources so workspace-present tables are never falsely flagged as NotStreaming.
+    # The retention fallback requires ArchiveRetentionInDays > 0 because the Tables API creates
+    # schema entries for all known XDR tables when streaming is configured, even if no data has
+    # been received. Only tables with explicit archive retention are treated as actively managed.
     $streamedFromUsage     = @($xdrStreamedTables | ForEach-Object { $_.TableName })
-    $streamedFromRetention = @($KnownXDRTables | Where-Object { $_ -and $RetentionMap.ContainsKey($_) })
+    $streamedFromRetention = @($KnownXDRTables | Where-Object {
+        $_ -and $RetentionMap.ContainsKey($_) -and
+        $RetentionMap[$_].ArchiveRetentionInDays -gt 0
+    })
     $streamedNames         = @($streamedFromUsage + $streamedFromRetention | Select-Object -Unique)
     $notStreamedNames = @($KnownXDRTables | Where-Object { $_ -and ($_ -notin $streamedNames) })
 

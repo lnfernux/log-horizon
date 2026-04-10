@@ -1241,6 +1241,55 @@ Describe 'Invoke-Analysis XDR not-streamed does not misidentify workspace tables
     }
 }
 
+Describe 'Invoke-Analysis XDR tables in workspace with default retention are flagged as NotStreaming' {
+    BeforeAll {
+        # XDR tables exist in the Tables API (RetentionMap) with default retention (ArchiveRetentionInDays = 0)
+        # but have zero usage during lookback. These should be flagged as NotStreaming because the Tables API
+        # creates schema entries for all known XDR tables when streaming is configured, even without data.
+        $tableUsage = @(
+            [PSCustomObject]@{ TableName = 'SecurityEvent'; DataGB = 10; MonthlyGB = 3; RecordCount = 50000; EstMonthlyCostUSD = 16.77; IsFree = $false }
+        )
+        $classifications = [PSCustomObject]@{
+            Classifications = @{
+                'SecurityEvent' = [PSCustomObject]@{ Classification = 'primary'; Category = 'Security'; RecommendedTier = 'analytics'; IsFree = $false; RecommendedRetentionDays = 365; IsSplitTable = $false; ParentTable = $null }
+            }
+            KeywordGaps = @()
+            DatabaseEntries = 1
+        }
+        $rulesData = [PSCustomObject]@{ Rules = @(); TableCoverage = @{}; TotalRules = 0; EnabledRules = 0; DontCorrCount = 0; IncCorrCount = 0 }
+        $huntingData = [PSCustomObject]@{ Queries = @(); TableCoverage = @{}; TotalQueries = 0 }
+        $defenderXdr = [PSCustomObject]@{
+            TotalXDRRules = 0
+            XDRTableCoverage = @{}
+            KnownXDRTables = @('DeviceEvents', 'DeviceProcessEvents')
+        }
+        # Both XDR tables exist in workspace Tables API but with default retention (no archive = no evidence of data)
+        $tableRetention = @(
+            [PSCustomObject]@{ TableName = 'SecurityEvent'; RetentionInDays = 90; TotalRetentionInDays = 90; ArchiveRetentionInDays = 0; Plan = 'Analytics' }
+            [PSCustomObject]@{ TableName = 'DeviceEvents'; RetentionInDays = 90; TotalRetentionInDays = 90; ArchiveRetentionInDays = 0; Plan = 'Analytics' }
+            [PSCustomObject]@{ TableName = 'DeviceProcessEvents'; RetentionInDays = 30; TotalRetentionInDays = 30; ArchiveRetentionInDays = 0; Plan = 'Analytics' }
+        )
+        $script:defaultRetResult = Invoke-Analysis -TableUsage $tableUsage -Classifications $classifications `
+            -RulesData $rulesData -HuntingData $huntingData -DefenderXDR $defenderXdr `
+            -TableRetention $tableRetention -SocRecommendations @()
+    }
+
+    It 'flags XDR tables with default retention and no usage as NotStreaming' {
+        $notStreaming = @($script:defaultRetResult.XdrChecker.Findings | Where-Object Type -eq 'NotStreaming')
+        $notStreaming.TableName | Should -Contain 'DeviceEvents'
+        $notStreaming.TableName | Should -Contain 'DeviceProcessEvents'
+    }
+
+    It 'generates XDR Checker recommendations for default-retention not-streamed tables' {
+        $recs = @($script:defaultRetResult.XdrChecker.Recommendations | Where-Object { $_.TableName -in @('DeviceEvents', 'DeviceProcessEvents') })
+        $recs.Count | Should -Be 2
+    }
+
+    It 'includes not-streamed count in XDR Checker summary' {
+        $script:defaultRetResult.XdrChecker.Summary.NotStreamedCount | Should -Be 2
+    }
+}
+
 # ── Export-Report & ConvertTo-ReportSections tests ──────────────────────────
 
 Describe 'ConvertTo-ReportSections' {

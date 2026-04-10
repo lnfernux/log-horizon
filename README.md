@@ -205,7 +205,42 @@ Then the module generates recommendations:
 | **Split Candidate** | Primary + high volume + detections + no existing transform | Split the table — high-value rows stay on Analytics, the rest goes to Data Lake |
 | **Retention Shortfall** | Table retention below recommended minimum | Increase total/archive retention to meet regulatory guidance |
 
-### 4. Interactive dashboard
+### 4. Detection Analyzer (noisiness scoring)
+
+When you pass `-IncludeDetectionAnalyzer`, the module fetches recent incidents and automation rules, then scores every enabled analytics rule for potential noisiness.
+
+**Per-rule metrics** (computed from incident data):
+
+| Metric | How it's calculated |
+|---|---|
+| Incidents total | Count of incidents linked to the rule |
+| AutoClose ratio | Incidents closed by automation rules ÷ total incidents |
+| FalsePositive ratio | Incidents classified as false positive ÷ total incidents |
+
+**Noisiness score formula**:
+
+Each metric is converted to a percentile rank across all rules that have at least one incident. The composite score is a weighted blend:
+
+```
+Score = (Volume_percentile × 0.35) + (AutoClose_percentile × 0.40) + (FalsePositive_percentile × 0.25)
+```
+
+- **Volume percentile (35%)** — how many incidents a rule generates relative to other rules.
+- **AutoClose percentile (40%)** — how often incidents are auto-closed by automation rules (highest weight because automated closure is the strongest signal of low-value alerts).
+- **FalsePositive percentile (25%)** — how often analysts classify the outcome as false positive.
+
+**Score thresholds**:
+
+| Score | Label | Meaning |
+|---|---|---|
+| ≥ 70 | Noisy | Rule likely needs tuning or disabling |
+| ≥ 50 | Watch | Rule shows early signs of noisiness |
+| < 50 | Healthy | Rule is within normal range |
+| N/A | — | Rule has no correlated incidents (no score possible) |
+
+Rules with a score ≥ 70 and at least 5 incidents are automatically surfaced as **High-priority recommendations** in the Recommendations view.
+
+### 5. Interactive dashboard
 
 You land in a Spectre.Console TUI with a menu:
 
@@ -219,7 +254,6 @@ You land in a Spectre.Console TUI with a menu:
 - **All Tables**: the full list with classification, cost, rules, retention (colour-coded), and assessment
 - **XDR Analysis**: Defender XDR integration (when you used `-IncludeDefenderXDR`)
 - **Detection Analyzer**: percentile-based noisy rule ranking with closure quality indicators (when you used `-IncludeDetectionAnalyzer`)
-- **XDR Checker**: XDR streaming/coverage advisories and Data Lake retention guidance
 - **Export**: dump the report to JSON or Markdown right from the menu
 
 ---
