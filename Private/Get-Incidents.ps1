@@ -23,7 +23,7 @@ function Get-Incidents {
 
     do {
         $pageCount++
-        $response = Invoke-RestMethod -Uri $uri -Headers $headers -ErrorAction Stop
+        $response = Invoke-AzRestWithRetry -Uri $uri -Headers $headers
         foreach ($incident in $response.value) { $allIncidents.Add($incident) }
         $uri = $response.nextLink
 
@@ -60,6 +60,7 @@ function Get-Incidents {
 }
 
 function ConvertTo-UtcDateOrNull {
+    [CmdletBinding()]
     param([object]$Value)
 
     if ($null -eq $Value -or [string]::IsNullOrWhiteSpace("$Value")) {
@@ -75,6 +76,7 @@ function ConvertTo-UtcDateOrNull {
 }
 
 function Get-NormalizedArray {
+    [CmdletBinding()]
     param([object]$Value)
 
     if ($null -eq $Value) { return @() }

@@ -51,6 +51,7 @@ function Invoke-LogHorizon {
         [int]$DaysBack = 90,
 
         [Alias('ppgb')]
+        [ValidateRange(0.01, 100)]
         [decimal]$PricePerGB = 5.59,
 
         [ValidateScript({ Test-Path $_ -PathType Leaf })]

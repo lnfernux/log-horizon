@@ -20,7 +20,7 @@ function Get-AutomationRules {
 
     do {
         $pageCount++
-        $response = Invoke-RestMethod -Uri $uri -Headers $headers -ErrorAction Stop
+        $response = Invoke-AzRestWithRetry -Uri $uri -Headers $headers
         foreach ($rule in $response.value) { $allRules.Add($rule) }
         $uri = $response.nextLink
 

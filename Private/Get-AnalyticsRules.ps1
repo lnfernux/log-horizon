@@ -1,3 +1,27 @@
+# KQL keywords shared by Get-TablesFromKql and Get-FieldsFromKql.
+# Prevents false-positive matches when regex patterns capture keyword names.
+$script:kqlKeywords = @(
+    'source', 'where', 'project', 'extend', 'summarize', 'render', 'sort', 'order',
+    'top', 'take', 'count', 'distinct', 'evaluate', 'parse', 'invoke', 'not',
+    'limit', 'sample', 'search', 'find', 'print', 'range', 'datatable',
+    'materialize', 'toscalar', 'let', 'and', 'or', 'typeof', 'true', 'false',
+    'contains', 'has', 'startswith', 'endswith', 'between', 'matches', 'regex',
+    'ago', 'now', 'datetime', 'timespan', 'time', 'dynamic', 'real', 'long', 'int',
+    'bin', 'tolower', 'toupper', 'tostring', 'toint', 'tolong', 'todouble', 'tobool',
+    'set', 'alias', 'restrict', 'declare', 'pattern', 'kind', 'inner', 'outer',
+    'leftouter', 'rightouter', 'fullouter', 'leftanti', 'rightanti', 'leftsemi',
+    'isnotempty', 'isempty', 'isnotnull', 'isnull', 'strcat', 'format_timespan',
+    'countif', 'sumif', 'avgif', 'minif', 'maxif', 'dcountif', 'makelist', 'makeset',
+    'arg_max', 'arg_min', 'dcount', 'avg', 'sum', 'min', 'max', 'any', 'all',
+    'pack', 'pack_all', 'parse_json', 'array_length', 'bag_keys', 'bag_unpack',
+    'union', 'join', 'lookup', 'asc', 'desc', 'nulls', 'first', 'last',
+    'prev', 'next', 'row_number', 'serialize', 'todynamic', 'split', 'trim',
+    'replace', 'extract', 'parse_path', 'parse_url', 'parse_urlquery',
+    'format_datetime', 'todatetime', 'make_datetime', 'make_timespan',
+    'geo_info_from_ip_address', 'ipv4_is_private', 'ipv4_is_match',
+    'case', 'iff', 'coalesce', 'iif', 'ingestion_time'
+)
+
 function Get-AnalyticsRules {
     <#
     .SYNOPSIS
@@ -21,7 +45,7 @@ function Get-AnalyticsRules {
     # handle paging
     do {
         $pageCount++
-        $response = Invoke-RestMethod -Uri $uri -Headers $headers -ErrorAction Stop
+        $response = Invoke-AzRestWithRetry -Uri $uri -Headers $headers
         foreach ($r in $response.value) { $allRules.Add($r) }
         $uri = $response.nextLink
         if ($pageCount -ge $maxPages) {
@@ -29,6 +53,8 @@ function Get-AnalyticsRules {
             break
         }
     } while ($uri)
+
+    Write-Verbose "Fetched $($allRules.Count) analytics rule(s) across $pageCount page(s)."
 
     $tableCoverage = @{}
     $rules = foreach ($rule in $allRules) {
@@ -124,7 +150,7 @@ function Get-TablesFromKql {
     }
 
     # Pattern 5: table in datatable() or externaldata() — skip, not real tables
-    $tables | Where-Object { $_ -notin $kqlKeywords -and $_ -notin $letNames -and $_.Length -gt 2 }
+    $tables | Where-Object { $_ -notin $script:kqlKeywords -and $_ -notin $letNames -and $_.Length -gt 2 }
 }
 
 function Get-FieldsFromKql {
@@ -191,28 +217,6 @@ function Get-FieldsFromKql {
     $m9 = [regex]::Matches($Kql, '(?i)\bmv-expand\s+(\w+)')
     foreach ($m in $m9) { [void]$fields.Add($m.Groups[1].Value) }
 
-    # Filter out KQL keywords, functions, and operators
-    $kqlKeywords = @(
-        'source', 'where', 'project', 'extend', 'summarize', 'render', 'sort', 'order',
-        'top', 'take', 'count', 'distinct', 'evaluate', 'parse', 'invoke', 'not',
-        'limit', 'sample', 'search', 'find', 'print', 'range', 'datatable',
-        'materialize', 'toscalar', 'let', 'and', 'or', 'typeof', 'true', 'false',
-        'contains', 'has', 'startswith', 'endswith', 'between', 'matches', 'regex',
-        'ago', 'now', 'datetime', 'timespan', 'time', 'dynamic', 'real', 'long', 'int',
-        'bin', 'tolower', 'toupper', 'tostring', 'toint', 'tolong', 'todouble', 'tobool',
-        'set', 'alias', 'restrict', 'declare', 'pattern', 'kind', 'inner', 'outer',
-        'leftouter', 'rightouter', 'fullouter', 'leftanti', 'rightanti', 'leftsemi',
-        'isnotempty', 'isempty', 'isnotnull', 'isnull', 'strcat', 'format_timespan',
-        'countif', 'sumif', 'avgif', 'minif', 'maxif', 'dcountif', 'makelist', 'makeset',
-        'arg_max', 'arg_min', 'dcount', 'avg', 'sum', 'min', 'max', 'any', 'all',
-        'pack', 'pack_all', 'parse_json', 'array_length', 'bag_keys', 'bag_unpack',
-        'union', 'join', 'lookup', 'asc', 'desc', 'nulls', 'first', 'last',
-        'prev', 'next', 'row_number', 'serialize', 'todynamic', 'split', 'trim',
-        'replace', 'extract', 'parse_path', 'parse_url', 'parse_urlquery',
-        'format_datetime', 'todatetime', 'make_datetime', 'make_timespan',
-        'geo_info_from_ip_address', 'ipv4_is_private', 'ipv4_is_match',
-        'case', 'iff', 'coalesce', 'iif', 'ingestion_time'
-    )
-
-    @($fields | Where-Object { $_ -notin $kqlKeywords -and $_.Length -gt 1 })
+    # Filter out KQL keywords, functions, and operators (shared file-scope list)
+    @($fields | Where-Object { $_ -notin $script:kqlKeywords -and $_.Length -gt 1 })
 }

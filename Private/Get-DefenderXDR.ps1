@@ -134,7 +134,7 @@ function Get-DefenderXDR {
             try {
                 $uri = $endpoint
                 do {
-                    $response = Invoke-RestMethod -Method GET -Uri $uri -Headers $headers -ErrorAction Stop
+                    $response = Invoke-AzRestWithRetry -Uri $uri -Headers $headers
                     if ($response -and $response.PSObject.Properties.Name -contains 'value') {
                         $customRules += @($response.value)
                     }

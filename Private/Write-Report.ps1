@@ -38,10 +38,13 @@ function Write-Report {
 }
 
 function Get-ConsoleWidth {
+    [CmdletBinding()]
+    param()
     try { $Host.UI.RawUI.WindowSize.Width } catch { 120 }
 }
 
 function Test-ConsoleSize {
+    [CmdletBinding()]
     param(
         [int]$MinimumWidth = 120,
         [int]$MinimumHeight = 30
@@ -77,7 +80,9 @@ function Invoke-ConsoleSizeCheck {
     Read-SpectrePause -Message ""
 }
 
-function Get-SafeEscapedText ([string]$Value) {
+function Get-SafeEscapedText {
+    [CmdletBinding()]
+    param([string]$Value)
     if ([string]::IsNullOrEmpty($Value)) { return '-' }
     Get-SpectreEscapedText $Value
 }

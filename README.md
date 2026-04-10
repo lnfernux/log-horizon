@@ -5,7 +5,7 @@
 ### Microsoft Sentinel SIEM Log Source Analyzer
 
 ![PowerShell 7+](https://img.shields.io/badge/PowerShell-7%2B-blue)
-![Module Version](https://img.shields.io/badge/version-0.5.0-green)
+![Module Version](https://img.shields.io/badge/version-0.6.1-green)
 
 ---
 I've had to answer *"what are we actually getting out of these logs?"* or *"what is the recommended logs for Microsoft Sentinel"* more times than I can count. The answer always depend on so many things, but we can be generic. So I built this thingy right here.
@@ -23,7 +23,7 @@ I've had to answer *"what are we actually getting out of these logs?"* or *"what
 
 | Feature | Description |
 |---|---|
-| **Classification Engine** | 344-entry knowledge base covering 190+ connectors, 21 categories, with automatic heuristic fallback for unknown tables |
+| **Classification Engine** | 345-entry knowledge base covering 190+ connectors, 21 categories, with automatic heuristic fallback for unknown tables |
 | **Cost-Value Scoring** | Per-table cost tier vs detection tier matrix with combined assessment (High Value → Low Value) |
 | **Recommendations** | Prioritised actions: data lake candidates, zero-detection tables, XDR streaming waste, ingest-time filtering, retention shortfalls |
 | **Detection Mapping** | Maps analytics rules, hunting queries, and XDR detections to each table to spot coverage gaps |
@@ -45,7 +45,7 @@ I've had to answer *"what are we actually getting out of these logs?"* or *"what
 | What you need | Version |
 |---|---|
 | PowerShell | 7.0+ |
-| Az modules | `Az.Accounts`, `Az.OperationalInsights`, `Az.SecurityInsights` |
+| Az modules | `Az.Accounts`, `Az.Resources` |
 | PwshSpectreConsole | 2.6.3+ |
 
 If you're not already logged into Azure, the module will fire up `Connect-AzAccount` for you. If you are, it'll just carry on.
@@ -56,7 +56,7 @@ Pretty straight forward:
 
 ```powershell
 # Grab the dependencies
-Install-Module -Name Az.Accounts, Az.OperationalInsights, Az.SecurityInsights -Scope CurrentUser
+Install-Module -Name Az.Accounts, Az.Resources -Scope CurrentUser
 Install-Module -Name PwshSpectreConsole -Scope CurrentUser
 
 # Clone and import
@@ -180,7 +180,7 @@ The module connects to Azure and pulls data from the Log Analytics and Security 
 
 Every table gets classified through two passes:
 
-**First**, a direct lookup against the 344-entry knowledge base in `Data/log-classifications.json`. Each entry carries the connector name, primary/secondary classification, security category, MITRE data source mappings, and a recommended pricing tier.
+**First**, a direct lookup against the 345-entry knowledge base in `Data/log-classifications.json`. Each entry carries the connector name, primary/secondary classification, security category, MITRE data source mappings, and a recommended pricing tier.
 
 **If there's no match**, heuristic rules kick in:
 - Name contains security patterns like `Alert`, `Incident`, `Threat`, `Signin`, `Audit`, `Risk` -> **primary**
@@ -265,7 +265,7 @@ You land in a Spectre.Console TUI with a menu:
 
 ## The classification database
 
-Sitting at `Data/log-classifications.json`. **344 entries**, **190 connectors**, **21 categories**.
+Sitting at `Data/log-classifications.json`. **345 entries**, **190 connectors**, **21 categories**.
 
 ### What's in each entry
 
@@ -416,12 +416,12 @@ Private/
   Write-Report.ps1           Spectre.Console TUI rendering
   Export-Report.ps1          JSON / Markdown / static HTML export with shared section renderer
 Data/
-  log-classifications.json              344-entry classification knowledge base
+  log-classifications.json              345-entry classification knowledge base
   high-value-fields.json                15-table split KQL knowledge base with curated fields and split hints
   custom-classifications-example.json   Example custom classification override file
   ReportTemplate.html                   Static HTML report template (pure-CSS tabs, zero JS)
 Tests/
-  LogHorizon.Tests.ps1       Pester v5 unit tests (106 tests)
+  LogHorizon.Tests.ps1       Pester v5 unit tests
 ```
 
 ## Tests
@@ -438,6 +438,7 @@ MIT
 
 | Version | Date | Changes |
 |---|---|---|
+| 0.6.1 | 2026-04-10 | Bug fixes: `$kqlKeywords` filtering now shared at file scope (was undefined in `Get-TablesFromKql`), `[CmdletBinding()]` added to all helper functions, Defender unified check simplified, removed ghost `-RuleCount` test param. Robustness: `Get-HuntingQueries` pagination, `Invoke-AzRestWithRetry` retry wrapper with exponential backoff for 429/5xx, `PricePerGB` validation, `Write-Verbose` in key functions. Docs: version badge, DB count, prerequisites aligned with manifest |
 | 0.6.0 | 2026-04-10 | Dynamic XDR streaming detection with 21 `KnownXDRTables` (was hardcoded 18), per-table `XDRState` (`NotStreaming`/`Analytics`/`Basic`/`Auxiliary`), Auxiliary recognized as data lake tier, not-streamed XDR tables surfaced as Information/Low recommendations with `NotStreamedCount`, retention analyzer shows not-streamed XDR tables as "XDR only (30d)", overview tier breakdown (analytics/basic/data lake + not streamed), Export-Report Auxiliary→"data lake" labels, classification DB updated to 345 entries (+`DeviceNetworkInfo`, `DeviceInfo`→secondary/datalake, `DeviceImageLoadEvents` and `IdentityQueryEvents`→datalake tier), 15 new Pester tests (121 total) |
 | 0.5.0 | 2026-04-03 | Static HTML export with pure-CSS tabs (zero JS, no CDN, fully self-contained), unified MD/HTML section renderer, complete JSON data capture (dataTransforms, correlationExcluded/Included, streamingTables), `-NonInteractive` switch for CI/pipeline usage, `md` format alias, datetime-stamped auto-filenames, full KQL display in DCR transforms (no truncation), multiline KQL handling in markdown tables, fixed regex `$`-backreference corruption in HTML token replacement, renamed internal helpers to avoid PowerShell alias conflicts (`h`→`hEnc`, `md`→`mdEsc`), 33 new Pester tests (106 total) |
 | 0.4.1 | 2026-04-03 | Security & stability fixes - added token memory sanitization, output path validation & XSS protection, REST API pagination limits, fixed module loader error masking, and resolved PSScriptAnalyzer warnings |
