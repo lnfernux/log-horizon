@@ -17,6 +17,7 @@ I've had to answer *"what are we actually getting out of these logs?"* or *"what
 **Want to read more? I have some posts about Log Horizon on my blog:**
 
 1. [Tool Release: Log Horizon](https://infernux.no/blog/loghorizon-toolrelease/)
+2. [Update: Log Horizon v0.5.0](https://infernux.no/blog/loghorizon-update1/)
 
 ## Features
 
