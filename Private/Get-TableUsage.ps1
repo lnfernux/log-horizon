@@ -21,7 +21,6 @@ function Get-TableUsage {
     $query = @"
 Usage
 | where TimeGenerated > ago(${DaysBack}d)
-| where IsBillable == true
 | summarize DataGB = sum(Quantity) / 1024.0,
             RecordCount = count()
   by DataType

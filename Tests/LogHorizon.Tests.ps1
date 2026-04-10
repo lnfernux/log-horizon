@@ -7,6 +7,8 @@ BeforeAll {
     . "$privatePath\Export-Report.ps1"
     . "$privatePath\Write-Report.ps1"
     . "$privatePath\Get-DataTransforms.ps1"
+    . "$privatePath\Get-Incidents.ps1"
+    . "$privatePath\Get-AutomationRules.ps1"
 
     function New-MockAnalysis {
         [PSCustomObject]@{
@@ -33,6 +35,7 @@ BeforeAll {
                     RecommendedRetentionDays = 365
                     TablePlan              = 'Analytics'
                     IsXDRStreaming         = $false
+                    XDRState               = $null
                     SplitSuggestion        = $null
                 },
                 [PSCustomObject]@{
@@ -57,6 +60,7 @@ BeforeAll {
                     RecommendedRetentionDays = 90
                     TablePlan              = 'Analytics'
                     IsXDRStreaming         = $false
+                    XDRState               = $null
                     SplitSuggestion        = $null
                 }
             )
@@ -934,6 +938,358 @@ Describe 'Invoke-Analysis with split KQL generation' {
     }
 }
 
+Describe 'Invoke-Analysis Detection Analyzer and XDR Checker' {
+    BeforeAll {
+        $tableUsage = @(
+            [PSCustomObject]@{ TableName = 'SigninLogs'; DataGB = 10; MonthlyGB = 3.3; RecordCount = 50000; EstMonthlyCostUSD = 18.45; IsFree = $false },
+            [PSCustomObject]@{ TableName = 'DeviceEvents'; DataGB = 5; MonthlyGB = 1.7; RecordCount = 20000; EstMonthlyCostUSD = 9.50; IsFree = $false }
+        )
+
+        $classifications = [PSCustomObject]@{
+            Classifications = @{
+                'SigninLogs' = [PSCustomObject]@{ Classification = 'primary'; Category = 'Identity & Access'; RecommendedTier = 'analytics'; IsFree = $false; RecommendedRetentionDays = 365; IsSplitTable = $false; ParentTable = $null }
+                'DeviceEvents' = [PSCustomObject]@{ Classification = 'primary'; Category = 'Endpoint'; RecommendedTier = 'analytics'; IsFree = $false; RecommendedRetentionDays = 365; IsSplitTable = $false; ParentTable = $null }
+            }
+            KeywordGaps = @()
+            DatabaseEntries = 2
+        }
+
+        $rulesData = [PSCustomObject]@{
+            Rules = @(
+                [PSCustomObject]@{
+                    RuleName = 'Suspicious Sign-in Burst'
+                    Kind = 'Scheduled'
+                    Enabled = $true
+                    Tables = @('SigninLogs')
+                    HasQuery = $true
+                    Query = 'SigninLogs | where ResultType != 0'
+                    Description = ''
+                    ExcludedFromCorrelation = $false
+                    IncludedInCorrelation = $false
+                }
+            )
+            TableCoverage = @{ 'SigninLogs' = 1 }
+            TotalRules = 1
+            EnabledRules = 1
+            DontCorrCount = 0
+            IncCorrCount = 0
+        }
+
+        $huntingData = [PSCustomObject]@{
+            Queries = @()
+            TableCoverage = @{}
+            TotalQueries = 0
+        }
+
+        $incidents = @(
+            [PSCustomObject]@{
+                IncidentId = 'inc-1'
+                Title = 'Suspicious Sign-in Burst - Test Case'
+                Status = 'Closed'
+                Classification = 'FalsePositive'
+                ClassificationReason = 'InaccurateData'
+                CreatedTimeUtc = [datetime]'2026-04-08T10:00:00Z'
+                ClosedTimeUtc = [datetime]'2026-04-08T10:05:00Z'
+                RelatedAnalyticRuleIds = @()
+                RelatedAnalyticRuleNames = @('Suspicious Sign-in Burst')
+            }
+        )
+
+        $automationRules = @(
+            [PSCustomObject]@{
+                AutomationRuleId = 'ar-1'
+                DisplayName = 'Auto close suspicious sign-in tests'
+                Enabled = $true
+                IsCloseIncidentRule = $true
+                TitleFilters = @('Suspicious Sign-in Burst*')
+            }
+        )
+
+        $defenderXdr = [PSCustomObject]@{
+            TotalXDRRules = 0
+            XDRTableCoverage = @{}
+            KnownXDRTables = @('DeviceEvents')
+        }
+
+        $tableRetention = @(
+            [PSCustomObject]@{ TableName = 'SigninLogs'; RetentionInDays = 90; TotalRetentionInDays = 90; ArchiveRetentionInDays = 0; Plan = 'Analytics' },
+            [PSCustomObject]@{ TableName = 'DeviceEvents'; RetentionInDays = 90; TotalRetentionInDays = 90; ArchiveRetentionInDays = 0; Plan = 'Analytics' }
+        )
+
+        $script:featureResult = Invoke-Analysis -TableUsage $tableUsage `
+                                                -Classifications $classifications `
+                                                -RulesData $rulesData `
+                                                -HuntingData $huntingData `
+                                                -DefenderXDR $defenderXdr `
+                                                -TableRetention $tableRetention `
+                                                -Incidents $incidents `
+                                                -AutomationRules $automationRules `
+                                                -IncludeDetectionAnalyzer `
+                                                -SocRecommendations @()
+    }
+
+    It 'produces DetectionAnalyzer summary' {
+        $script:featureResult.DetectionAnalyzer | Should -Not -BeNullOrEmpty
+        $script:featureResult.DetectionAnalyzer.Summary.RulesAnalyzed | Should -Be 1
+        $script:featureResult.DetectionAnalyzer.Summary.IncidentsAnalyzed | Should -Be 1
+    }
+
+    It 'attributes auto-closed incidents when automation title filter matches' {
+        $metric = $script:featureResult.DetectionAnalyzer.RuleMetrics | Select-Object -First 1
+        $metric.IncidentsAutoClosed | Should -Be 1
+        $metric.AutoCloseRatio | Should -Be 1
+    }
+
+    It 'produces XDR checker findings for advisory retention gap' {
+        $script:featureResult.XdrChecker | Should -Not -BeNullOrEmpty
+        @($script:featureResult.XdrChecker.Findings).Count | Should -BeGreaterThan 0
+    }
+
+    It 'sets XDRState to Analytics for known XDR table with Analytics plan' {
+        $t = $script:featureResult.TableAnalysis | Where-Object TableName -eq 'DeviceEvents'
+        $t.XDRState | Should -Be 'Analytics'
+        $t.IsXDRStreaming | Should -Be $true
+    }
+
+    It 'sets XDRState to null for non-XDR tables' {
+        $t = $script:featureResult.TableAnalysis | Where-Object TableName -eq 'SigninLogs'
+        $t.XDRState | Should -BeNullOrEmpty
+        $t.IsXDRStreaming | Should -Be $false
+    }
+}
+
+Describe 'Invoke-Analysis XDR Basic tier streaming' {
+    BeforeAll {
+        $tableUsage = @(
+            [PSCustomObject]@{ TableName = 'EmailEvents'; DataGB = 2; MonthlyGB = 0.7; RecordCount = 5000; EstMonthlyCostUSD = 3.90; IsFree = $false }
+        )
+        $classifications = [PSCustomObject]@{
+            Classifications = @{
+                'EmailEvents' = [PSCustomObject]@{ Classification = 'primary'; Category = 'Email'; RecommendedTier = 'analytics'; IsFree = $false; RecommendedRetentionDays = 365; IsSplitTable = $false; ParentTable = $null }
+            }
+            KeywordGaps = @()
+            DatabaseEntries = 1
+        }
+        $rulesData = [PSCustomObject]@{ Rules = @(); TableCoverage = @{}; TotalRules = 0; EnabledRules = 0; DontCorrCount = 0; IncCorrCount = 0 }
+        $huntingData = [PSCustomObject]@{ Queries = @(); TableCoverage = @{}; TotalQueries = 0 }
+        $defenderXdr = [PSCustomObject]@{
+            TotalXDRRules = 0
+            XDRTableCoverage = @{}
+            KnownXDRTables = @('EmailEvents')
+        }
+        $tableRetention = @(
+            [PSCustomObject]@{ TableName = 'EmailEvents'; RetentionInDays = 30; TotalRetentionInDays = 30; ArchiveRetentionInDays = 0; Plan = 'Basic' }
+        )
+        $script:basicResult = Invoke-Analysis -TableUsage $tableUsage -Classifications $classifications `
+            -RulesData $rulesData -HuntingData $huntingData -DefenderXDR $defenderXdr `
+            -TableRetention $tableRetention -SocRecommendations @()
+    }
+
+    It 'marks Basic plan XDR table as streaming' {
+        $t = $script:basicResult.TableAnalysis | Where-Object TableName -eq 'EmailEvents'
+        $t.IsXDRStreaming | Should -Be $true
+        $t.XDRState | Should -Be 'Basic'
+    }
+
+    It 'includes Basic tier table in XDR checker' {
+        $script:basicResult.XdrChecker.Summary.StreamedTableCount | Should -Be 1
+    }
+}
+
+Describe 'Invoke-Analysis XDR Auxiliary (data lake) tier streaming' {
+    BeforeAll {
+        $tableUsage = @(
+            [PSCustomObject]@{ TableName = 'DeviceNetworkEvents'; DataGB = 5; MonthlyGB = 1.5; RecordCount = 10000; EstMonthlyCostUSD = 8.39; IsFree = $false }
+        )
+        $classifications = [PSCustomObject]@{
+            Classifications = @{
+                'DeviceNetworkEvents' = [PSCustomObject]@{ Classification = 'primary'; Category = 'Endpoint'; RecommendedTier = 'analytics'; IsFree = $false; RecommendedRetentionDays = 365; IsSplitTable = $false; ParentTable = $null }
+            }
+            KeywordGaps = @()
+            DatabaseEntries = 1
+        }
+        $rulesData = [PSCustomObject]@{ Rules = @(); TableCoverage = @{}; TotalRules = 0; EnabledRules = 0; DontCorrCount = 0; IncCorrCount = 0 }
+        $huntingData = [PSCustomObject]@{ Queries = @(); TableCoverage = @{}; TotalQueries = 0 }
+        $defenderXdr = [PSCustomObject]@{
+            TotalXDRRules = 0
+            XDRTableCoverage = @{}
+            KnownXDRTables = @('DeviceNetworkEvents')
+        }
+        $tableRetention = @(
+            [PSCustomObject]@{ TableName = 'DeviceNetworkEvents'; RetentionInDays = 30; TotalRetentionInDays = 1825; ArchiveRetentionInDays = 0; Plan = 'Auxiliary' }
+        )
+        $script:auxResult = Invoke-Analysis -TableUsage $tableUsage -Classifications $classifications `
+            -RulesData $rulesData -HuntingData $huntingData -DefenderXDR $defenderXdr `
+            -TableRetention $tableRetention -SocRecommendations @()
+    }
+
+    It 'marks Auxiliary plan XDR table as streaming with data lake state' {
+        $t = $script:auxResult.TableAnalysis | Where-Object TableName -eq 'DeviceNetworkEvents'
+        $t.IsXDRStreaming | Should -Be $true
+        $t.XDRState | Should -Be 'Auxiliary'
+    }
+
+    It 'does not flag NotForwardedToDataLake for Auxiliary table' {
+        $findings = $script:auxResult.XdrChecker.Findings | Where-Object Type -eq 'NotForwardedToDataLake'
+        $findings | Should -BeNullOrEmpty
+    }
+
+    It 'includes Auxiliary tier table in XDR checker streamed count' {
+        $script:auxResult.XdrChecker.Summary.StreamedTableCount | Should -Be 1
+    }
+}
+
+Describe 'Invoke-Analysis XDR not-streamed tables' {
+    BeforeAll {
+        # Only one table in workspace (SecurityEvent), but KnownXDRTables has two XDR tables
+        $tableUsage = @(
+            [PSCustomObject]@{ TableName = 'SecurityEvent'; DataGB = 10; MonthlyGB = 3; RecordCount = 50000; EstMonthlyCostUSD = 16.77; IsFree = $false }
+            [PSCustomObject]@{ TableName = 'DeviceProcessEvents'; DataGB = 5; MonthlyGB = 1.5; RecordCount = 10000; EstMonthlyCostUSD = 8.39; IsFree = $false }
+        )
+        $classifications = [PSCustomObject]@{
+            Classifications = @{
+                'SecurityEvent' = [PSCustomObject]@{ Classification = 'primary'; Category = 'Security'; RecommendedTier = 'analytics'; IsFree = $false; RecommendedRetentionDays = 365; IsSplitTable = $false; ParentTable = $null }
+                'DeviceProcessEvents' = [PSCustomObject]@{ Classification = 'primary'; Category = 'Endpoint'; RecommendedTier = 'analytics'; IsFree = $false; RecommendedRetentionDays = 365; IsSplitTable = $false; ParentTable = $null }
+            }
+            KeywordGaps = @()
+            DatabaseEntries = 2
+        }
+        $rulesData = [PSCustomObject]@{ Rules = @(); TableCoverage = @{}; TotalRules = 0; EnabledRules = 0; DontCorrCount = 0; IncCorrCount = 0 }
+        $huntingData = [PSCustomObject]@{ Queries = @(); TableCoverage = @{}; TotalQueries = 0 }
+        $defenderXdr = [PSCustomObject]@{
+            TotalXDRRules = 0
+            XDRTableCoverage = @{}
+            KnownXDRTables = @('DeviceProcessEvents', 'DeviceNetworkEvents', 'EmailEvents')
+        }
+        # Only DeviceProcessEvents is in Sentinel workspace
+        $tableRetention = @(
+            [PSCustomObject]@{ TableName = 'SecurityEvent'; RetentionInDays = 90; TotalRetentionInDays = 90; ArchiveRetentionInDays = 0; Plan = 'Analytics' }
+            [PSCustomObject]@{ TableName = 'DeviceProcessEvents'; RetentionInDays = 90; TotalRetentionInDays = 365; ArchiveRetentionInDays = 275; Plan = 'Analytics' }
+        )
+        $script:notStreamedResult = Invoke-Analysis -TableUsage $tableUsage -Classifications $classifications `
+            -RulesData $rulesData -HuntingData $huntingData -DefenderXDR $defenderXdr `
+            -TableRetention $tableRetention -SocRecommendations @()
+    }
+
+    It 'generates NotStreaming findings for XDR tables not in workspace' {
+        $notStreaming = @($script:notStreamedResult.XdrChecker.Findings | Where-Object Type -eq 'NotStreaming')
+        $notStreaming.Count | Should -Be 2
+        $notStreaming.TableName | Should -Contain 'DeviceNetworkEvents'
+        $notStreaming.TableName | Should -Contain 'EmailEvents'
+    }
+
+    It 'sets severity to Information for NotStreaming findings' {
+        $notStreaming = @($script:notStreamedResult.XdrChecker.Findings | Where-Object Type -eq 'NotStreaming')
+        $notStreaming | ForEach-Object { $_.Severity | Should -Be 'Information' }
+    }
+
+    It 'generates Low priority recommendations for not-streamed tables' {
+        $recs = @($script:notStreamedResult.XdrChecker.Recommendations | Where-Object { $_.TableName -in @('DeviceNetworkEvents', 'EmailEvents') })
+        $recs.Count | Should -Be 2
+        $recs | ForEach-Object { $_.Priority | Should -Be 'Low' }
+    }
+
+    It 'reports NotStreamedCount in summary' {
+        $script:notStreamedResult.XdrChecker.Summary.NotStreamedCount | Should -Be 2
+    }
+
+    It 'does not flag streamed table as NotStreaming' {
+        $notStreaming = @($script:notStreamedResult.XdrChecker.Findings | Where-Object Type -eq 'NotStreaming')
+        $notStreaming.TableName | Should -Not -Contain 'DeviceProcessEvents'
+    }
+}
+
+Describe 'Invoke-Analysis XDR not-streamed does not misidentify workspace tables with zero lookback usage' {
+    BeforeAll {
+        # DeviceProcessEvents is in workspace (tableRetention) but has NO usage during lookback (absent from tableUsage).
+        # It must NOT be flagged as NotStreaming.
+        $tableUsage = @(
+            [PSCustomObject]@{ TableName = 'SecurityEvent'; DataGB = 10; MonthlyGB = 3; RecordCount = 50000; EstMonthlyCostUSD = 16.77; IsFree = $false }
+        )
+        $classifications = [PSCustomObject]@{
+            Classifications = @{
+                'SecurityEvent' = [PSCustomObject]@{ Classification = 'primary'; Category = 'Security'; RecommendedTier = 'analytics'; IsFree = $false; RecommendedRetentionDays = 365; IsSplitTable = $false; ParentTable = $null }
+            }
+            KeywordGaps = @()
+            DatabaseEntries = 1
+        }
+        $rulesData = [PSCustomObject]@{ Rules = @(); TableCoverage = @{}; TotalRules = 0; EnabledRules = 0; DontCorrCount = 0; IncCorrCount = 0 }
+        $huntingData = [PSCustomObject]@{ Queries = @(); TableCoverage = @{}; TotalQueries = 0 }
+        $defenderXdr = [PSCustomObject]@{
+            TotalXDRRules = 0
+            XDRTableCoverage = @{}
+            KnownXDRTables = @('DeviceProcessEvents', 'EmailEvents')
+        }
+        # DeviceProcessEvents IS in workspace retention but has no usage in the lookback window
+        $tableRetention = @(
+            [PSCustomObject]@{ TableName = 'SecurityEvent'; RetentionInDays = 90; TotalRetentionInDays = 90; ArchiveRetentionInDays = 0; Plan = 'Analytics' }
+            [PSCustomObject]@{ TableName = 'DeviceProcessEvents'; RetentionInDays = 90; TotalRetentionInDays = 365; ArchiveRetentionInDays = 275; Plan = 'Analytics' }
+        )
+        $script:zeroUsageResult = Invoke-Analysis -TableUsage $tableUsage -Classifications $classifications `
+            -RulesData $rulesData -HuntingData $huntingData -DefenderXDR $defenderXdr `
+            -TableRetention $tableRetention -SocRecommendations @()
+    }
+
+    It 'does not flag a workspace-present XDR table as NotStreaming when it has zero lookback usage' {
+        $notStreaming = @($script:zeroUsageResult.XdrChecker.Findings | Where-Object Type -eq 'NotStreaming')
+        $notStreaming.TableName | Should -Not -Contain 'DeviceProcessEvents'
+    }
+
+    It 'still flags truly not-streamed XDR table as NotStreaming' {
+        $notStreaming = @($script:zeroUsageResult.XdrChecker.Findings | Where-Object Type -eq 'NotStreaming')
+        $notStreaming.TableName | Should -Contain 'EmailEvents'
+    }
+}
+
+Describe 'Invoke-Analysis XDR tables in workspace with default retention are flagged as NotStreaming' {
+    BeforeAll {
+        # XDR tables exist in the Tables API (RetentionMap) with default retention (ArchiveRetentionInDays = 0)
+        # but have zero usage during lookback. These should be flagged as NotStreaming because the Tables API
+        # creates schema entries for all known XDR tables when streaming is configured, even without data.
+        $tableUsage = @(
+            [PSCustomObject]@{ TableName = 'SecurityEvent'; DataGB = 10; MonthlyGB = 3; RecordCount = 50000; EstMonthlyCostUSD = 16.77; IsFree = $false }
+        )
+        $classifications = [PSCustomObject]@{
+            Classifications = @{
+                'SecurityEvent' = [PSCustomObject]@{ Classification = 'primary'; Category = 'Security'; RecommendedTier = 'analytics'; IsFree = $false; RecommendedRetentionDays = 365; IsSplitTable = $false; ParentTable = $null }
+            }
+            KeywordGaps = @()
+            DatabaseEntries = 1
+        }
+        $rulesData = [PSCustomObject]@{ Rules = @(); TableCoverage = @{}; TotalRules = 0; EnabledRules = 0; DontCorrCount = 0; IncCorrCount = 0 }
+        $huntingData = [PSCustomObject]@{ Queries = @(); TableCoverage = @{}; TotalQueries = 0 }
+        $defenderXdr = [PSCustomObject]@{
+            TotalXDRRules = 0
+            XDRTableCoverage = @{}
+            KnownXDRTables = @('DeviceEvents', 'DeviceProcessEvents')
+        }
+        # Both XDR tables exist in workspace Tables API but with default retention (no archive = no evidence of data)
+        $tableRetention = @(
+            [PSCustomObject]@{ TableName = 'SecurityEvent'; RetentionInDays = 90; TotalRetentionInDays = 90; ArchiveRetentionInDays = 0; Plan = 'Analytics' }
+            [PSCustomObject]@{ TableName = 'DeviceEvents'; RetentionInDays = 90; TotalRetentionInDays = 90; ArchiveRetentionInDays = 0; Plan = 'Analytics' }
+            [PSCustomObject]@{ TableName = 'DeviceProcessEvents'; RetentionInDays = 30; TotalRetentionInDays = 30; ArchiveRetentionInDays = 0; Plan = 'Analytics' }
+        )
+        $script:defaultRetResult = Invoke-Analysis -TableUsage $tableUsage -Classifications $classifications `
+            -RulesData $rulesData -HuntingData $huntingData -DefenderXDR $defenderXdr `
+            -TableRetention $tableRetention -SocRecommendations @()
+    }
+
+    It 'flags XDR tables with default retention and no usage as NotStreaming' {
+        $notStreaming = @($script:defaultRetResult.XdrChecker.Findings | Where-Object Type -eq 'NotStreaming')
+        $notStreaming.TableName | Should -Contain 'DeviceEvents'
+        $notStreaming.TableName | Should -Contain 'DeviceProcessEvents'
+    }
+
+    It 'generates XDR Checker recommendations for default-retention not-streamed tables' {
+        $recs = @($script:defaultRetResult.XdrChecker.Recommendations | Where-Object { $_.TableName -in @('DeviceEvents', 'DeviceProcessEvents') })
+        $recs.Count | Should -Be 2
+    }
+
+    It 'includes not-streamed count in XDR Checker summary' {
+        $script:defaultRetResult.XdrChecker.Summary.NotStreamedCount | Should -Be 2
+    }
+}
+
 # ── Export-Report & ConvertTo-ReportSections tests ──────────────────────────
 
 Describe 'ConvertTo-ReportSections' {
@@ -1032,7 +1388,7 @@ Describe 'ConvertTo-ReportSections' {
         $xdr = [PSCustomObject]@{
             TotalXDRRules    = 5
             XDRTableCoverage = @{}
-            StreamingTables  = @()
+            KnownXDRTables   = @()
         }
         $sections = ConvertTo-ReportSections -Analysis $script:analysis -DefenderXDR $xdr
         $xdrSection = $sections | Where-Object TabId -eq 'xdr'
@@ -1096,7 +1452,7 @@ Describe 'Export-Report' {
         $xdr = [PSCustomObject]@{
             TotalXDRRules    = 3
             XDRTableCoverage = @{}
-            StreamingTables  = @('DeviceEvents')
+            KnownXDRTables   = @('DeviceEvents')
         }
         Export-Report -Analysis $script:analysis -Format 'json' -OutputPath $outFile -WorkspaceName 'WS' -DefenderXDR $xdr
         $json = Get-Content $outFile -Raw | ConvertFrom-Json

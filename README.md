@@ -33,6 +33,8 @@ I've had to answer *"what are we actually getting out of these logs?"* or *"what
 | **Transform Discovery** | Discovers Data Collection Rules (DCRs) and classifies ingest-time transforms (filter, projection, enrichment, aggregation) |
 | **Split Table Detection** | Identifies `_SPLT_CL` split tables and links them back to parent tables in the classification engine |
 | **Split KQL Generator** | Generates portal-ready split KQL from a 15-table knowledge base and/or your analytics rules — condition-only format that pastes straight into the Sentinel split rule editor |
+| **Detection Analyzer** | Scores analytic rules for potential noisiness using incident outcomes (auto-close ratio, false positive ratio, and incident volume percentiles) |
+| **XDR Checker** | Adds an XDR-focused advisory layer: streaming coverage checks and one-year Data Lake retention guidance for XDR-related telemetry |
 | **Custom Classifications** | Provide your own JSON to add or override the built-in classification database |
 | **Interactive TUI** | Spectre.Console dashboard with menus, colour-coded tables, drill-downs, and ASCII art |
 | **Export** | JSON, Markdown, or static HTML report for sharing with the team |
@@ -86,6 +88,14 @@ Want to know if you're missing tables related to specific vendors? Throw in some
 Invoke-LogHorizon -SubscriptionId '...' -ResourceGroup 'rg' -WorkspaceName 'ws' -Keywords 'CrowdStrike','AWS','Okta' -IncludeDefenderXDR
 ```
 
+### Detection Analyzer
+
+Enable rule quality/noise analysis based on incidents and automation rules:
+
+```powershell
+Invoke-LogHorizon -SubscriptionId '...' -ResourceGroup 'rg' -WorkspaceName 'ws' -IncludeDetectionAnalyzer -DetectionLookbackDays 90
+```
+
 ### Export a report
 
 ```powershell
@@ -136,6 +146,8 @@ Invoke-LogHorizon -SubscriptionId '...' -ResourceGroup 'rg' -WorkspaceName 'ws' 
 | `-OutputPath` | string | No | - | File or directory path for export (auto-generates timestamped filename when a directory) |
 | `-Keywords` | string[] | No | - | Keywords for gap analysis (e.g. `'AWS','CrowdStrike'`) |
 | `-IncludeDefenderXDR` | switch | No | - | Include Defender XDR custom detection analysis |
+| `-IncludeDetectionAnalyzer` | switch | No | - | Include per-rule noisy detection analysis using incidents and automation rules |
+| `-DetectionLookbackDays` | int | No | 90 | Query window for incident/automation-based detection analysis (1-365 days) |
 | `-DaysBack` | int | No | 90 | Query window for usage data (1-365 days) |
 | `-PricePerGB` | decimal | No | 5.59 | Sentinel ingestion price per GB |
 | `-NonInteractive` | switch | No | - | Skip the TUI dashboard and export directly (or return data to pipeline if `-Output` is omitted) |
@@ -160,6 +172,8 @@ The module connects to Azure and pulls data from the Log Analytics and Security 
 | SOC optimisation | Security Insights REST | Microsoft's built-in SOC recommendations |
 | Table retention | Azure Tables REST | Per-table retention, archive, and plan (Analytics/Basic) |
 | Defender XDR | Security Insights REST | XDR custom detections and streaming config (optional) |
+| Incidents | Security Insights REST | Incident outcomes (status/classification), timing, and rule-linking hints for rule quality scoring |
+| Automation rules | Security Insights REST | Rule-level close-incident actions and title matching conditions for auto-close attribution |
 
 ### 2. Classification
 
@@ -195,7 +209,42 @@ Then the module generates recommendations:
 | **Split Candidate** | Primary + high volume + detections + no existing transform | Split the table — high-value rows stay on Analytics, the rest goes to Data Lake |
 | **Retention Shortfall** | Table retention below recommended minimum | Increase total/archive retention to meet regulatory guidance |
 
-### 4. Interactive dashboard
+### 4. Detection Analyzer (noisiness scoring)
+
+When you pass `-IncludeDetectionAnalyzer`, the module fetches recent incidents and automation rules, then scores every enabled analytics rule for potential noisiness.
+
+**Per-rule metrics** (computed from incident data):
+
+| Metric | How it's calculated |
+|---|---|
+| Incidents total | Count of incidents linked to the rule |
+| AutoClose ratio | Incidents closed by automation rules ÷ total incidents |
+| FalsePositive ratio | Incidents classified as false positive ÷ total incidents |
+
+**Noisiness score formula**:
+
+Each metric is converted to a percentile rank across all rules that have at least one incident. The composite score is a weighted blend:
+
+```
+Score = (Volume_percentile × 0.35) + (AutoClose_percentile × 0.40) + (FalsePositive_percentile × 0.25)
+```
+
+- **Volume percentile (35%)** — how many incidents a rule generates relative to other rules.
+- **AutoClose percentile (40%)** — how often incidents are auto-closed by automation rules (highest weight because automated closure is the strongest signal of low-value alerts).
+- **FalsePositive percentile (25%)** — how often analysts classify the outcome as false positive.
+
+**Score thresholds**:
+
+| Score | Label | Meaning |
+|---|---|---|
+| ≥ 70 | Noisy | Rule likely needs tuning or disabling |
+| ≥ 50 | Watch | Rule shows early signs of noisiness |
+| < 50 | Healthy | Rule is within normal range |
+| N/A | — | Rule has no correlated incidents (no score possible) |
+
+Rules with a score ≥ 70 and at least 5 incidents are automatically surfaced as **High-priority recommendations** in the Recommendations view.
+
+### 5. Interactive dashboard
 
 You land in a Spectre.Console TUI with a menu:
 
@@ -208,6 +257,7 @@ You land in a Spectre.Console TUI with a menu:
 - **Split KQL Suggestions**: per-table split KQL ready to paste into the portal, with source attribution (knowledge base, rule analysis, or combined)
 - **All Tables**: the full list with classification, cost, rules, retention (colour-coded), and assessment
 - **XDR Analysis**: Defender XDR integration (when you used `-IncludeDefenderXDR`)
+- **Detection Analyzer**: percentile-based noisy rule ranking with closure quality indicators (when you used `-IncludeDetectionAnalyzer`)
 - **Export**: dump the report to JSON or Markdown right from the menu
 
 ---
@@ -310,32 +360,36 @@ The primary/secondary grading was done by feeding Microsoft's data connector and
 
 The classification criteria were drawn from the following sources:
 
+**ACSC (Australian Signals Directorate, Australian Cyber Security Centre)**
+- [ACSC: Best practices for event logging and threat detection (Aug 2024)](https://www.cyber.gov.au/sites/default/files/2024-08/best-practices-for-event-logging-and-threat-detection.pdf)
+- [ACSC: Priority logs for SIEM ingestion - Practitioner guidance (May 2025)](https://www.cyber.gov.au/business-government/detecting-responding-to-threats/event-logging/implementing-siem-soar-platforms/priority-logs-for-siem-ingestion-practitioner-guidance)
+
+**CISA (Cybersecurity and Infrastructure Security Agency)**
+- [CISA: Guidance for Implementing M-21-31: Improving the Federal Government's Investigative and Remediation Capabilities](https://www.cisa.gov/sites/default/files/2023-02/TLP%20CLEAR%20-%20Guidance%20for%20Implementing%20M-21-31_Improving%20the%20Federal%20Governments%20Investigative%20and%20Remediation%20Capabilities_.pdf)
+- [CISA: Microsoft Expanded Cloud Logs Implementation Playbook (2025)](https://www.cisa.gov/sites/default/files/2025-01/microsoft-expanded-cloud-logs-implementation-playbook-508c.pdf)
+
 **Microsoft**
 - [Microsoft Sentinel data connectors reference](https://learn.microsoft.com/en-us/azure/sentinel/data-connectors-reference)
 - [Microsoft Sentinel tables & connectors reference](https://learn.microsoft.com/en-us/azure/sentinel/sentinel-tables-connectors-reference)
 - [Azure-Sentinel GitHub repo](https://github.com/Azure/Azure-Sentinel) (community analytics rules, connector definitions, solution templates)
-- Microsoft Sentinel pricing docs for free tier identification
+- [Microsoft Sentinel billing](https://learn.microsoft.com/azure/sentinel/billing)
+- [Microsoft Sentinel data tier management](https://learn.microsoft.com/azure/sentinel/manage-data-overview)
 
 **MITRE**
 - [MITRE ATT&CK Data Sources](https://attack.mitre.org/datasources/)
 
-**NIST**
-- NIST SP 800-92 Rev. 1, Cybersecurity Log Management Planning Guide
-- NIST Guide to Operational Technology (OT) Security
+**NIST (National Institute of Standards and Technology)**
+- [NIST SP 800-92: Guide to Computer Security Log Management](https://csrc.nist.gov/pubs/sp/800/92/final)
 
-**CISA**
-- CISA Guidance for Implementing M-21-31: Improving the Federal Government's Investigative and Remediation Capabilities
-- CISA SCuBA TRA and eVRF Guidance Documents
-
-**NSA**
+**NSA (National Security Agency)**
 - NSA Cyber Event Forwarding Guidance
 
-**NCSC-UK**
+**NCSC-UK (National Cyber Security Centre - United Kingdom)**
 - NCSC-UK's "What exactly should we be logging?"
 
-**ASD ACSC / Joint advisories**
-- Joint-sealed advisory: Identifying and Mitigating Living Off the Land Techniques
-- ASD ACSC's Windows Event Logging and Forwarding
+**Google Cloud**
+- [Google Cloud Audit Logs overview](https://docs.cloud.google.com/logging/docs/audit)
+- [Google Cloud Audit Logs best practices](https://docs.cloud.google.com/logging/docs/audit/best-practices)
 
 ---
 
@@ -383,6 +437,7 @@ MIT
 
 | Version | Date | Changes |
 |---|---|---|
+| 0.6.0 | 2026-04-10 | Dynamic XDR streaming detection with 21 `KnownXDRTables` (was hardcoded 18), per-table `XDRState` (`NotStreaming`/`Analytics`/`Basic`/`Auxiliary`), Auxiliary recognized as data lake tier, not-streamed XDR tables surfaced as Information/Low recommendations with `NotStreamedCount`, retention analyzer shows not-streamed XDR tables as "XDR only (30d)", overview tier breakdown (analytics/basic/data lake + not streamed), Export-Report Auxiliary→"data lake" labels, classification DB updated to 345 entries (+`DeviceNetworkInfo`, `DeviceInfo`→secondary/datalake, `DeviceImageLoadEvents` and `IdentityQueryEvents`→datalake tier), 15 new Pester tests (121 total) |
 | 0.5.0 | 2026-04-03 | Static HTML export with pure-CSS tabs (zero JS, no CDN, fully self-contained), unified MD/HTML section renderer, complete JSON data capture (dataTransforms, correlationExcluded/Included, streamingTables), `-NonInteractive` switch for CI/pipeline usage, `md` format alias, datetime-stamped auto-filenames, full KQL display in DCR transforms (no truncation), multiline KQL handling in markdown tables, fixed regex `$`-backreference corruption in HTML token replacement, renamed internal helpers to avoid PowerShell alias conflicts (`h`→`hEnc`, `md`→`mdEsc`), 33 new Pester tests (106 total) |
 | 0.4.1 | 2026-04-03 | Security & stability fixes - added token memory sanitization, output path validation & XSS protection, REST API pagination limits, fixed module loader error masking, and resolved PSScriptAnalyzer warnings |
 | 0.4.0 | 2026-04-02 | Transform discovery (DCR listing + transform type classification), split table detection (`_SPLT_CL`), split KQL helper with 15-table knowledge base (`high-value-fields.json`) + rule-analysis fallback, portal-ready condition-only KQL output, expandable recommendations list, split KQL suggestions TUI menu |

@@ -26,8 +26,7 @@
         /* === Pure-CSS Tabs (radio buttons) === */
         .tab-radio { display: none; }
         .tabs-wrapper { margin-bottom: 2rem; }
-        .tab-bar { display: flex; gap: 0; border-bottom: 2px solid #dee2e6; margin-bottom: 0; overflow-x: auto; flex-wrap: nowrap; scrollbar-width: none; -ms-overflow-style: none; }
-        .tab-bar::-webkit-scrollbar { display: none; }
+        .tab-bar { display: flex; gap: 0; border-bottom: 2px solid #dee2e6; margin-bottom: 0; overflow-x: auto; flex-wrap: nowrap; }
         .tab-label { display: inline-block; padding: 0.6rem 1.2rem; cursor: pointer; font-weight: 600; font-size: 0.85rem; color: #666; border-bottom: 2px solid transparent; margin-bottom: -2px; white-space: nowrap; transition: color 0.15s, border-color 0.15s; }
         .tab-label:hover { color: #1e90ff; }
         .tab-pane { display: none; padding: 1.5rem 0; }
@@ -41,7 +40,10 @@
         .tab-radio:nth-of-type(6):checked ~ .tab-bar .tab-label:nth-of-type(6),
         .tab-radio:nth-of-type(7):checked ~ .tab-bar .tab-label:nth-of-type(7),
         .tab-radio:nth-of-type(8):checked ~ .tab-bar .tab-label:nth-of-type(8),
-        .tab-radio:nth-of-type(9):checked ~ .tab-bar .tab-label:nth-of-type(9) {
+        .tab-radio:nth-of-type(9):checked ~ .tab-bar .tab-label:nth-of-type(9),
+        .tab-radio:nth-of-type(10):checked ~ .tab-bar .tab-label:nth-of-type(10),
+        .tab-radio:nth-of-type(11):checked ~ .tab-bar .tab-label:nth-of-type(11),
+        .tab-radio:nth-of-type(12):checked ~ .tab-bar .tab-label:nth-of-type(12) {
             color: #1e90ff; border-bottom-color: #1e90ff;
         }
         .tab-radio:nth-of-type(1):checked ~ .tab-pane:nth-of-type(1),
@@ -52,7 +54,10 @@
         .tab-radio:nth-of-type(6):checked ~ .tab-pane:nth-of-type(6),
         .tab-radio:nth-of-type(7):checked ~ .tab-pane:nth-of-type(7),
         .tab-radio:nth-of-type(8):checked ~ .tab-pane:nth-of-type(8),
-        .tab-radio:nth-of-type(9):checked ~ .tab-pane:nth-of-type(9) {
+        .tab-radio:nth-of-type(9):checked ~ .tab-pane:nth-of-type(9),
+        .tab-radio:nth-of-type(10):checked ~ .tab-pane:nth-of-type(10),
+        .tab-radio:nth-of-type(11):checked ~ .tab-pane:nth-of-type(11),
+        .tab-radio:nth-of-type(12):checked ~ .tab-pane:nth-of-type(12) {
             display: block;
         }
 

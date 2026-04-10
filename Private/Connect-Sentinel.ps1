@@ -66,6 +66,7 @@ function Connect-Sentinel {
 
     [PSCustomObject]@{
         SubscriptionId  = $SubscriptionId
+        TenantId        = $ctx.Tenant.Id
         ResourceGroup   = $ResourceGroup
         WorkspaceName   = $WorkspaceName
         WorkspaceId     = $resolvedWsId

@@ -230,7 +230,7 @@
     "mitreSources": [
       "Active Directory: Active Directory Object Access"
     ],
-    "recommendedTier": "analytics",
+    "recommendedTier": "datalake",
     "isFree": false,
     "recommendedRetentionDays": 365
   },
@@ -411,6 +411,27 @@
     "recommendedRetentionDays": 365
   },
   {
+    "tableName": "DeviceNetworkInfo",
+    "connector": "Microsoft Defender for Endpoint",
+    "classification": "secondary",
+    "category": "Endpoint Detection",
+    "description": "Network adapter configuration including IP addresses, MAC addresses, DNS servers, and connected networks on managed endpoints",
+    "keywords": [
+      "network",
+      "adapter",
+      "ip",
+      "mac",
+      "dns",
+      "endpoint",
+      "defender",
+      "mde"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "datalake",
+    "isFree": false,
+    "recommendedRetentionDays": 365
+  },
+  {
     "tableName": "DeviceLogonEvents",
     "connector": "Microsoft Defender for Endpoint",
     "classification": "primary",
@@ -453,7 +474,7 @@
     "mitreSources": [
       "Module: Module Load"
     ],
-    "recommendedTier": "analytics",
+    "recommendedTier": "datalake",
     "isFree": false,
     "recommendedRetentionDays": 365
   },
@@ -2295,7 +2316,7 @@
   {
     "tableName": "DeviceInfo",
     "connector": "Microsoft Defender for Endpoint",
-    "classification": "primary",
+    "classification": "secondary",
     "category": "Endpoint Detection",
     "description": "Device inventory data from Defender for Endpoint including OS, domain, and onboarding status",
     "keywords": [
@@ -2307,7 +2328,7 @@
       "mde"
     ],
     "mitreSources": [],
-    "recommendedTier": "analytics",
+    "recommendedTier": "datalake",
     "isFree": false,
     "recommendedRetentionDays": 365
   },

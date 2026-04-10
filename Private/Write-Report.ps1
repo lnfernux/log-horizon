@@ -17,7 +17,19 @@ function Write-Report {
     Write-LogHorizonBanner
 
     # Dashboard (always shown first)
-    Write-Dashboard -Analysis $Analysis -WorkspaceName $WorkspaceName
+    Write-Dashboard -Analysis $Analysis -WorkspaceName $WorkspaceName -DefenderXDR $DefenderXDR
+
+    # Auto-export when -Output was specified (before showing menu)
+    if ($ExportFormat) {
+        if (-not $ExportPath) { $ExportPath = $PWD.Path }
+        Export-Report -Analysis $Analysis `
+                      -Format $ExportFormat `
+                      -OutputPath $ExportPath `
+                      -WorkspaceName $WorkspaceName `
+                      -DefenderXDR $DefenderXDR
+        Write-SpectreHost "[green]Report exported to [bold]$(Get-SafeEscapedText $ExportPath)[/][/]"
+        Write-SpectreHost ""
+    }
 
     # Interactive menu loop
     Write-InteractiveMenu -Analysis $Analysis -WorkspaceName $WorkspaceName `
@@ -27,6 +39,42 @@ function Write-Report {
 
 function Get-ConsoleWidth {
     try { $Host.UI.RawUI.WindowSize.Width } catch { 120 }
+}
+
+function Test-ConsoleSize {
+    param(
+        [int]$MinimumWidth = 120,
+        [int]$MinimumHeight = 30
+    )
+
+    try {
+        $size = $Host.UI.RawUI.WindowSize
+        return ($size.Width -ge $MinimumWidth -and $size.Height -ge $MinimumHeight)
+    }
+    catch {
+        return $true
+    }
+}
+
+function Invoke-ConsoleSizeCheck {
+    param(
+        [int]$MinimumWidth = 120,
+        [int]$MinimumHeight = 30
+    )
+
+    if (Test-ConsoleSize -MinimumWidth $MinimumWidth -MinimumHeight $MinimumHeight) {
+        return
+    }
+
+    $current = $null
+    try { $current = $Host.UI.RawUI.WindowSize } catch { }
+
+    $currentWidth = if ($current) { $current.Width } else { '?' }
+    $currentHeight = if ($current) { $current.Height } else { '?' }
+
+    Write-SpectreHost "[yellow]:warning: Terminal is $currentWidth x $currentHeight. Recommended minimum is $MinimumWidth x $MinimumHeight for clean table/menu rendering.[/]"
+    Write-SpectreHost "[dim]Resize the terminal, then press Enter to continue.[/]"
+    Read-SpectrePause -Message ""
 }
 
 function Get-SafeEscapedText ([string]$Value) {
@@ -62,7 +110,8 @@ function Write-LogHorizonBanner {
 function Write-Dashboard {
     param(
         [PSCustomObject]$Analysis,
-        [string]$WorkspaceName
+        [string]$WorkspaceName,
+        [PSCustomObject]$DefenderXDR
     )
 
     $s = $Analysis.Summary
@@ -105,6 +154,33 @@ function Write-Dashboard {
 
     if ($s.EstTotalSavings -gt 0) {
         $overviewLines += "[bold]Savings Potential:[/] [green]`$$($s.EstTotalSavings)/mo[/]"
+    }
+
+    if ($s.DetectionRulesAnalyzed -gt 0) {
+        $overviewLines += "[bold]Rule Quality:[/]     [deepskyblue1]$($s.DetectionRulesAnalyzed) analyzed[/] | [yellow]$($s.NoisyRulesDetected) noisy[/] | [dim]$($s.AutoClosedIncidents) auto-closed incidents[/]"
+    }
+
+    if ($DefenderXDR) {
+        $cdrCorrelated = if ($Analysis.DetectionAnalyzer -and $Analysis.DetectionAnalyzer.Summary.CustomDetectionRules -gt 0) {
+            " | [dim]$($Analysis.DetectionAnalyzer.Summary.CDRCorrelatedIncidents) with incidents[/]"
+        } else { '' }
+        $xdrStreamed = @($Analysis.TableAnalysis | Where-Object IsXDRStreaming)
+        $xdrStreamingCount = $xdrStreamed.Count
+        $tierParts = @()
+        $analyticsTierCount = @($xdrStreamed | Where-Object { $_.XDRState -eq 'Analytics' }).Count
+        $basicTierCount     = @($xdrStreamed | Where-Object { $_.XDRState -eq 'Basic' }).Count
+        $dataLakeTierCount  = @($xdrStreamed | Where-Object { $_.XDRState -eq 'Auxiliary' }).Count
+        if ($analyticsTierCount -gt 0) { $tierParts += "$analyticsTierCount analytics" }
+        if ($basicTierCount -gt 0)     { $tierParts += "$basicTierCount basic" }
+        if ($dataLakeTierCount -gt 0)  { $tierParts += "$dataLakeTierCount data lake" }
+        $tierDetail = if ($tierParts.Count -gt 0) { " ($($tierParts -join ', '))" } else { '' }
+        $notStreamedCount = $Analysis.XdrChecker.Summary.NotStreamedCount
+        $notStreamedPart = if ($notStreamedCount -gt 0) { " | [dim]$notStreamedCount not streamed[/]" } else { '' }
+        $overviewLines += "[bold]Defender XDR:[/]     [deepskyblue1]$($DefenderXDR.TotalXDRRules) custom detections[/]${cdrCorrelated} | [dim]$xdrStreamingCount streaming tables${tierDetail}[/]${notStreamedPart}"
+    }
+
+    if ($s.XdrCheckerIssues -gt 0) {
+        $overviewLines += "[bold]XDR Checker:[/]      [yellow]$($s.XdrCheckerIssues) advisory issue(s)[/] | [dim]target $($s.XdrAdvisoryRetention)d retention path[/]"
     }
 
     $overviewText = $overviewLines -join "`n"
@@ -172,6 +248,7 @@ function Write-InteractiveMenu {
     $menuItems = [ordered]@{
         'View Recommendations'          = 'recommendations'
         'View Detection Assessment'     = 'detection'
+        'View Detection Analyzer'       = 'detanalyzer'
         'View SOC Optimization'         = 'soc'
         'View Retention Assessment'     = 'retention'
         'View Data Transforms'          = 'transforms'
@@ -180,15 +257,12 @@ function Write-InteractiveMenu {
         'View All Tables'               = 'tables'
     }
 
-    if ($DefenderXDR) {
-        $menuItems['View Defender XDR Analysis'] = 'xdr'
-    }
-
     $menuItems['Export Report']       = 'export'
     $menuItems['Quit']                = 'quit'
 
     $continue = $true
     while ($continue) {
+        Invoke-ConsoleSizeCheck
         Write-SpectreRule -Title "[dodgerblue2]MENU[/]" -Color DodgerBlue2
         Write-SpectreHost ""
 
@@ -203,13 +277,13 @@ function Write-InteractiveMenu {
         switch ($action) {
             'recommendations' { Write-Recommendations -Analysis $Analysis }
             'detection'       { Write-DetectionAssessment -Analysis $Analysis }
+            'detanalyzer'     { Write-DetectionAnalyzer -Analysis $Analysis }
             'soc'             { Write-SocOptimization -Analysis $Analysis }
             'retention'       { Write-RetentionAssessment -Analysis $Analysis }
             'transforms'      { Write-DataTransforms -Analysis $Analysis }
             'splitkql'        { Write-SplitKqlSuggestions -Analysis $Analysis }
             'tableKql'        { Write-TableKqlSuggestion -Analysis $Analysis }
             'tables'          { Write-AllTables -Analysis $Analysis }
-            'xdr'             { Write-XDRAnalysis -Analysis $Analysis -DefenderXDR $DefenderXDR }
             'export'          {
                 Invoke-ExportFromMenu -Analysis $Analysis `
                                       -WorkspaceName $WorkspaceName `
@@ -218,11 +292,6 @@ function Write-InteractiveMenu {
                                       -ExportPath $ExportPath
             }
             'quit'            { $continue = $false }
-        }
-
-        if ($continue -and $action -ne 'export') {
-            Write-SpectreHost ""
-            Read-SpectrePause -Message "[dim]Press [bold]Enter[/] to return to menu...[/]"
         }
     }
 
@@ -315,14 +384,14 @@ function Write-DetectionAssessment {
 
     # Well covered
     $wellCovered = $Analysis.TableAnalysis |
-        Where-Object { $_.Classification -eq 'primary' -and $_.TotalCoverage -ge 3 } |
+        Where-Object { $_.Classification -eq 'primary' -and $_.EffectiveCoverage -ge 3 } |
         Group-Object Category
 
     if ($wellCovered) {
         $lines += "[green][bold]Well Covered[/][/]"
         foreach ($grp in $wellCovered) {
             $tableList = ($grp.Group | ForEach-Object { $_.TableName }) -join ', '
-            $totalRules = ($grp.Group | Measure-Object TotalCoverage -Sum).Sum
+            $totalRules = ($grp.Group | Measure-Object EffectiveCoverage -Sum).Sum
             $lines += "  [green]●[/] $(Get-SafeEscapedText $grp.Name): $(Get-SafeEscapedText $tableList) [dim]($totalRules rules)[/]"
         }
         $lines += ""
@@ -330,19 +399,19 @@ function Write-DetectionAssessment {
 
     # Gaps (1-2 rules)
     $gaps = $Analysis.TableAnalysis |
-        Where-Object { $_.Classification -eq 'primary' -and -not $_.IsFree -and $_.TotalCoverage -lt 3 -and $_.TotalCoverage -ge 1 }
+        Where-Object { $_.Classification -eq 'primary' -and -not $_.IsFree -and $_.EffectiveCoverage -lt 3 -and $_.EffectiveCoverage -ge 1 }
 
     if ($gaps) {
         $lines += "[yellow][bold]Gaps Detected[/][/]"
         foreach ($g in $gaps) {
-            $lines += "  [yellow]●[/] $(Get-SafeEscapedText $g.TableName) - $($g.MonthlyGB) GB/mo, only $($g.TotalCoverage) rule(s)"
+            $lines += "  [yellow]●[/] $(Get-SafeEscapedText $g.TableName) - $($g.MonthlyGB) GB/mo, only $($g.EffectiveCoverage) rule(s)"
         }
         $lines += ""
     }
 
     # Zero detections
     $noCoverage = $Analysis.TableAnalysis |
-        Where-Object { $_.Classification -eq 'primary' -and -not $_.IsFree -and $_.TotalCoverage -eq 0 }
+        Where-Object { $_.Classification -eq 'primary' -and -not $_.IsFree -and $_.EffectiveCoverage -eq 0 }
 
     if ($noCoverage) {
         $lines += "[red][bold]Primary Sources With Zero Detections[/][/]"
@@ -846,6 +915,31 @@ function Write-RetentionAssessment {
     $extendedRecTables = @($Analysis.TableAnalysis |
         Where-Object { $_.RecommendedRetentionDays -gt 90 -and $null -ne $_.RetentionCompliant })
 
+    # XDR streaming tables not already covered by the extended list (advisory: 365d)
+    $extendedNames = @($extendedRecTables | ForEach-Object { $_.TableName })
+    $xdrAdvisoryTables = @($Analysis.TableAnalysis | Where-Object {
+        $_.IsXDRStreaming -and
+        $_.TableName -notin $extendedNames -and
+        $null -ne $_.ActualRetentionDays -and
+        $_.ActualRetentionDays -lt 365
+    })
+
+    # XDR streaming tables with no data lake forwarding at all (skip Auxiliary — already in data lake)
+    $xdrNoDataLake = @($Analysis.TableAnalysis | Where-Object {
+        $_.IsXDRStreaming -and
+        $_.XDRState -ne 'Auxiliary' -and
+        $null -ne $_.ArchiveRetentionInDays -and
+        $_.ArchiveRetentionInDays -eq 0
+    })
+
+    # Known XDR tables not ingested into the workspace at all
+    $xdrNotStreamed = @()
+    if ($Analysis.XdrChecker -and $Analysis.XdrChecker.Findings) {
+        $xdrNotStreamed = @($Analysis.XdrChecker.Findings | Where-Object Type -eq 'NotStreaming')
+    }
+
+    $totalExtended = $extendedRecTables.Count + $xdrAdvisoryTables.Count + $xdrNotStreamed.Count
+
     # Overview panel
     $lines = @()
     if ($s.WorkspaceRetentionDays -gt 0) {
@@ -856,8 +950,17 @@ function Write-RetentionAssessment {
     if ($s.RetentionNonCompliant -gt 0) {
         $lines += "[bold]Below Baseline:[/]   [red]$($s.RetentionNonCompliant)[/] table(s) below 90d"
     }
-    if ($extendedRecTables.Count -gt 0) {
-        $lines += "[bold]Extended (>90d):[/]  [deepskyblue1]$($extendedRecTables.Count)[/] table(s) recommended for 180d+ retention"
+    if ($totalExtended -gt 0) {
+        $lines += "[bold]Extended (>90d):[/]  [deepskyblue1]$totalExtended[/] table(s) recommended for extended retention"
+        if ($xdrAdvisoryTables.Count -gt 0) {
+            $lines += "                    [dim]includes $($xdrAdvisoryTables.Count) XDR streaming table(s) — advisory target: 365d[/]"
+        }
+        if ($xdrNotStreamed.Count -gt 0) {
+            $lines += "                    [dim]includes $($xdrNotStreamed.Count) XDR table(s) not yet streamed to Sentinel[/]"
+        }
+    }
+    if ($xdrNoDataLake.Count -gt 0) {
+        $lines += "[bold]No Data Lake:[/]    [yellow]$($xdrNoDataLake.Count)[/] XDR streaming table(s) not forwarded to Data Lake tier"
     }
     $lines += ""
 
@@ -897,8 +1000,8 @@ function Write-RetentionAssessment {
 
     # Submenu
     $choices = @('Back')
-    if ($extendedRecTables.Count -gt 0) {
-        $choices = @("Show extended retention recommendations ($($extendedRecTables.Count) tables)", 'Back')
+    if ($totalExtended -gt 0) {
+        $choices = @("Show extended retention recommendations ($totalExtended tables)", 'Back')
     }
 
     $pick = Read-SpectreSelection -Title "[deepskyblue1]Select an option:[/]" -Choices $choices -Color DodgerBlue2
@@ -906,10 +1009,9 @@ function Write-RetentionAssessment {
     if ($pick -ne 'Back') {
         Write-SpectreHost ""
 
-        $sorted = $extendedRecTables | Sort-Object RecommendedRetentionDays -Descending
-
         $impTable = @()
-        foreach ($t in $sorted) {
+
+        foreach ($t in ($extendedRecTables | Sort-Object RecommendedRetentionDays -Descending)) {
             $currentStr = if ($null -ne $t.ActualRetentionDays) { "$($t.ActualRetentionDays)d" } else { '-' }
             $statusMarkup = if ($null -ne $t.ActualRetentionDays -and $t.ActualRetentionDays -ge $t.RecommendedRetentionDays) {
                 '[green]Met[/]'
@@ -919,12 +1021,36 @@ function Write-RetentionAssessment {
                 '[red]Below baseline[/]'
             }
 
+            $tableLabel = if ($t.IsXDRStreaming) { "$(Get-SafeEscapedText $t.TableName) [dim](XDR)[/]" } else { Get-SafeEscapedText $t.TableName }
             $impTable += [PSCustomObject]@{
-                'Table'       = Get-SafeEscapedText $t.TableName
+                'Table'       = $tableLabel
                 'Category'    = Get-SafeEscapedText $t.Category
                 'Current'     = $currentStr
                 'Recommended' = "[deepskyblue1]$($t.RecommendedRetentionDays)d[/]"
                 'Status'      = $statusMarkup
+            }
+        }
+
+        # XDR advisory tables appended at the end
+        foreach ($t in ($xdrAdvisoryTables | Sort-Object ActualRetentionDays)) {
+            $currentStr = if ($null -ne $t.ActualRetentionDays) { "$($t.ActualRetentionDays)d" } else { '-' }
+            $impTable += [PSCustomObject]@{
+                'Table'       = "$(Get-SafeEscapedText $t.TableName) [dim](XDR)[/]"
+                'Category'    = Get-SafeEscapedText $t.Category
+                'Current'     = $currentStr
+                'Recommended' = '[yellow]365d[/]'
+                'Status'      = '[yellow]XDR advisory[/]'
+            }
+        }
+
+        # XDR tables not streamed to Sentinel at all
+        foreach ($f in ($xdrNotStreamed | Sort-Object TableName)) {
+            $impTable += [PSCustomObject]@{
+                'Table'       = "$(Get-SafeEscapedText $f.TableName) [dim](XDR)[/]"
+                'Category'    = 'Defender XDR'
+                'Current'     = '[dim]XDR only (30d)[/]'
+                'Recommended' = '[yellow]365d[/]'
+                'Status'      = '[dim]Not streaming[/]'
             }
         }
 
@@ -935,43 +1061,255 @@ function Write-RetentionAssessment {
         Write-SpectreHost "[dim]  Keep 90 days in the Analytics tier for active hunting and detections,[/]"
         Write-SpectreHost "[dim]  then archive to the Data Lake tier for long-term compliance retention.[/]"
         Write-SpectreHost "[dim]  Data Lake storage costs ~95% less than Analytics tier ingestion.[/]"
+        if ($xdrAdvisoryTables.Count -gt 0) {
+            Write-SpectreHost "[dim]  XDR streaming tables: advisory target is 365 days for long-term investigation capability.[/]"
+        }
+        if ($xdrNotStreamed.Count -gt 0) {
+            Write-SpectreHost "[dim]  XDR tables not yet streamed can be ingested into Analytics or directly to Data Lake tier.[/]"
+        }
     }
 }
 
-# Defender XDR analysis
-function Write-XDRAnalysis {
-    param(
-        [PSCustomObject]$Analysis,
-        [PSCustomObject]$DefenderXDR
-    )
+function Write-DetectionAnalyzer {
+    param([PSCustomObject]$Analysis)
 
-    if (-not $DefenderXDR) {
-        Write-SpectreHost "[dim]Defender XDR data not available. Re-run with -IncludeDefenderXDR.[/]"
+    if (-not $Analysis.DetectionAnalyzer -or $Analysis.DetectionAnalyzer.RuleMetrics.Count -eq 0) {
+        Write-SpectreHost "[dim]Detection Analyzer data not available. Re-run with -IncludeDetectionAnalyzer.[/]"
         return
     }
 
-    $lines = @(
-        "[bold]Custom Detections:[/] $($DefenderXDR.TotalXDRRules) rules"
-    )
+    # Scored rules sorted by noisiness, then unscored (CDRs without incidents) at the end
+    $scored = @($Analysis.DetectionAnalyzer.RuleMetrics | Where-Object { $null -ne $_.NoisinessScore } | Sort-Object NoisinessScore -Descending)
+    $unscored = @($Analysis.DetectionAnalyzer.RuleMetrics | Where-Object { $null -eq $_.NoisinessScore })
+    $metrics = @($scored) + @($unscored)
+    $displayMetrics = @($metrics | Select-Object -First 15)
 
-    $xdrStreaming = $Analysis.TableAnalysis | Where-Object IsXDRStreaming
-    if ($xdrStreaming) {
-        $streamingNames = ($xdrStreaming | ForEach-Object { Get-SafeEscapedText $_.TableName }) -join ', '
-        $lines += "[bold]Streaming to Sentinel:[/] $streamingNames"
-    }
+    $table = @()
+    foreach ($r in $displayMetrics) {
+        $scoreMarkup = if ($null -eq $r.NoisinessScore) {
+            "[dim]N/A[/]"
+        } elseif ($r.NoisinessScore -ge 70) {
+            "[red]$($r.NoisinessScore)[/]"
+        } elseif ($r.NoisinessScore -ge 50) {
+            "[yellow]$($r.NoisinessScore)[/]"
+        } else {
+            "[green]$($r.NoisinessScore)[/]"
+        }
 
-    $xdrRecs = $Analysis.Recommendations | Where-Object Type -eq 'XDROptimize'
-    if ($xdrRecs) {
-        $lines += ""
-        $lines += "[yellow][bold]Optimization Opportunities:[/][/]"
-        foreach ($xr in $xdrRecs) {
-            $lines += "  [yellow]>[/] $(Get-SafeEscapedText $xr.Title)"
-            $lines += "    [dim]$(Get-SafeEscapedText $xr.Detail)[/]"
+        $kindMarkup = switch ($r.RuleKind) {
+            'CustomDetection' { '[deepskyblue1]CDR[/]' }
+            'NRT'             { '[yellow]NRT[/]' }
+            default           { $r.RuleKind }
+        }
+
+        $table += [PSCustomObject]@{
+            'Rule'        = Get-SafeEscapedText $r.RuleName
+            'Kind'        = $kindMarkup
+            'Incidents'   = $r.IncidentsTotal
+            'AutoClose%'  = [math]::Round(($r.AutoCloseRatio * 100), 1)
+            'FalsePos%'   = [math]::Round(($r.FalsePositiveRatio * 100), 1)
+            'Score'       = $scoreMarkup
         }
     }
 
-    $body = $lines -join "`n"
-    $body | Format-SpectrePanel -Header "[dodgerblue2] DEFENDER XDR [/]" -Border Rounded -Color DodgerBlue2
+    $table | Format-SpectreTable -Border Rounded -Color DodgerBlue2 -HeaderColor DodgerBlue2 -AllowMarkup
+    Write-SpectreHost "[dim]  Showing top $($displayMetrics.Count) of $($metrics.Count) rules by noisiness score.[/]"
+
+    $cdrSummary = $Analysis.DetectionAnalyzer.Summary
+    if ($cdrSummary.CustomDetectionRules -gt 0) {
+        Write-SpectreHost "[dim]  Includes $($cdrSummary.CustomDetectionRules) Defender XDR custom detection rule(s), $($cdrSummary.CDRCorrelatedIncidents) with correlated incidents.[/]"
+    }
+    Write-SpectreHost ""
+
+    # Scoring formula explanation
+    $formulaLines = @(
+        "[bold]How is the Noisiness Score calculated?[/]"
+        ""
+        "  Score = (Volume_percentile [dim]x[/] [deepskyblue1]35%[/]) + (AutoClose_percentile [dim]x[/] [deepskyblue1]40%[/]) + (FalsePos_percentile [dim]x[/] [deepskyblue1]25%[/])"
+        ""
+        "  Each percentile ranks a rule relative to all analyzed rules (0-100)."
+        "  [red]>= 70[/] = noisy   [yellow]>= 50[/] = watch   [green]< 50[/] = healthy"
+        "  [dim]N/A[/] = no correlated incidents found (listing only)"
+    )
+    ($formulaLines -join "`n") | Format-SpectrePanel -Header "[dodgerblue2] SCORING FORMULA [/]" -Border Rounded -Color DodgerBlue2
+    Write-SpectreHost ""
+
+    # Submenu loop: Back / Show all / Browse details
+    $submenuContinue = $true
+    while ($submenuContinue) {
+        $choices = @('Back')
+        if ($metrics.Count -gt 15) {
+            $choices += "Show all $($metrics.Count) rules"
+        }
+        $choices += 'Browse rule details'
+
+        $pick = Read-SpectreSelection -Title "[deepskyblue1]Select an option:[/]" `
+                                      -Choices $choices `
+                                      -Color DodgerBlue2
+
+        switch ($pick) {
+            'Back' { $submenuContinue = $false }
+
+            { $_ -like 'Show all *' } {
+                Write-SpectreHost ""
+                $fullTable = @()
+                foreach ($r in $metrics) {
+                    $scoreMarkup = if ($null -eq $r.NoisinessScore) {
+                        "[dim]N/A[/]"
+                    } elseif ($r.NoisinessScore -ge 70) {
+                        "[red]$($r.NoisinessScore)[/]"
+                    } elseif ($r.NoisinessScore -ge 50) {
+                        "[yellow]$($r.NoisinessScore)[/]"
+                    } else {
+                        "[green]$($r.NoisinessScore)[/]"
+                    }
+
+                    $kindMarkup = switch ($r.RuleKind) {
+                        'CustomDetection' { '[deepskyblue1]CDR[/]' }
+                        'NRT'             { '[yellow]NRT[/]' }
+                        default           { $r.RuleKind }
+                    }
+
+                    $fullTable += [PSCustomObject]@{
+                        'Rule'        = Get-SafeEscapedText $r.RuleName
+                        'Kind'        = $kindMarkup
+                        'Incidents'   = $r.IncidentsTotal
+                        'AutoClose%'  = [math]::Round(($r.AutoCloseRatio * 100), 1)
+                        'FalsePos%'   = [math]::Round(($r.FalsePositiveRatio * 100), 1)
+                        'Score'       = $scoreMarkup
+                    }
+                }
+                $fullTable | Format-SpectreTable -Border Rounded -Color DodgerBlue2 -HeaderColor DodgerBlue2 -AllowMarkup
+                Write-SpectreHost ""
+            }
+
+            'Browse rule details' {
+                $browseContinue = $true
+                while ($browseContinue) {
+                    $ruleChoiceMap = @{}
+                    foreach ($r in $metrics) {
+                        $display = Get-SafeEscapedText $r.RuleName
+                        $ruleChoiceMap[$display] = $r.RuleName
+                    }
+
+                    $ruleChoices = @('Back') + @($ruleChoiceMap.Keys)
+                    $rulePick = Read-SpectreSelection -Title "[deepskyblue1]Select a rule for details:[/]" `
+                                                      -Choices $ruleChoices `
+                                                      -Color DodgerBlue2
+
+                    if ($rulePick -eq 'Back') {
+                        $browseContinue = $false
+                    } else {
+                        $selectedRuleName = $ruleChoiceMap[$rulePick]
+                        $selected = $metrics | Where-Object { $_.RuleName -eq $selectedRuleName } | Select-Object -First 1
+                        if ($selected) {
+                            Write-DetectionAnalyzerRuleDetail -RuleMetric $selected
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+function Write-DetectionAnalyzerRuleDetail {
+    param([PSCustomObject]$RuleMetric)
+
+    $selected = $RuleMetric
+    Write-SpectreHost ""
+
+    $kindLabel = if ($selected.RuleKind -eq 'CustomDetection') { 'Custom Detection (CDR)' } else { $selected.RuleKind }
+    $sourceLabel = if ($selected.Source) { $selected.Source } else { 'Sentinel' }
+
+    $detailLines = @(
+        "[bold]$(Get-SafeEscapedText $selected.RuleName)[/]  [dim]($kindLabel | $sourceLabel)[/]"
+        ""
+    )
+
+    # CDR-specific properties
+    if ($selected.RuleKind -eq 'CustomDetection') {
+        $enabledStr = if ($selected.Enabled) { '[green]Enabled[/]' } else { '[red]Disabled[/]' }
+        $detailLines += "[bold]Status:[/]           $enabledStr"
+        if ($selected.Frequency) {
+            $detailLines += "[bold]Frequency:[/]        $($selected.Frequency)"
+        }
+        if ($selected.Tables -and $selected.Tables.Count -gt 0) {
+            $detailLines += "[bold]Tables Queried:[/]   $(($selected.Tables | ForEach-Object { Get-SafeEscapedText $_ }) -join ', ')"
+        }
+        $detailLines += ""
+    }
+
+    if ($selected.IncidentsTotal -gt 0) {
+        $detailLines += "[bold]Incidents:[/]        $($selected.IncidentsTotal) total  |  $($selected.IncidentsClosed) closed  |  $($selected.IncidentsAutoClosed) auto-closed"
+        $detailLines += "[bold]True Positive:[/]    $($selected.TruePositiveClosed)  |  [bold]False Positive:[/] $($selected.FalsePositiveClosed)  |  [bold]Benign:[/] $($selected.BenignPositiveClosed)"
+        $detailLines += "[bold]Auto-Close Ratio:[/] $([math]::Round($selected.AutoCloseRatio * 100, 1))%  |  [bold]False Pos Ratio:[/] $([math]::Round($selected.FalsePositiveRatio * 100, 1))%"
+        if ($null -ne $selected.AvgCloseMinutes) {
+            $detailLines += "[bold]Avg Close Time:[/]   $($selected.AvgCloseMinutes) minutes"
+        }
+        $detailLines += ""
+        if ($null -ne $selected.NoisinessScore) {
+            $scoreColor = if ($selected.NoisinessScore -ge 70) { 'red' } elseif ($selected.NoisinessScore -ge 50) { 'yellow' } else { 'green' }
+            $detailLines += "[bold]Noisiness Score:[/]  [${scoreColor}]$($selected.NoisinessScore)[/]"
+            $detailLines += "[dim]  Volume %ile: $($selected.PercentileVolume)  |  AutoClose %ile: $($selected.PercentileAutoClose)  |  FalsePos %ile: $($selected.PercentileFalsePositive)[/]"
+        }
+    } else {
+        $detailLines += "[dim]No correlated incidents found. Noisiness score not available.[/]"
+    }
+
+    if ($selected.LinkedAutomationRules -and $selected.LinkedAutomationRules.Count -gt 0) {
+        $detailLines += ""
+        $detailLines += "[bold]Auto-close automation:[/] $(Get-SafeEscapedText ($selected.LinkedAutomationRules -join ', '))"
+    }
+    ($detailLines -join "`n") | Format-SpectrePanel -Header "[dodgerblue2] RULE DETAIL [/]" -Border Rounded -Color DodgerBlue2
+}
+
+function Write-XDRChecker {
+    param([PSCustomObject]$Analysis)
+
+    if (-not $Analysis.XdrChecker) {
+        Write-SpectreHost "[dim]XDR Checker data is not available.[/]"
+        return
+    }
+
+    $findings = @($Analysis.XdrChecker.Findings)
+    $streamedTableCount = 0
+    if ($Analysis.XdrChecker.Summary -and $null -ne $Analysis.XdrChecker.Summary.StreamedTableCount) {
+        $streamedTableCount = [int]$Analysis.XdrChecker.Summary.StreamedTableCount
+    }
+
+    if ($streamedTableCount -eq 0) {
+        Write-SpectreHost "[yellow]No Defender XDR tables appear to be streamed into this Sentinel workspace.[/]"
+        Write-SpectreHost "[dim]XDR checker cannot validate forwarding/retention posture until XDR table forwarding is configured.[/]"
+        return
+    }
+
+    if ($findings.Count -eq 0) {
+        Write-SpectreHost "[green]No XDR checker findings for the currently streamed XDR tables.[/]"
+        Write-SpectreHost "[dim]Streamed XDR tables detected: $streamedTableCount[/]"
+        return
+    }
+
+    $table = @()
+    foreach ($f in $findings) {
+        $severity = switch ($f.Severity) {
+            'Medium'      { '[yellow]Medium[/]' }
+            'High'        { '[red]High[/]' }
+            'Information' { '[dim]Info[/]' }
+            default       { '[deepskyblue1]Low[/]' }
+        }
+
+        $table += [PSCustomObject]@{
+            'Table'    = Get-SafeEscapedText $f.TableName
+            'Type'     = Get-SafeEscapedText $f.Type
+            'Severity' = $severity
+            'Detail'   = Get-SafeEscapedText $f.Detail
+        }
+    }
+
+    $table | Format-SpectreTable -Border Rounded -Color DodgerBlue2 -HeaderColor DodgerBlue2 -AllowMarkup
+    $notStreamedCount = if ($Analysis.XdrChecker.Summary.NotStreamedCount) { [int]$Analysis.XdrChecker.Summary.NotStreamedCount } else { 0 }
+    Write-SpectreHost "[dim]  Streamed XDR tables: $streamedTableCount | Not streamed: $notStreamedCount[/]"
+    Write-SpectreHost "[dim]  Advisory retention target: $($Analysis.XdrChecker.Summary.AdvisoryRetentionDays) days in Data Lake for XDR-related logs.[/]"
 }
 
 # Export from menu
