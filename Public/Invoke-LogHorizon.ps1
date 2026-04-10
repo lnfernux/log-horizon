@@ -42,6 +42,11 @@ function Invoke-LogHorizon {
 
         [switch]$IncludeDefenderXDR,
 
+        [switch]$IncludeDetectionAnalyzer,
+
+        [ValidateRange(1, 365)]
+        [int]$DetectionLookbackDays = 90,
+
         [ValidateRange(1, 365)]
         [int]$DaysBack = 90,
 
@@ -85,6 +90,14 @@ function Invoke-LogHorizon {
             try { $result.DefenderXDR = Get-DefenderXDR -Context $ctx } catch { }
         }
 
+        # Detection analyzer inputs (optional)
+        $result.Incidents = @()
+        $result.AutomationRules = @()
+        if ($IncludeDetectionAnalyzer) {
+            try { $result.Incidents = Get-Incidents -Context $ctx -DaysBack $DetectionLookbackDays } catch { }
+            try { $result.AutomationRules = Get-AutomationRules -Context $ctx } catch { }
+        }
+
         # SOC Optimization
         $result.SocRecs = Get-SocOptimization -Context $ctx
 
@@ -107,6 +120,8 @@ function Invoke-LogHorizon {
     $tableRetention = $tableRetentionResult.Tables
     $workspaceRetentionDays = $tableRetentionResult.WorkspaceRetentionDays
     $dataTransforms = $collectResult.DataTransforms
+    $incidents = $collectResult.Incidents
+    $automationRules = $collectResult.AutomationRules
 
     # Phase 2 - Classification
     $classifications = Invoke-SpectreCommandWithStatus -Title "[deepskyblue1]Classifying log sources...[/]" -Spinner Dots -ScriptBlock {
@@ -138,7 +153,9 @@ function Invoke-LogHorizon {
                         -WorkspaceRetentionDays $workspaceRetentionDays `
                         -PricePerGB $PricePerGB `
                         -DataTransforms $dataTransforms `
-                        -HighValueFields $highValueFields
+                        -HighValueFields $highValueFields `
+                        -Incidents $incidents `
+                        -AutomationRules $automationRules
     }
 
     $sw.Stop()

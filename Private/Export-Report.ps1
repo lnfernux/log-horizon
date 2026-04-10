@@ -61,12 +61,18 @@ function Export-Report {
                 correlationIncluded  = $Analysis.CorrelationIncluded
                 socRecommendations   = $Analysis.SocRecommendations
                 dataTransforms       = $Analysis.DataTransforms
+                detectionAnalyzer    = $Analysis.DetectionAnalyzer
+                xdrChecker           = $Analysis.XdrChecker
             }
             if ($DefenderXDR) {
+                $xdrStreamed = @($Analysis.TableAnalysis | Where-Object IsXDRStreaming)
                 $export.defenderXDR = [ordered]@{
                     totalXDRRules    = $DefenderXDR.TotalXDRRules
                     xdrTableCoverage = $DefenderXDR.XDRTableCoverage
-                    streamingTables  = $DefenderXDR.StreamingTables
+                    knownXDRTables   = $DefenderXDR.KnownXDRTables
+                    streamingTables  = @($xdrStreamed | ForEach-Object {
+                        [ordered]@{ tableName = $_.TableName; plan = $_.XDRState }
+                    })
                 }
             }
 
@@ -539,8 +545,17 @@ function ConvertTo-ReportSections {
 
         $xdrStreaming = @($Analysis.TableAnalysis | Where-Object IsXDRStreaming)
         if ($xdrStreaming.Count -gt 0) {
-            $streamingNames = ($xdrStreaming | ForEach-Object { $_.TableName }) -join ', '
+            $streamingNames = ($xdrStreaming | ForEach-Object {
+                $tierLabel = if ($_.XDRState -eq 'Auxiliary') { 'data lake' } else { $_.XDRState }
+                "$($_.TableName) ($tierLabel)"
+            }) -join ', '
             [void]$mdSb.AppendLine("**Streaming to Sentinel:** $streamingNames  ")
+        }
+
+        if ($Analysis.XdrChecker -and $Analysis.XdrChecker.Summary.NotStreamedCount -gt 0) {
+            $notStreamedFindings = @($Analysis.XdrChecker.Findings | Where-Object Type -eq 'NotStreaming')
+            $notStreamedNames = ($notStreamedFindings | ForEach-Object { $_.TableName }) -join ', '
+            [void]$mdSb.AppendLine("**Not streaming (XDR default 30d):** $notStreamedNames  ")
         }
         [void]$mdSb.AppendLine('')
 
@@ -559,6 +574,9 @@ function ConvertTo-ReportSections {
         if ($xdrStreaming.Count -gt 0) {
             [void]$htmlSb.AppendLine("            <p><strong>Streaming to Sentinel:</strong> $(hEnc $streamingNames)</p>")
         }
+        if ($Analysis.XdrChecker -and $Analysis.XdrChecker.Summary.NotStreamedCount -gt 0) {
+            [void]$htmlSb.AppendLine("            <p><strong>Not streaming (XDR default 30d):</strong> $(hEnc $notStreamedNames)</p>")
+        }
         if ($xdrRecs.Count -gt 0) {
             [void]$htmlSb.AppendLine('            <h3>XDR Optimization Opportunities</h3>')
             [void]$htmlSb.AppendLine('            <ul>')
@@ -569,6 +587,77 @@ function ConvertTo-ReportSections {
         }
 
         $sections.Add([PSCustomObject]@{ Title = 'Defender XDR'; TabId = 'xdr'; Markdown = $mdSb.ToString(); Html = $htmlSb.ToString() })
+    }
+
+    # ── 10. Detection Analyzer (conditional) ──
+    if ($Analysis.DetectionAnalyzer -and $Analysis.DetectionAnalyzer.RuleMetrics.Count -gt 0) {
+        $scored = @($Analysis.DetectionAnalyzer.RuleMetrics | Where-Object { $null -ne $_.NoisinessScore } | Sort-Object NoisinessScore -Descending)
+        $unscored = @($Analysis.DetectionAnalyzer.RuleMetrics | Where-Object { $null -eq $_.NoisinessScore })
+        $sortedMetrics = @($scored) + @($unscored)
+
+        $mdSb = [System.Text.StringBuilder]::new()
+        [void]$mdSb.AppendLine('## Detection Analyzer')
+        [void]$mdSb.AppendLine('')
+        [void]$mdSb.AppendLine("**Rules analyzed:** $($Analysis.DetectionAnalyzer.Summary.RulesAnalyzed)  ")
+        [void]$mdSb.AppendLine("**Noisy rules (score >= 70):** $($Analysis.DetectionAnalyzer.Summary.NoisyRules)  ")
+        [void]$mdSb.AppendLine("**Incidents analyzed:** $($Analysis.DetectionAnalyzer.Summary.IncidentsAnalyzed)  ")
+        if ($Analysis.DetectionAnalyzer.Summary.CustomDetectionRules -gt 0) {
+            [void]$mdSb.AppendLine("**Custom Detection Rules:** $($Analysis.DetectionAnalyzer.Summary.CustomDetectionRules) ($($Analysis.DetectionAnalyzer.Summary.CDRCorrelatedIncidents) with incidents)  ")
+        }
+        [void]$mdSb.AppendLine('')
+        [void]$mdSb.AppendLine('| Rule | Kind | Incidents | AutoClose % | FalsePositive % | Noisiness Score |')
+        [void]$mdSb.AppendLine('| --- | --- | ---: | ---: | ---: | ---: |')
+        foreach ($r in ($sortedMetrics | Select-Object -First 25)) {
+            $scoreStr = if ($null -eq $r.NoisinessScore) { 'N/A' } else { $r.NoisinessScore }
+            [void]$mdSb.AppendLine("| $($r.RuleName) | $($r.RuleKind) | $($r.IncidentsTotal) | $([math]::Round($r.AutoCloseRatio * 100, 1)) | $([math]::Round($r.FalsePositiveRatio * 100, 1)) | $scoreStr |")
+        }
+        [void]$mdSb.AppendLine('')
+
+        $htmlSb = [System.Text.StringBuilder]::new()
+        [void]$htmlSb.AppendLine("            <p><strong>Rules analyzed:</strong> $($Analysis.DetectionAnalyzer.Summary.RulesAnalyzed)</p>")
+        [void]$htmlSb.AppendLine("            <p><strong>Noisy rules:</strong> $($Analysis.DetectionAnalyzer.Summary.NoisyRules)</p>")
+        if ($Analysis.DetectionAnalyzer.Summary.CustomDetectionRules -gt 0) {
+            [void]$htmlSb.AppendLine("            <p><strong>Custom Detection Rules:</strong> $($Analysis.DetectionAnalyzer.Summary.CustomDetectionRules) ($($Analysis.DetectionAnalyzer.Summary.CDRCorrelatedIncidents) with incidents)</p>")
+        }
+        [void]$htmlSb.AppendLine('            <div class="table-wrap"><table>')
+        [void]$htmlSb.AppendLine('                <thead><tr><th>Rule</th><th>Kind</th><th>Incidents</th><th>AutoClose %</th><th>FalsePositive %</th><th>Noisiness Score</th></tr></thead>')
+        [void]$htmlSb.AppendLine('                <tbody>')
+        foreach ($r in ($sortedMetrics | Select-Object -First 25)) {
+            $scoreStr = if ($null -eq $r.NoisinessScore) { 'N/A' } else { $r.NoisinessScore }
+            [void]$htmlSb.AppendLine("                <tr><td>$(hEnc $r.RuleName)</td><td>$(hEnc $r.RuleKind)</td><td class=`"num`">$($r.IncidentsTotal)</td><td class=`"num`">$([math]::Round($r.AutoCloseRatio * 100, 1))</td><td class=`"num`">$([math]::Round($r.FalsePositiveRatio * 100, 1))</td><td class=`"num`">$scoreStr</td></tr>")
+        }
+        [void]$htmlSb.AppendLine('                </tbody>')
+        [void]$htmlSb.AppendLine('            </table></div>')
+
+        $sections.Add([PSCustomObject]@{ Title = 'Detection Analyzer'; TabId = 'detanalyzer'; Markdown = $mdSb.ToString(); Html = $htmlSb.ToString() })
+    }
+
+    # ── 11. XDR Checker (conditional) ──
+    if ($Analysis.XdrChecker -and $Analysis.XdrChecker.Findings.Count -gt 0) {
+        $mdSb = [System.Text.StringBuilder]::new()
+        [void]$mdSb.AppendLine('## XDR Checker')
+        [void]$mdSb.AppendLine('')
+        [void]$mdSb.AppendLine("**Advisory retention target:** $($Analysis.XdrChecker.Summary.AdvisoryRetentionDays) days (Data Lake)  ")
+        [void]$mdSb.AppendLine('')
+        [void]$mdSb.AppendLine('| Table | Type | Severity | Detail |')
+        [void]$mdSb.AppendLine('| --- | --- | --- | --- |')
+        foreach ($f in $Analysis.XdrChecker.Findings) {
+            [void]$mdSb.AppendLine("| $($f.TableName) | $($f.Type) | $($f.Severity) | $($f.Detail) |")
+        }
+        [void]$mdSb.AppendLine('')
+
+        $htmlSb = [System.Text.StringBuilder]::new()
+        [void]$htmlSb.AppendLine("            <p><strong>Advisory retention target:</strong> $($Analysis.XdrChecker.Summary.AdvisoryRetentionDays) days in Data Lake for XDR-related logs.</p>")
+        [void]$htmlSb.AppendLine('            <div class="table-wrap"><table>')
+        [void]$htmlSb.AppendLine('                <thead><tr><th>Table</th><th>Type</th><th>Severity</th><th>Detail</th></tr></thead>')
+        [void]$htmlSb.AppendLine('                <tbody>')
+        foreach ($f in $Analysis.XdrChecker.Findings) {
+            [void]$htmlSb.AppendLine("                <tr><td>$(hEnc $f.TableName)</td><td>$(hEnc $f.Type)</td><td>$(hEnc $f.Severity)</td><td>$(hEnc $f.Detail)</td></tr>")
+        }
+        [void]$htmlSb.AppendLine('                </tbody>')
+        [void]$htmlSb.AppendLine('            </table></div>')
+
+        $sections.Add([PSCustomObject]@{ Title = 'XDR Checker'; TabId = 'xdrchecker'; Markdown = $mdSb.ToString(); Html = $htmlSb.ToString() })
     }
 
     return $sections
