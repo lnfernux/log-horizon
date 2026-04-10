@@ -2,7 +2,9 @@ function Get-DefenderXDR {
     <#
     .SYNOPSIS
         Queries Defender XDR for custom detection rules and streaming configuration.
-        Requires -IncludeDefenderXDR flag and SecurityEvents.Read.All Graph permission.
+        Requires -IncludeDefenderXDR flag. Uses delegated Microsoft Graph auth with
+        CustomDetection.Read.All (or CustomDetection.ReadWrite.All) scope. Falls back
+        to an Az access-token REST call if delegated Graph auth is unavailable.
     .OUTPUTS
         PSCustomObject with custom detection rules and XDR table analysis.
     #>
