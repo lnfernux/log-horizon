@@ -149,10 +149,15 @@ function Invoke-Analysis {
     }
 
     $cdrRules = if ($DefenderXDR -and $DefenderXDR.CustomRules) { $DefenderXDR.CustomRules } else { @() }
-    $detectionAnalyzer = Get-DetectionAnalyzerData -Rules $RulesData.Rules `
-                                                   -Incidents $Incidents `
-                                                   -AutomationRules $AutomationRules `
-                                                   -CustomDetectionRules $cdrRules
+    $detectionAnalyzer = if ($IncludeDetectionAnalyzer) {
+        Get-DetectionAnalyzerData -Rules $RulesData.Rules `
+                                  -Incidents $Incidents `
+                                  -AutomationRules $AutomationRules `
+                                  -CustomDetectionRules $cdrRules
+    }
+    else {
+        $null
+    }
 
     $xdrChecker = Get-XdrCheckerData -TableAnalysis $tableAnalysis -KnownXDRTables $knownXDRTables
 
