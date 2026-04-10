@@ -179,6 +179,13 @@ function Get-DefenderXDR {
         if ($rule.PSObject.Properties.Name -contains 'queryCondition' -and $rule.queryCondition) {
             $query = $rule.queryCondition.queryText
         }
+        if (-not $query -and
+            $rule.PSObject.Properties.Name -contains 'detectionAction' -and
+            $rule.detectionAction -and
+            $rule.detectionAction.PSObject.Properties.Name -contains 'queryCondition' -and
+            $rule.detectionAction.queryCondition) {
+            $query = $rule.detectionAction.queryCondition.queryText
+        }
         if ($query) {
             $tables = Get-TablesFromKql -Kql $query
             foreach ($t in $tables) {
