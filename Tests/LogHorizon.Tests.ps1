@@ -1024,6 +1024,7 @@ Describe 'Invoke-Analysis Detection Analyzer and XDR Checker' {
                                                 -TableRetention $tableRetention `
                                                 -Incidents $incidents `
                                                 -AutomationRules $automationRules `
+                                                -IncludeDetectionAnalyzer `
                                                 -SocRecommendations @()
     }
 
@@ -1195,6 +1196,48 @@ Describe 'Invoke-Analysis XDR not-streamed tables' {
     It 'does not flag streamed table as NotStreaming' {
         $notStreaming = @($script:notStreamedResult.XdrChecker.Findings | Where-Object Type -eq 'NotStreaming')
         $notStreaming.TableName | Should -Not -Contain 'DeviceProcessEvents'
+    }
+}
+
+Describe 'Invoke-Analysis XDR not-streamed does not misidentify workspace tables with zero lookback usage' {
+    BeforeAll {
+        # DeviceProcessEvents is in workspace (tableRetention) but has NO usage during lookback (absent from tableUsage).
+        # It must NOT be flagged as NotStreaming.
+        $tableUsage = @(
+            [PSCustomObject]@{ TableName = 'SecurityEvent'; DataGB = 10; MonthlyGB = 3; RecordCount = 50000; EstMonthlyCostUSD = 16.77; IsFree = $false }
+        )
+        $classifications = [PSCustomObject]@{
+            Classifications = @{
+                'SecurityEvent' = [PSCustomObject]@{ Classification = 'primary'; Category = 'Security'; RecommendedTier = 'analytics'; IsFree = $false; RecommendedRetentionDays = 365; IsSplitTable = $false; ParentTable = $null }
+            }
+            KeywordGaps = @()
+            DatabaseEntries = 1
+        }
+        $rulesData = [PSCustomObject]@{ Rules = @(); TableCoverage = @{}; TotalRules = 0; EnabledRules = 0; DontCorrCount = 0; IncCorrCount = 0 }
+        $huntingData = [PSCustomObject]@{ Queries = @(); TableCoverage = @{}; TotalQueries = 0 }
+        $defenderXdr = [PSCustomObject]@{
+            TotalXDRRules = 0
+            XDRTableCoverage = @{}
+            KnownXDRTables = @('DeviceProcessEvents', 'EmailEvents')
+        }
+        # DeviceProcessEvents IS in workspace retention but has no usage in the lookback window
+        $tableRetention = @(
+            [PSCustomObject]@{ TableName = 'SecurityEvent'; RetentionInDays = 90; TotalRetentionInDays = 90; ArchiveRetentionInDays = 0; Plan = 'Analytics' }
+            [PSCustomObject]@{ TableName = 'DeviceProcessEvents'; RetentionInDays = 90; TotalRetentionInDays = 365; ArchiveRetentionInDays = 275; Plan = 'Analytics' }
+        )
+        $script:zeroUsageResult = Invoke-Analysis -TableUsage $tableUsage -Classifications $classifications `
+            -RulesData $rulesData -HuntingData $huntingData -DefenderXDR $defenderXdr `
+            -TableRetention $tableRetention -SocRecommendations @()
+    }
+
+    It 'does not flag a workspace-present XDR table as NotStreaming when it has zero lookback usage' {
+        $notStreaming = @($script:zeroUsageResult.XdrChecker.Findings | Where-Object Type -eq 'NotStreaming')
+        $notStreaming.TableName | Should -Not -Contain 'DeviceProcessEvents'
+    }
+
+    It 'still flags truly not-streamed XDR table as NotStreaming' {
+        $notStreaming = @($script:zeroUsageResult.XdrChecker.Findings | Where-Object Type -eq 'NotStreaming')
+        $notStreaming.TableName | Should -Contain 'EmailEvents'
     }
 }
 

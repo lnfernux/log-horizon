@@ -20,7 +20,8 @@ function Invoke-Analysis {
         [PSCustomObject]$DataTransforms,
         [hashtable]$HighValueFields,
         [array]$Incidents = @(),
-        [array]$AutomationRules = @()
+        [array]$AutomationRules = @(),
+        [switch]$IncludeDetectionAnalyzer
     )
 
     $classMap       = $Classifications.Classifications   # hashtable
@@ -159,7 +160,7 @@ function Invoke-Analysis {
         $null
     }
 
-    $xdrChecker = Get-XdrCheckerData -TableAnalysis $tableAnalysis -KnownXDRTables $knownXDRTables
+    $xdrChecker = Get-XdrCheckerData -TableAnalysis $tableAnalysis -KnownXDRTables $knownXDRTables -RetentionMap $retentionMap
 
     # Generate recommendations
     $recommendations = [System.Collections.Generic.List[PSCustomObject]]::new()
@@ -678,6 +679,7 @@ function Get-XdrCheckerData {
     param(
         [array]$TableAnalysis,
         [array]$KnownXDRTables = @(),
+        [hashtable]$RetentionMap = @{},
         [int]$AdvisoryRetentionDays = 365
     )
 
@@ -686,9 +688,14 @@ function Get-XdrCheckerData {
 
     $xdrStreamedTables = @($TableAnalysis | Where-Object IsXDRStreaming)
 
-    # Identify known XDR tables not streamed to Sentinel at all
-    $streamedNames = @($xdrStreamedTables | ForEach-Object { $_.TableName })
-    $notStreamedNames = @($KnownXDRTables | Where-Object { $_ -notin $streamedNames })
+    # Identify known XDR tables not streamed to Sentinel at all.
+    # A known XDR table may exist in the workspace (RetentionMap) with zero ingestion during the
+    # lookback window, meaning it won't appear in TableAnalysis. Use the union of usage-based
+    # and retention-based sources so workspace-present tables are never falsely flagged as NotStreaming.
+    $streamedFromUsage     = @($xdrStreamedTables | ForEach-Object { $_.TableName })
+    $streamedFromRetention = @($KnownXDRTables | Where-Object { $_ -and $RetentionMap.ContainsKey($_) })
+    $streamedNames         = @($streamedFromUsage + $streamedFromRetention | Select-Object -Unique)
+    $notStreamedNames = @($KnownXDRTables | Where-Object { $_ -and ($_ -notin $streamedNames) })
 
     foreach ($tableName in $notStreamedNames) {
         $findings.Add([PSCustomObject]@{
