@@ -55,7 +55,7 @@ function Connect-Sentinel {
         $headers = @{ Authorization = "Bearer $token" }
         $onboardUri = "https://management.azure.com${sentinelResourceId}?api-version=2024-03-01"
         $onboard = Invoke-RestMethod -Uri $onboardUri -Headers $headers -ErrorAction Stop
-        if ($onboard.properties.customerManagedKey -eq $false -or $onboard.properties) {
+        if ($onboard.properties) {
             # If the onboarding state exists, workspace is onboarded to Sentinel
             $defenderUnified = $true
         }

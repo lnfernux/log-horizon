@@ -34,9 +34,11 @@ Usage
     }
 
     $uri = "https://api.loganalytics.io/v1/workspaces/$($Context.WorkspaceId)/query"
-    $response = Invoke-RestMethod -Uri $uri -Method Post -Headers $headers -Body $body -ErrorAction Stop
+    $response = Invoke-AzRestWithRetry -Uri $uri -Method Post -Headers $headers -Body $body
 
     $rows = $response.tables[0].rows
+
+    Write-Verbose "Usage query returned $($rows.Count) table(s) over last $DaysBack day(s)."
 
     $results = foreach ($row in $rows) {
         $tableName = $row[0]

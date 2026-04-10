@@ -44,6 +44,8 @@ function Invoke-Analysis {
         $transformLookup = $DataTransforms.TableLookup
     }
 
+    Write-Verbose "Starting analysis for $($TableUsage.Count) table(s)."
+
     # Per-table analysis
     $tableAnalysis = foreach ($table in $TableUsage) {
         $name = $table.TableName
@@ -410,6 +412,7 @@ function Invoke-Analysis {
 }
 
 function Get-Assessment {
+    [CmdletBinding()]
     param(
         [string]$Classification,
         [string]$CostTier,

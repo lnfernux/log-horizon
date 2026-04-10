@@ -9,6 +9,7 @@ BeforeAll {
     . "$privatePath\Get-DataTransforms.ps1"
     . "$privatePath\Get-Incidents.ps1"
     . "$privatePath\Get-AutomationRules.ps1"
+    . "$privatePath\Invoke-AzRestWithRetry.ps1"
 
     function New-MockAnalysis {
         [PSCustomObject]@{
@@ -227,27 +228,27 @@ Describe 'Resolve-DynamicClassification' {
 
 Describe 'Get-Assessment' {
     It 'returns High Value for primary with high detection' {
-        $result = Get-Assessment -Classification 'primary' -CostTier 'High' -DetectionTier 'High' -RuleCount 10 -IsFree $false
+        $result = Get-Assessment -Classification 'primary' -CostTier 'High' -DetectionTier 'High' -IsFree $false
         $result | Should -Be 'High Value'
     }
 
     It 'returns Missing Coverage for primary with no detection' {
-        $result = Get-Assessment -Classification 'primary' -CostTier 'Medium' -DetectionTier 'None' -RuleCount 0 -IsFree $false
+        $result = Get-Assessment -Classification 'primary' -CostTier 'Medium' -DetectionTier 'None' -IsFree $false
         $result | Should -Be 'Missing Coverage'
     }
 
     It 'returns Optimize for secondary high cost low detection' {
-        $result = Get-Assessment -Classification 'secondary' -CostTier 'High' -DetectionTier 'Low' -RuleCount 1 -IsFree $false
+        $result = Get-Assessment -Classification 'secondary' -CostTier 'High' -DetectionTier 'Low' -IsFree $false
         $result | Should -Be 'Optimize'
     }
 
     It 'returns Low Value for high cost zero detection' {
-        $result = Get-Assessment -Classification 'unknown' -CostTier 'Very High' -DetectionTier 'None' -RuleCount 0 -IsFree $false
+        $result = Get-Assessment -Classification 'unknown' -CostTier 'Very High' -DetectionTier 'None' -IsFree $false
         $result | Should -Be 'Low Value'
     }
 
     It 'returns Free Tier for free tables' {
-        $result = Get-Assessment -Classification 'primary' -CostTier 'Free' -DetectionTier 'None' -RuleCount 0 -IsFree $true
+        $result = Get-Assessment -Classification 'primary' -CostTier 'Free' -DetectionTier 'None' -IsFree $true
         $result | Should -Be 'Free Tier'
     }
 }
@@ -1660,5 +1661,98 @@ Describe 'ConvertTo-ReportSections edge cases' {
         $mdLine = ($tx.Markdown -split "`n" | Where-Object { $_ -match 'PipeTable' })
         $mdLine | Should -Match '&#124;'
         $mdLine | Should -Match '<code>'
+    }
+}
+
+Describe 'Invoke-AzRestWithRetry' {
+    It 'returns response on first successful call' {
+        Mock Invoke-RestMethod { [PSCustomObject]@{ value = @('ok') } }
+        $result = Invoke-AzRestWithRetry -Uri 'https://example.com/api' -Headers @{ Authorization = 'Bearer test' }
+        $result.value | Should -Contain 'ok'
+        Should -Invoke Invoke-RestMethod -Times 1 -Exactly
+    }
+
+    It 'passes Method and Body through to Invoke-RestMethod' {
+        Mock Invoke-RestMethod { [PSCustomObject]@{ tables = @() } }
+        Invoke-AzRestWithRetry -Uri 'https://example.com/api' -Headers @{ Authorization = 'Bearer test' } -Method Post -Body '{"query":"test"}'
+        Should -Invoke Invoke-RestMethod -Times 1 -Exactly -ParameterFilter {
+            $Method -eq 'Post' -and $Body -eq '{"query":"test"}'
+        }
+    }
+
+    It 'throws non-retryable errors immediately' {
+        Mock Invoke-RestMethod {
+            $resp = [System.Net.Http.HttpResponseMessage]::new([System.Net.HttpStatusCode]::NotFound)
+            $ex = [Microsoft.PowerShell.Commands.HttpResponseException]::new('Not Found', $resp)
+            throw $ex
+        }
+        { Invoke-AzRestWithRetry -Uri 'https://example.com/api' -Headers @{ Authorization = 'Bearer test' } } | Should -Throw
+        Should -Invoke Invoke-RestMethod -Times 1 -Exactly
+    }
+
+    It 'retries on 429 and eventually succeeds' {
+        $script:retryCallCount = 0
+        Mock Invoke-RestMethod {
+            $script:retryCallCount++
+            if ($script:retryCallCount -lt 2) {
+                $resp = [System.Net.Http.HttpResponseMessage]::new([System.Net.HttpStatusCode]::TooManyRequests)
+                $ex = [Microsoft.PowerShell.Commands.HttpResponseException]::new('Throttled', $resp)
+                throw $ex
+            }
+            [PSCustomObject]@{ value = @('retried') }
+        }
+        $result = Invoke-AzRestWithRetry -Uri 'https://example.com/api' -Headers @{ Authorization = 'Bearer test' } -BaseDelaySeconds 0
+        $result.value | Should -Contain 'retried'
+        Should -Invoke Invoke-RestMethod -Times 2 -Exactly
+    }
+
+    It 'throws after exhausting max retries' {
+        Mock Invoke-RestMethod {
+            $resp = [System.Net.Http.HttpResponseMessage]::new([System.Net.HttpStatusCode]::TooManyRequests)
+            $ex = [Microsoft.PowerShell.Commands.HttpResponseException]::new('Throttled', $resp)
+            throw $ex
+        }
+        { Invoke-AzRestWithRetry -Uri 'https://example.com/api' -Headers @{ Authorization = 'Bearer test' } -MaxRetries 1 -BaseDelaySeconds 0 } | Should -Throw
+        Should -Invoke Invoke-RestMethod -Times 2 -Exactly
+    }
+}
+
+Describe 'Get-TablesFromKql keyword filtering via $script:kqlKeywords' {
+    It 'filters out ingestion_time from table extraction' {
+        $kql = 'SecurityEvent | where ingestion_time() > ago(1d)'
+        $result = Get-TablesFromKql -Kql $kql
+        $result | Should -Contain 'SecurityEvent'
+        $result | Should -Not -Contain 'ingestion_time'
+    }
+
+    It 'filters out all common aggregation keywords' {
+        $kql = 'SigninLogs | summarize dcount(UserPrincipalName), avg(RiskScore) by bin(TimeGenerated, 1h)'
+        $result = Get-TablesFromKql -Kql $kql
+        $result | Should -Contain 'SigninLogs'
+        $result | Should -Not -Contain 'dcount'
+        $result | Should -Not -Contain 'avg'
+        $result | Should -Not -Contain 'bin'
+    }
+}
+
+Describe 'Write-Report helper functions' {
+    It 'Get-SafeEscapedText returns empty string for null input' {
+        $result = Get-SafeEscapedText -Value $null
+        $result | Should -Be ''
+    }
+
+    It 'Get-SafeEscapedText escapes Spectre markup characters' {
+        $result = Get-SafeEscapedText -Value 'test [bold]markup[/] text'
+        $result | Should -Not -Match '\[bold\]'
+    }
+
+    It 'Get-ConsoleWidth returns a positive integer' {
+        $result = Get-ConsoleWidth
+        $result | Should -BeGreaterThan 0
+    }
+
+    It 'Test-ConsoleSize returns a boolean' {
+        $result = Test-ConsoleSize
+        $result | Should -BeOfType [bool]
     }
 }

@@ -17,12 +17,12 @@ function Get-TableRetention {
 
     # Workspace-level default retention
     $wsUri = "https://management.azure.com$($Context.ResourceId)?api-version=2023-09-01"
-    $wsResponse = Invoke-RestMethod -Uri $wsUri -Headers $headers -ErrorAction Stop
+    $wsResponse = Invoke-AzRestWithRetry -Uri $wsUri -Headers $headers
     $workspaceRetention = [int]$wsResponse.properties.retentionInDays
 
     # Per-table retention and plan
     $uri = "https://management.azure.com$($Context.ResourceId)/tables?api-version=2025-07-01"
-    $response = Invoke-RestMethod -Uri $uri -Headers $headers -ErrorAction Stop
+    $response = Invoke-AzRestWithRetry -Uri $uri -Headers $headers
 
     $tables = foreach ($table in $response.value) {
         $props = $table.properties

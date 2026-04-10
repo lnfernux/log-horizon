@@ -20,7 +20,7 @@ function Get-DataConnectors {
 
     do {
         $pageCount++
-        $response = Invoke-RestMethod -Uri $uri -Headers $headers -ErrorAction Stop
+        $response = Invoke-AzRestWithRetry -Uri $uri -Headers $headers
         foreach ($c in $response.value) { $allConnectors.Add($c) }
         $uri = $response.nextLink
         if ($pageCount -ge $maxPages) {

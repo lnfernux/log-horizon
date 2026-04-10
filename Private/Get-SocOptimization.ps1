@@ -15,7 +15,7 @@ function Get-SocOptimization {
            "/providers/Microsoft.SecurityInsights/recommendations?api-version=2024-01-01-preview"
 
     try {
-        $response = Invoke-RestMethod -Uri $uri -Headers $headers -ErrorAction Stop
+        $response = Invoke-AzRestWithRetry -Uri $uri -Headers $headers
         $response.value | ForEach-Object {
             # Extract actionable suggestions (e.g. specific tables to enable, rules to create)
             $suggestions = @()

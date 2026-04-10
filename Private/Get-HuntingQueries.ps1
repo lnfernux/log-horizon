@@ -13,10 +13,25 @@ function Get-HuntingQueries {
     $headers = @{ Authorization = "Bearer $($Context.ArmToken)" }
     $uri = "https://management.azure.com$($Context.ResourceId)/savedSearches?api-version=2020-08-01"
 
-    $response = Invoke-RestMethod -Uri $uri -Headers $headers -ErrorAction Stop
+    $allSavedSearches = [System.Collections.Generic.List[object]]::new()
+    $maxPages = 1000
+    $pageCount = 0
+
+    do {
+        $pageCount++
+        $response = Invoke-AzRestWithRetry -Uri $uri -Headers $headers
+        foreach ($ss in $response.value) { $allSavedSearches.Add($ss) }
+        $uri = $response.nextLink
+        if ($pageCount -ge $maxPages) {
+            Write-Warning "Pagination limit reached fetching Hunting Queries. Terminating to avoid infinite loop."
+            break
+        }
+    } while ($uri)
+
+    Write-Verbose "Fetched $($allSavedSearches.Count) saved search(es) across $pageCount page(s)."
 
     $tableCoverage = @{}
-    $huntingQueries = foreach ($ss in $response.value) {
+    $huntingQueries = foreach ($ss in $allSavedSearches) {
         $cat = $ss.properties.category
         # Hunting queries have category "Hunting Queries" in Sentinel
         if ($cat -ne 'Hunting Queries') { continue }

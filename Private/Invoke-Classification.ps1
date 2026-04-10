@@ -37,6 +37,8 @@ function Invoke-Classification {
         Write-Verbose "Merged $customCount custom classification(s) from '$CustomClassificationPath'"
     }
 
+    Write-Verbose "Classification DB loaded: $($db.Count) entries. Classifying $($TableUsage.Count) ingesting table(s)."
+
     # Classify each ingesting table
     $classified = @{}
 

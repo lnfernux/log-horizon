@@ -21,7 +21,7 @@ function Get-DataTransforms {
 
     $dcrs = @()
     try {
-        $response = Invoke-RestMethod -Uri $dcrUri -Headers $headers -ErrorAction Stop
+        $response = Invoke-AzRestWithRetry -Uri $dcrUri -Headers $headers
         $dcrs = @($response.value)
     }
     catch {
@@ -117,6 +117,7 @@ function Get-TransformType {
     .SYNOPSIS
         Classifies a transform KQL expression into a category.
     #>
+    [CmdletBinding()]
     param([string]$KQL)
 
     $kqlLower = $KQL.ToLower().Trim()
