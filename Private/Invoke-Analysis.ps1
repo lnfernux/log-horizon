@@ -533,7 +533,7 @@ function Get-DetectionAnalyzerData {
         # Title heuristic fallback — works for both analytics and CDR rules
         if ($candidateNames.Count -eq 0 -and -not [string]::IsNullOrWhiteSpace($incident.Title)) {
             foreach ($rule in $unifiedRules) {
-                if ($incident.Title -like "*$($rule.RuleName)*") {
+                if ($incident.Title.IndexOf($rule.RuleName, [System.StringComparison]::OrdinalIgnoreCase) -ge 0) {
                     [void]$candidateNames.Add($rule.RuleName)
                 }
             }
