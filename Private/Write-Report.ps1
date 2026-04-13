@@ -257,8 +257,7 @@ function Write-InteractiveMenu {
         'View SOC Optimization'         = 'soc'
         'View Retention Assessment'     = 'retention'
         'View Data Transforms'          = 'transforms'
-        'View Split KQL Suggestions'    = 'splitkql'
-        'Evaluate specific table (KQL)' = 'tableKql'
+        'Log Tuning / Transforms'       = 'logtuning'
         'View All Tables'               = 'tables'
     }
 
@@ -286,8 +285,7 @@ function Write-InteractiveMenu {
             'soc'             { Write-SocOptimization -Analysis $Analysis }
             'retention'       { Write-RetentionAssessment -Analysis $Analysis }
             'transforms'      { Write-DataTransforms -Analysis $Analysis }
-            'splitkql'        { Write-SplitKqlSuggestions -Analysis $Analysis }
-            'tableKql'        { Write-TableKqlSuggestion -Analysis $Analysis }
+            'logtuning'       { Write-LogTuningMenu -Analysis $Analysis }
             'tables'          { Write-AllTables -Analysis $Analysis }
             'export'          {
                 Invoke-ExportFromMenu -Analysis $Analysis `
@@ -680,7 +678,373 @@ function Write-DataTransforms {
     }
 }
 
-# Split KQL suggestions
+# Log Tuning / Transforms sub-menu
+function Write-LogTuningMenu {
+    param([PSCustomObject]$Analysis)
+
+    # Help text explaining the three transform types
+    $helpLines = @(
+        "[bold]Log Tuning / Transforms[/]"
+        ""
+        "Reduce Sentinel ingestion costs by shaping data at ingest time. Filter and split transforms can be"
+        "configured directly in the Defender portal (Configuration > Tables) or via Data Collection Rules (DCRs)."
+        "Three approaches are available, and can be combined:"
+        ""
+        "[bold yellow]Row Splitting (WHERE):[/]  Route security-relevant rows to Analytics tier; send the rest to the Data lake tier."
+        "                       Reduces Analytics ingestion cost while keeping all data available for compliance and investigations."
+        ""
+        "[bold yellow]Column Reduction (PROJECT):[/]  Remove unused columns at ingest time via DCR transform."
+        "                              Reduces per-row storage cost proportional to columns removed."
+        ""
+        "[bold yellow]Combined (WHERE + PROJECT):[/]  Apply both row splitting AND column reduction for maximum savings."
+        ""
+        "[dim]Tip: Use 'Live Data' for tuning based on YOUR deployed rules. Use 'Knowledge Base' for community-driven recommendations.[/]"
+    )
+    ($helpLines -join "`n") | Format-SpectrePanel -Header "[dodgerblue2] LOG TUNING GUIDE [/]" -Border Rounded -Color DodgerBlue2
+    Write-SpectreHost ""
+
+    $subContinue = $true
+    while ($subContinue) {
+        $subMenu = [ordered]@{
+            'Log tuning suggestions (live data)'      = 'live'
+            'Log tuning suggestions (knowledge base)'  = 'kb'
+            'Evaluate specific table'                  = 'evaluate'
+            'Back'                                     = 'back'
+        }
+
+        $subChoice = Read-SpectreSelection -Title "[deepskyblue1]Select a tuning mode:[/]" `
+                        -Choices @($subMenu.Keys) `
+                        -Color DodgerBlue2
+
+        $subAction = $subMenu[$subChoice]
+        Write-SpectreHost ""
+
+        switch ($subAction) {
+            'live'     { Write-LiveTuningSuggestions -Analysis $Analysis }
+            'kb'       { Write-SplitKqlSuggestions -Analysis $Analysis }
+            'evaluate' { Write-TableEvaluation -Analysis $Analysis }
+            'back'     { $subContinue = $false }
+        }
+    }
+}
+
+# Live data tuning suggestions
+function Write-LiveTuningSuggestions {
+    param([PSCustomObject]$Analysis)
+
+    $liveTuning = @($Analysis.LiveTuningAnalysis | Where-Object { $_.RuleCount -gt 0 })
+
+    if ($liveTuning.Count -eq 0) {
+        Write-SpectreHost "[dim]No live tuning suggestions available. Your deployed rules must reference at least one table.[/]"
+        return
+    }
+
+    # Overview panel
+    $totalSavings = ($liveTuning | Measure-Object EstFilterSavings -Sum).Sum + ($liveTuning | Measure-Object EstProjectSavings -Sum).Sum
+    $tablesWithSchema = @($liveTuning | Where-Object { $_.SchemaColumnCount -gt 0 }).Count
+    $overviewLines = @(
+        "[bold]Tables with rules:[/]   $($liveTuning.Count)"
+        "[bold]With schema data:[/]    $tablesWithSchema [dim](unused field analysis available)[/]"
+        "[bold]Est. total savings:[/]  [green]`$$([math]::Round($totalSavings, 2))/mo[/] [dim](combined filter + project potential)[/]"
+    )
+    ($overviewLines -join "`n") | Format-SpectrePanel -Header "[dodgerblue2] LIVE DATA TUNING [/]" -Border Rounded -Color DodgerBlue2
+    Write-SpectreHost ""
+
+    # Summary table
+    $table = @()
+    foreach ($lt in ($liveTuning | Sort-Object EstMonthlyCostUSD -Descending)) {
+        $unusedStr = if ($lt.SchemaColumnCount -gt 0) { "$($lt.UnusedFieldCount) of $($lt.SchemaColumnCount)" } else { '[dim]-[/]' }
+        $filterStr = if ($lt.EstFilterSavings -gt 0) { "[green]`$$($lt.EstFilterSavings)[/]" } else { '[dim]-[/]' }
+        $projectStr = if ($lt.EstProjectSavings -gt 0) { "[green]`$$($lt.EstProjectSavings)[/]" } else { '[dim]-[/]' }
+
+        $table += [PSCustomObject]@{
+            'Table'           = Get-SafeEscapedText $lt.TableName
+            'GB/mo'           = $lt.MonthlyGB
+            'Rules'           = $lt.RuleCount
+            'Fields Used'     = $lt.FieldCount
+            'Unused Cols'     = $unusedStr
+            'Filter Savings'  = $filterStr
+            'Project Savings' = $projectStr
+        }
+    }
+
+    $table | Format-SpectreTable -Border Rounded -Color DodgerBlue2 -HeaderColor DodgerBlue2 -AllowMarkup
+    Write-SpectreHost ""
+
+    # Drill-down
+    $choices = @('Back') + @($liveTuning | Sort-Object EstMonthlyCostUSD -Descending | ForEach-Object { $_.TableName })
+    $pick = Read-SpectreSelection -Title "[deepskyblue1]Select a table for tuning KQL, or Back:[/]" -Choices $choices -Color DodgerBlue2 -EnableSearch
+
+    if ($pick -ne 'Back') {
+        $lt = $liveTuning | Where-Object { $_.TableName -eq $pick } | Select-Object -First 1
+        Write-LiveTuningDetail -TuningEntry $lt
+    }
+}
+
+function Write-LiveTuningDetail {
+    param([PSCustomObject]$TuningEntry)
+
+    $lt = $TuningEntry
+    Write-SpectreHost ""
+    Write-SpectreHost "[dodgerblue2][bold]$($lt.TableName)[/] — Live Data Tuning[/]"
+    Write-SpectreHost "[dim]Based on $($lt.RuleCount) deployed rule(s) and hunting queries[/]"
+    Write-SpectreHost ""
+
+    # Per-table sub-menu
+    $detailContinue = $true
+    while ($detailContinue) {
+        $detailMenu = [ordered]@{}
+        if ($lt.FilterKql)   { $detailMenu['View WHERE filter KQL'] = 'filter' }
+        if ($lt.ProjectKql)  { $detailMenu['View column reduction KQL'] = 'project' }
+        if ($lt.CombinedKql) { $detailMenu['View combined KQL'] = 'combined' }
+        $detailMenu['View field-by-rule breakdown'] = 'fields'
+        $detailMenu['Back'] = 'back'
+
+        $detailChoice = Read-SpectreSelection -Title "[deepskyblue1]Select a view:[/]" -Choices @($detailMenu.Keys) -Color DodgerBlue2
+        $detailAction = $detailMenu[$detailChoice]
+        Write-SpectreHost ""
+
+        switch ($detailAction) {
+            'filter' {
+                Write-SpectreHost "[bold]Row Filter KQL[/] [dim](condition-only — portal prepends 'source | where')[/]"
+                Write-SpectreHost "[deepskyblue1]$(Get-SafeEscapedText $lt.FilterKql)[/]"
+                if ($lt.EstFilterSavings -gt 0) {
+                    Write-SpectreHost "[dim]Estimated savings: ~`$$($lt.EstFilterSavings)/mo[/]"
+                }
+                Write-SpectreHost ""
+            }
+            'project' {
+                Write-SpectreHost "[bold]Column Reduction KQL[/] [dim](full DCR transform syntax)[/]"
+                Write-SpectreHost "[deepskyblue1]$(Get-SafeEscapedText $lt.ProjectKql)[/]"
+                if ($lt.EstProjectSavings -gt 0) {
+                    Write-SpectreHost "[dim]Estimated savings: ~`$$($lt.EstProjectSavings)/mo[/]"
+                }
+                Write-SpectreHost ""
+            }
+            'combined' {
+                Write-SpectreHost "[bold]Combined KQL[/] [dim](filter rows + reduce columns)[/]"
+                Write-SpectreHost "[deepskyblue1]$(Get-SafeEscapedText $lt.CombinedKql)[/]"
+                $totalEst = $lt.EstFilterSavings + $lt.EstProjectSavings
+                if ($totalEst -gt 0) {
+                    Write-SpectreHost "[dim]Estimated combined savings: ~`$$([math]::Round($totalEst, 2))/mo[/]"
+                }
+                Write-SpectreHost ""
+            }
+            'fields' {
+                Write-SpectreHost "[bold]Field-by-Rule Breakdown[/]"
+                Write-SpectreHost ""
+
+                # Show which rules use which fields
+                foreach ($rd in $lt.RuleDetails) {
+                    $fieldStr = ($rd.Fields | Select-Object -First 15) -join ', '
+                    if ($rd.Fields.Count -gt 15) { $fieldStr += ", ... (+$($rd.Fields.Count - 15) more)" }
+                    Write-SpectreHost "  [white]$(Get-SafeEscapedText $rd.RuleName)[/]"
+                    Write-SpectreHost "    [dim]$fieldStr[/]"
+                }
+                Write-SpectreHost ""
+
+                # Show used vs unused fields summary
+                Write-SpectreHost "[bold]Fields used by rules ($($lt.FieldCount)):[/]"
+                $usedStr = ($lt.UsedFields | Select-Object -First 25) -join ', '
+                if ($lt.UsedFields.Count -gt 25) { $usedStr += ", ... (+$($lt.UsedFields.Count - 25) more)" }
+                Write-SpectreHost "  [green]$(Get-SafeEscapedText $usedStr)[/]"
+
+                if ($lt.UnusedFields.Count -gt 0) {
+                    Write-SpectreHost ""
+                    Write-SpectreHost "[bold]Unused schema columns ($($lt.UnusedFieldCount)):[/]"
+                    $unusedStr = ($lt.UnusedFields | Select-Object -First 25) -join ', '
+                    if ($lt.UnusedFields.Count -gt 25) { $unusedStr += ", ... (+$($lt.UnusedFields.Count - 25) more)" }
+                    Write-SpectreHost "  [yellow]$(Get-SafeEscapedText $unusedStr)[/]"
+                }
+                Write-SpectreHost ""
+            }
+            'back' { $detailContinue = $false }
+        }
+    }
+}
+
+# Enhanced table evaluation
+function Write-TableEvaluation {
+    param([PSCustomObject]$Analysis)
+
+    $allTables = @($Analysis.TableAnalysis | Sort-Object TableName)
+    if ($allTables.Count -eq 0) { return }
+
+    $choices = @('Back') + @($allTables | ForEach-Object { $_.TableName })
+    $pick = Read-SpectreSelection -Title "Type to search or select a table to evaluate:" `
+                                  -Choices $choices `
+                                  -Color DodgerBlue2 `
+                                  -EnableSearch
+
+    if ($pick -eq 'Back') { return }
+
+    $table = $allTables | Where-Object { $_.TableName -eq $pick } | Select-Object -First 1
+    $s = $table.SplitSuggestion
+
+    # Get live tuning data for this table if available
+    $liveEntry = $Analysis.LiveTuningAnalysis | Where-Object { $_.TableName -eq $pick } | Select-Object -First 1
+
+    Write-SpectreHost ""
+    Write-SpectreHost "[dodgerblue2][bold]$($table.TableName)[/] — Comprehensive Table Evaluation[/]"
+    Write-SpectreHost ""
+
+    # Overview info
+    $infoLines = @(
+        "[bold]Category:[/]       $(Get-SafeEscapedText $table.Category)"
+        "[bold]Classification:[/] $($table.Classification)"
+        "[bold]Ingestion:[/]      $($table.MonthlyGB) GB/mo  |  [bold]Cost:[/] `$$($table.EstMonthlyCostUSD)/mo"
+        "[bold]Plan:[/]           $(if ($table.TablePlan) { $table.TablePlan } else { 'Unknown' })"
+        "[bold]Rules:[/]          $($table.AnalyticsRules) analytics  |  $($table.HuntingQueries) hunting$(if ($table.XDRRules -gt 0) { "  |  $($table.XDRRules) XDR" })"
+    )
+
+    if ($table.SchemaColumns -and $table.SchemaColumns.Count -gt 0) {
+        $usedCount = if ($liveEntry) { $liveEntry.FieldCount } elseif ($s -and $s.AllFields) { $s.AllFields.Count } else { 0 }
+        $infoLines += "[bold]Schema columns:[/]  $($table.SchemaColumns.Count) total  |  $usedCount used by rules"
+    }
+
+    ($infoLines -join "`n") | Format-SpectrePanel -Header "[dodgerblue2] TABLE OVERVIEW [/]" -Border Rounded -Color DodgerBlue2
+    Write-SpectreHost ""
+
+    # Field usage matrix (if we have live tuning data)
+    if ($liveEntry -and $liveEntry.RuleDetails.Count -gt 0) {
+        Write-SpectreHost "[bold]Field Usage Matrix[/]"
+        Write-SpectreHost ""
+
+        # Build matrix: show each field and which rules reference it
+        $fieldRuleMap = @{}
+        foreach ($rd in $liveEntry.RuleDetails) {
+            foreach ($f in $rd.Fields) {
+                if (-not $fieldRuleMap.ContainsKey($f)) {
+                    $fieldRuleMap[$f] = [System.Collections.Generic.List[string]]::new()
+                }
+                $fieldRuleMap[$f].Add($rd.RuleName)
+            }
+        }
+
+        $matrixRows = @()
+        foreach ($field in ($fieldRuleMap.Keys | Sort-Object)) {
+            $rules = $fieldRuleMap[$field]
+            $ruleStr = ($rules | Select-Object -First 3) -join ', '
+            if ($rules.Count -gt 3) { $ruleStr += " +$($rules.Count - 3) more" }
+
+            $matrixRows += [PSCustomObject]@{
+                'Field'      = Get-SafeEscapedText $field
+                'Rule Count' = $rules.Count
+                'Rules'      = Get-SafeEscapedText $ruleStr
+            }
+        }
+
+        if ($matrixRows.Count -gt 0) {
+            $matrixRows | Sort-Object 'Rule Count' -Descending |
+                Select-Object -First 20 |
+                Format-SpectreTable -Border Rounded -Color DodgerBlue2 -HeaderColor DodgerBlue2
+        }
+
+        # Coverage summary
+        if ($table.SchemaColumns -and $table.SchemaColumns.Count -gt 0) {
+            $coveragePct = [math]::Round(($liveEntry.FieldCount / $table.SchemaColumns.Count) * 100, 0)
+            $coverageColor = if ($coveragePct -ge 50) { 'green' } elseif ($coveragePct -ge 25) { 'yellow' } else { 'red' }
+            Write-SpectreHost "[$coverageColor][bold]$($liveEntry.FieldCount) of $($table.SchemaColumns.Count)[/] schema columns are referenced by your rules ($coveragePct% coverage)[/]"
+        }
+        Write-SpectreHost ""
+    }
+
+    # Tuning recommendation
+    $recommendation = 'No automated tuning recommendation available for this table.'
+    if ($liveEntry) {
+        if ($liveEntry.ConditionCount -gt 0 -and $liveEntry.UnusedFieldCount -gt 5) {
+            $recommendation = "[bold green]Recommended: Combined (filter + project)[/] — $($liveEntry.ConditionCount) filter condition(s) available and $($liveEntry.UnusedFieldCount) unused columns can be removed."
+        }
+        elseif ($liveEntry.ConditionCount -gt 0) {
+            $recommendation = "[bold yellow]Recommended: Row splitting (WHERE)[/] — $($liveEntry.ConditionCount) filter condition(s) from deployed rules."
+        }
+        elseif ($liveEntry.UnusedFieldCount -gt 5) {
+            $recommendation = "[bold yellow]Recommended: Column reduction (PROJECT)[/] — $($liveEntry.UnusedFieldCount) unused columns can be removed."
+        }
+        else {
+            $recommendation = "[dim]Low tuning potential for this table based on current rule coverage.[/]"
+        }
+    }
+    elseif ($s -and $s.Source -ne 'none') {
+        $recommendation = "[bold yellow]Recommended: Use knowledge-base suggestion (source: $($s.Source))[/]"
+    }
+
+    Write-SpectreHost "[bold]Tuning Recommendation:[/]"
+    Write-SpectreHost "  $recommendation"
+    Write-SpectreHost ""
+
+    # KQL generation sub-menu
+    $evalContinue = $true
+    while ($evalContinue) {
+        $evalMenu = [ordered]@{}
+
+        # Prefer live tuning KQL if available
+        $kqlSource = if ($liveEntry) { $liveEntry } else { $null }
+
+        if ($kqlSource -and $kqlSource.FilterKql)    { $evalMenu['View WHERE filter KQL'] = 'filter' }
+        elseif ($s -and $s.SplitKql)                 { $evalMenu['View WHERE filter KQL (KB)'] = 'kbfilter' }
+
+        if ($kqlSource -and $kqlSource.ProjectKql)   { $evalMenu['View column reduction KQL'] = 'project' }
+        elseif ($s -and $s.ProjectKql)               { $evalMenu['View column reduction KQL (KB)'] = 'kbproject' }
+
+        if ($kqlSource -and $kqlSource.CombinedKql)  { $evalMenu['View combined KQL'] = 'combined' }
+
+        if ($liveEntry -and $liveEntry.RuleDetails.Count -gt 0) {
+            $evalMenu['View field-by-rule breakdown'] = 'fields'
+        }
+
+        $evalMenu['Back'] = 'back'
+
+        if ($evalMenu.Count -le 1) {
+            Write-SpectreHost "[dim]No KQL suggestions could be automatically generated for this table.[/]"
+            break
+        }
+
+        $evalChoice = Read-SpectreSelection -Title "[deepskyblue1]Select a view:[/]" -Choices @($evalMenu.Keys) -Color DodgerBlue2
+        $evalAction = $evalMenu[$evalChoice]
+        Write-SpectreHost ""
+
+        switch ($evalAction) {
+            'filter' {
+                Write-SpectreHost "[bold]Row Filter KQL[/] [dim](condition-only — portal prepends 'source | where')[/]"
+                Write-SpectreHost "[deepskyblue1]$(Get-SafeEscapedText $kqlSource.FilterKql)[/]"
+                Write-SpectreHost ""
+            }
+            'kbfilter' {
+                Write-SpectreHost "[bold]Split Transform KQL[/] [dim](from knowledge base, condition-only)[/]"
+                Write-SpectreHost "[deepskyblue1]$(Get-SafeEscapedText $s.SplitKql)[/]"
+                Write-SpectreHost ""
+            }
+            'project' {
+                Write-SpectreHost "[bold]Column Reduction KQL[/] [dim](full DCR transform syntax)[/]"
+                Write-SpectreHost "[deepskyblue1]$(Get-SafeEscapedText $kqlSource.ProjectKql)[/]"
+                Write-SpectreHost ""
+            }
+            'kbproject' {
+                Write-SpectreHost "[bold]Column Reduction KQL[/] [dim](from knowledge base)[/]"
+                Write-SpectreHost "[deepskyblue1]$(Get-SafeEscapedText $s.ProjectKql)[/]"
+                Write-SpectreHost ""
+            }
+            'combined' {
+                Write-SpectreHost "[bold]Combined KQL[/] [dim](filter rows + reduce columns)[/]"
+                Write-SpectreHost "[deepskyblue1]$(Get-SafeEscapedText $kqlSource.CombinedKql)[/]"
+                Write-SpectreHost ""
+            }
+            'fields' {
+                foreach ($rd in $liveEntry.RuleDetails) {
+                    $fieldStr = ($rd.Fields | Select-Object -First 15) -join ', '
+                    if ($rd.Fields.Count -gt 15) { $fieldStr += ", ... (+$($rd.Fields.Count - 15) more)" }
+                    Write-SpectreHost "  [white]$(Get-SafeEscapedText $rd.RuleName)[/]"
+                    Write-SpectreHost "    [dim]$fieldStr[/]"
+                }
+                Write-SpectreHost ""
+            }
+            'back' { $evalContinue = $false }
+        }
+    }
+}
+
+# Split KQL suggestions (knowledge base path)
 function Write-SplitKqlSuggestions {
     param([PSCustomObject]$Analysis)
 
@@ -698,7 +1062,7 @@ function Write-SplitKqlSuggestions {
     $lines += "[bold]With split KQL:[/]  $($withKql.Count) table(s) have a generated split suggestion"
     $lines += ""
     $body = $lines -join "`n"
-    $body | Format-SpectrePanel -Header "[dodgerblue2] SPLIT KQL SUGGESTIONS [/]" -Border Rounded -Color DodgerBlue2
+    $body | Format-SpectrePanel -Header "[dodgerblue2] KNOWLEDGE BASE TUNING [/]" -Border Rounded -Color DodgerBlue2
     Write-SpectreHost ""
 
     # Summary table
@@ -706,17 +1070,25 @@ function Write-SplitKqlSuggestions {
     foreach ($rec in $splitRecs) {
         $s = $rec.SplitSuggestion
         $sourceMarkup = switch ($s.Source) {
-            'knowledge-base' { '[green]Knowledge Base[/]' }
-            'rule-analysis'  { '[deepskyblue1]Rule Analysis[/]' }
-            'combined'       { '[green]Combined[/]' }
-            default          { '[grey]None[/]' }
+            'knowledge-base'   { '[green]Knowledge Base[/]' }
+            'rule-analysis'    { '[deepskyblue1]Rule Analysis[/]' }
+            'combined'         { '[green]Combined[/]' }
+            'community-stats'  { '[yellow]Community Stats[/]' }
+            'category-defaults' { '[yellow]Category Defaults[/]' }
+            'universal'        { '[dim]Universal Fallback[/]' }
+            default            { '[grey]None[/]' }
+        }
+
+        $fieldsSummary = "$($s.RuleFields.Count) rule + $($s.HighValueFields.Count) KB"
+        if ($s.FallbackFields -and $s.FallbackFields.Count -gt 0) {
+            $fieldsSummary += " + $($s.FallbackFields.Count) fallback"
         }
 
         $table += [PSCustomObject]@{
             'Table'       = Get-SafeEscapedText $rec.TableName
             'GB/mo'       = ($Analysis.TableAnalysis | Where-Object TableName -eq $rec.TableName).MonthlyGB
             'Rules'       = $s.RuleCount
-            'Fields'      = "$($s.RuleFields.Count) rule + $($s.HighValueFields.Count) KB"
+            'Fields'      = $fieldsSummary
             'Source'      = $sourceMarkup
             'Est Savings' = "`$$($rec.EstSavingsUSD)/mo"
         }
@@ -727,50 +1099,75 @@ function Write-SplitKqlSuggestions {
 
     # Drill-down
     $choices = @('Back') + @($splitRecs | ForEach-Object { $_.TableName })
-    $pick = Read-SpectreSelection -Title "[deepskyblue1]Select a table for full KQL suggestion, or Back:[/]" -Choices $choices -Color DodgerBlue2
+    $pick = Read-SpectreSelection -Title "[deepskyblue1]Select a table for tuning KQL, or Back:[/]" -Choices $choices -Color DodgerBlue2
 
     if ($pick -ne 'Back') {
         $rec = $splitRecs | Where-Object { $_.TableName -eq $pick } | Select-Object -First 1
         $s = $rec.SplitSuggestion
 
         Write-SpectreHost ""
-        Write-SpectreHost "[dodgerblue2][bold]$($rec.TableName)[/] — Split KQL Suggestion[/]"
+        Write-SpectreHost "[dodgerblue2][bold]$($rec.TableName)[/] — Knowledge Base Tuning[/]"
 
         if ($s.Description) {
             Write-SpectreHost "[dim]$(Get-SafeEscapedText $s.Description)[/]"
         }
         Write-SpectreHost ""
 
-        # Show split KQL
-        if ($s.SplitKql) {
-            Write-SpectreHost "[bold]Split Transform KQL[/] [dim](condition-only — the portal prepends 'source | where' automatically)[/]"
-            Write-SpectreHost "[deepskyblue1]$(Get-SafeEscapedText $s.SplitKql)[/]"
-            Write-SpectreHost ""
-        }
+        # Sub-menu for KB drill-down
+        $kbContinue = $true
+        while ($kbContinue) {
+            $kbMenu = [ordered]@{}
+            if ($s.SplitKql)   { $kbMenu['View WHERE filter KQL'] = 'filter' }
+            if ($s.ProjectKql) { $kbMenu['View column reduction KQL'] = 'project' }
+            $kbMenu['View field analysis'] = 'fields'
+            $kbMenu['Back'] = 'back'
 
-        # Show projection KQL
-        if ($s.ProjectKql) {
-            Write-SpectreHost "[bold]Column Reduction KQL[/] [dim](keeps only detection-relevant fields)[/]"
-            Write-SpectreHost "[deepskyblue1]$(Get-SafeEscapedText $s.ProjectKql)[/]"
+            $kbChoice = Read-SpectreSelection -Title "[deepskyblue1]Select a view:[/]" -Choices @($kbMenu.Keys) -Color DodgerBlue2
+            $kbAction = $kbMenu[$kbChoice]
             Write-SpectreHost ""
-        }
 
-        # Show field analysis
-        if ($s.RuleFields.Count -gt 0) {
-            $ruleFieldStr = ($s.RuleFields | Select-Object -First 20) -join ', '
-            Write-SpectreHost "[bold]Fields from analytics rules ($($s.RuleFields.Count)):[/]"
-            Write-SpectreHost "  [white]$(Get-SafeEscapedText $ruleFieldStr)[/]"
-            Write-SpectreHost ""
-        }
+            switch ($kbAction) {
+                'filter' {
+                    Write-SpectreHost "[bold]Split Transform KQL[/] [dim](condition-only — the portal prepends 'source | where' automatically)[/]"
+                    Write-SpectreHost "[deepskyblue1]$(Get-SafeEscapedText $s.SplitKql)[/]"
+                    if ($rec.EstSavingsUSD -gt 0) {
+                        Write-SpectreHost "[dim]Estimated savings: ~`$$($rec.EstSavingsUSD)/mo[/]"
+                    }
+                    Write-SpectreHost ""
+                }
+                'project' {
+                    Write-SpectreHost "[bold]Column Reduction KQL[/] [dim](keeps only detection-relevant fields)[/]"
+                    Write-SpectreHost "[deepskyblue1]$(Get-SafeEscapedText $s.ProjectKql)[/]"
+                    Write-SpectreHost ""
+                }
+                'fields' {
+                    if ($s.RuleFields.Count -gt 0) {
+                        $ruleFieldStr = ($s.RuleFields | Select-Object -First 20) -join ', '
+                        Write-SpectreHost "[bold]Fields from analytics rules ($($s.RuleFields.Count)):[/]"
+                        Write-SpectreHost "  [white]$(Get-SafeEscapedText $ruleFieldStr)[/]"
+                        Write-SpectreHost ""
+                    }
 
-        if ($s.HighValueFields.Count -gt 0) {
-            $hvFieldStr = ($s.HighValueFields | Select-Object -First 20) -join ', '
-            Write-SpectreHost "[bold]Fields from knowledge base ($($s.HighValueFields.Count)):[/]"
-            Write-SpectreHost "  [white]$(Get-SafeEscapedText $hvFieldStr)[/]"
-            Write-SpectreHost ""
-        }
+                    if ($s.HighValueFields.Count -gt 0) {
+                        $hvFieldStr = ($s.HighValueFields | Select-Object -First 20) -join ', '
+                        Write-SpectreHost "[bold]Fields from knowledge base ($($s.HighValueFields.Count)):[/]"
+                        Write-SpectreHost "  [white]$(Get-SafeEscapedText $hvFieldStr)[/]"
+                        Write-SpectreHost ""
+                    }
 
-        Write-SpectreHost "[dim]Source: $($s.Source) | $($s.RuleCount) rule(s) | $($s.ConditionCount) condition(s) extracted[/]"
+                    if ($s.FallbackFields -and $s.FallbackFields.Count -gt 0) {
+                        $fbFieldStr = ($s.FallbackFields | Select-Object -First 20) -join ', '
+                        Write-SpectreHost "[bold]Fields from fallback ($($s.FallbackFields.Count)) [dim](source: $($s.FallbackSource))[/]:[/]"
+                        Write-SpectreHost "  [yellow]$(Get-SafeEscapedText $fbFieldStr)[/]"
+                        Write-SpectreHost ""
+                    }
+
+                    Write-SpectreHost "[dim]Source: $($s.Source) | $($s.RuleCount) rule(s) | $($s.ConditionCount) condition(s) extracted[/]"
+                    Write-SpectreHost ""
+                }
+                'back' { $kbContinue = $false }
+            }
+        }
     }
 }
 
@@ -1083,6 +1480,31 @@ function Write-DetectionAnalyzer {
         return
     }
 
+    # Coverage stats panel
+    $s = $Analysis.DetectionAnalyzer.Summary
+    if ($null -ne $s.TotalTables -and $s.TotalTables -gt 0) {
+        $barWidth = 30
+        $detFill   = [math]::Max([math]::Round(($s.DetectionCoveragePct / 100) * $barWidth), 0)
+        $huntFill  = [math]::Max([math]::Round(($s.HuntingCoveragePct / 100) * $barWidth), 0)
+        $combFill  = [math]::Max([math]::Round(($s.CombinedCoveragePct / 100) * $barWidth), 0)
+
+        $detBar  = "[deepskyblue1]$([string]::new([char]0x2588, $detFill))[/][dim]$([string]::new([char]0x2591, $barWidth - $detFill))[/]"
+        $huntBar = "[green]$([string]::new([char]0x2588, $huntFill))[/][dim]$([string]::new([char]0x2591, $barWidth - $huntFill))[/]"
+        $combBar = "[yellow]$([string]::new([char]0x2588, $combFill))[/][dim]$([string]::new([char]0x2591, $barWidth - $combFill))[/]"
+
+        $coverageLines = @(
+            "[bold]Ingestion Coverage[/] [dim]($($s.TotalTables) tables, $($s.TotalIngestionGB) GB/month)[/]"
+            ""
+            "  Detection (Analytics/CDR)  $detBar  [deepskyblue1]$($s.DetectionCoveragePct)%[/] [dim]($($s.TablesWithDetection)/$($s.TotalTables) tables)[/]"
+            "  Hunting Queries            $huntBar  [green]$($s.HuntingCoveragePct)%[/] [dim]($($s.TablesWithHunting)/$($s.TotalTables) tables)[/]"
+            "  Combined                   $combBar  [yellow]$($s.CombinedCoveragePct)%[/] [dim]($($s.TablesWithCombined)/$($s.TotalTables) tables)[/]"
+            ""
+            "  Avg detections per table:  [bold]$($s.AvgDetectionsPerTable)[/] [dim](analytics + CDR rules)[/]"
+        )
+        ($coverageLines -join "`n") | Format-SpectrePanel -Header "[dodgerblue2] DETECTION COVERAGE [/]" -Border Rounded -Color DodgerBlue2
+        Write-SpectreHost ""
+    }
+
     # Scored rules sorted by noisiness, then unscored (CDRs without incidents) at the end
     $scored = @($Analysis.DetectionAnalyzer.RuleMetrics | Where-Object { $null -ne $_.NoisinessScore } | Sort-Object NoisinessScore -Descending)
     $unscored = @($Analysis.DetectionAnalyzer.RuleMetrics | Where-Object { $null -eq $_.NoisinessScore })
@@ -1135,6 +1557,9 @@ function Write-DetectionAnalyzer {
         "  Each percentile ranks a rule relative to all analyzed rules (0-100)."
         "  [red]>= 70[/] = noisy   [yellow]>= 50[/] = watch   [green]< 50[/] = healthy"
         "  [dim]N/A[/] = no correlated incidents found (listing only)"
+        ""
+        "  [dim]A high score does not conclusively mean a detection is bad -- it is an[/]"
+        "  [dim]indicator that the rule may warrant closer review.[/]"
     )
     ($formulaLines -join "`n") | Format-SpectrePanel -Header "[dodgerblue2] SCORING FORMULA [/]" -Border Rounded -Color DodgerBlue2
     Write-SpectreHost ""

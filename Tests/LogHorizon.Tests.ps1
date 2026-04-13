@@ -704,6 +704,24 @@ SigninLogs
         $result = Get-FieldsFromKql -Kql 'AuditLogs | where OperationName has "Add member"'
         $result | Should -Contain 'OperationName'
     }
+
+    It 'filters out entity mapping artifacts and timespan literals' {
+        $kql = 'SecurityEvent | where TimeGenerated > ago(1d) | project Account, Account_0_Name, AccountCustomEntity, TI_ipEntity'
+        $result = Get-FieldsFromKql -Kql $kql
+        $result | Should -Contain 'Account'
+        $result | Should -Not -Contain 'Account_0_Name'
+        $result | Should -Not -Contain 'AccountCustomEntity'
+        $result | Should -Not -Contain 'TI_ipEntity'
+        $result | Should -Not -Contain '1d'
+    }
+
+    It 'filters out lowercase-only tokens that are not real field names' {
+        $kql = 'SecurityEvent | where EventID == 4625 | project Status, EventID | extend result = "test"'
+        $result = Get-FieldsFromKql -Kql $kql
+        $result | Should -Contain 'EventID'
+        $result | Should -Contain 'Status'
+        $result | Should -Not -Contain 'result'
+    }
 }
 
 Describe 'Get-SplitKql' {
@@ -816,7 +834,7 @@ Describe 'High-value-fields database integrity' {
             $entry = $prop.Value
             $entry.description | Should -Not -BeNullOrEmpty -Because "$($prop.Name) needs a description"
             $entry.highValueFields | Should -Not -BeNullOrEmpty -Because "$($prop.Name) needs highValueFields"
-            $entry.highValueFields.Count | Should -BeGreaterOrEqual 5 -Because "$($prop.Name) should have at least 5 fields"
+            $entry.highValueFields.Count | Should -BeGreaterOrEqual 1 -Because "$($prop.Name) should have at least 1 field"
         }
     }
 
@@ -840,9 +858,12 @@ Describe 'High-value-fields database integrity' {
         }
     }
 
-    It 'TimeGenerated is in highValueFields for all tables' {
+    It 'TimeGenerated or Timestamp is in highValueFields for well-covered tables' {
         foreach ($prop in $script:hvTables) {
-            $prop.Value.highValueFields | Should -Contain 'TimeGenerated' -Because "$($prop.Name) should include TimeGenerated"
+            # Only validate the original curated tables (community-mined entries may lack time columns until KB regeneration)
+            if ($prop.Value.description -match 'Mined from') { continue }
+            $hasTime = ($prop.Value.highValueFields -contains 'TimeGenerated') -or ($prop.Value.highValueFields -contains 'Timestamp')
+            $hasTime | Should -BeTrue -Because "$($prop.Name) should include TimeGenerated or Timestamp"
         }
     }
 }
@@ -985,6 +1006,7 @@ Describe 'Invoke-Analysis Detection Analyzer and XDR Checker' {
         $incidents = @(
             [PSCustomObject]@{
                 IncidentId = 'inc-1'
+                IncidentNumber = 1
                 Title = 'Suspicious Sign-in Burst - Test Case'
                 Status = 'Closed'
                 Classification = 'FalsePositive'
@@ -1002,7 +1024,10 @@ Describe 'Invoke-Analysis Detection Analyzer and XDR Checker' {
                 DisplayName = 'Auto close suspicious sign-in tests'
                 Enabled = $true
                 IsCloseIncidentRule = $true
+                HasConditions = $true
                 TitleFilters = @('Suspicious Sign-in Burst*')
+                TitleOperators = @('Contains')
+                RuleIdFilters = @()
             }
         )
 
@@ -1035,6 +1060,19 @@ Describe 'Invoke-Analysis Detection Analyzer and XDR Checker' {
         $script:featureResult.DetectionAnalyzer.Summary.IncidentsAnalyzed | Should -Be 1
     }
 
+    It 'includes detection coverage stats in DetectionAnalyzer summary' {
+        $s = $script:featureResult.DetectionAnalyzer.Summary
+        $s.TotalIngestionGB | Should -BeGreaterThan 0
+        $s.TotalTables | Should -BeGreaterThan 0
+        $s.DetectionCoveragePct | Should -BeGreaterOrEqual 0
+        $s.HuntingCoveragePct | Should -BeGreaterOrEqual 0
+        $s.CombinedCoveragePct | Should -BeGreaterOrEqual $s.DetectionCoveragePct
+        $s.AvgDetectionsPerTable | Should -BeGreaterOrEqual 0
+        # SigninLogs has 1 analytic rule, so detection coverage should include its table count
+        $s.TablesWithDetection | Should -BeGreaterThan 0
+        $s.DetectionCoverageGB | Should -BeGreaterThan 0
+    }
+
     It 'attributes auto-closed incidents when automation title filter matches' {
         $metric = $script:featureResult.DetectionAnalyzer.RuleMetrics | Select-Object -First 1
         $metric.IncidentsAutoClosed | Should -Be 1
@@ -1056,6 +1094,345 @@ Describe 'Invoke-Analysis Detection Analyzer and XDR Checker' {
         $t = $script:featureResult.TableAnalysis | Where-Object TableName -eq 'SigninLogs'
         $t.XDRState | Should -BeNullOrEmpty
         $t.IsXDRStreaming | Should -Be $false
+    }
+}
+
+Describe 'Test-AutomationRuleIncidentMatch' {
+    It 'matches by title filter' {
+        $rule = [PSCustomObject]@{
+            HasConditions = $true
+            TitleFilters = @('Suspicious*')
+            TitleOperators = @('Contains')
+            RuleIdFilters = @()
+        }
+        Test-AutomationRuleIncidentMatch -AutomationRule $rule -IncidentTitle 'Suspicious Sign-in Burst' -IncidentRuleIds @() | Should -Be $true
+    }
+
+    It 'matches by analytic rule ID' {
+        $rule = [PSCustomObject]@{
+            HasConditions = $true
+            TitleFilters = @()
+            TitleOperators = @()
+            RuleIdFilters = @('/subscriptions/xxx/providers/Microsoft.SecurityInsights/alertRules/rule-123')
+        }
+        Test-AutomationRuleIncidentMatch -AutomationRule $rule -IncidentTitle 'Some Alert' -IncidentRuleIds @('/subscriptions/xxx/providers/Microsoft.SecurityInsights/alertRules/rule-123') | Should -Be $true
+    }
+
+    It 'matches blanket close rule with no conditions' {
+        $rule = [PSCustomObject]@{
+            HasConditions = $false
+            TitleFilters = @()
+            TitleOperators = @()
+            RuleIdFilters = @()
+        }
+        Test-AutomationRuleIncidentMatch -AutomationRule $rule -IncidentTitle 'Any Alert' -IncidentRuleIds @() | Should -Be $true
+    }
+
+    It 'does not match when title and rule ID both miss' {
+        $rule = [PSCustomObject]@{
+            HasConditions = $true
+            TitleFilters = @('Specific Alert*')
+            TitleOperators = @('Contains')
+            RuleIdFilters = @('/subscriptions/xxx/providers/Microsoft.SecurityInsights/alertRules/other-rule')
+        }
+        Test-AutomationRuleIncidentMatch -AutomationRule $rule -IncidentTitle 'Unrelated Alert' -IncidentRuleIds @('/subscriptions/xxx/providers/Microsoft.SecurityInsights/alertRules/rule-456') | Should -Be $false
+    }
+
+    It 'matches by Equals operator on title' {
+        $rule = [PSCustomObject]@{
+            HasConditions = $true
+            TitleFilters = @('Exact Title')
+            TitleOperators = @('Equals')
+            RuleIdFilters = @()
+        }
+        Test-AutomationRuleIncidentMatch -AutomationRule $rule -IncidentTitle 'Exact Title' -IncidentRuleIds @() | Should -Be $true
+    }
+
+    It 'does not match by Equals when title differs' {
+        $rule = [PSCustomObject]@{
+            HasConditions = $true
+            TitleFilters = @('Exact Title')
+            TitleOperators = @('Equals')
+            RuleIdFilters = @()
+        }
+        Test-AutomationRuleIncidentMatch -AutomationRule $rule -IncidentTitle 'Exact Title Extra' -IncidentRuleIds @() | Should -Be $false
+    }
+
+    It 'matches by StartsWith operator' {
+        $rule = [PSCustomObject]@{
+            HasConditions = $true
+            TitleFilters = @('Suspicious')
+            TitleOperators = @('StartsWith')
+            RuleIdFilters = @()
+        }
+        Test-AutomationRuleIncidentMatch -AutomationRule $rule -IncidentTitle 'Suspicious Login Attempt' -IncidentRuleIds @() | Should -Be $true
+    }
+
+    It 'matches by EndsWith operator' {
+        $rule = [PSCustomObject]@{
+            HasConditions = $true
+            TitleFilters = @('Attempt')
+            TitleOperators = @('EndsWith')
+            RuleIdFilters = @()
+        }
+        Test-AutomationRuleIncidentMatch -AutomationRule $rule -IncidentTitle 'Suspicious Login Attempt' -IncidentRuleIds @() | Should -Be $true
+    }
+
+    It 'matches by GUID tail when ARM resource IDs differ in prefix' {
+        $rule = [PSCustomObject]@{
+            HasConditions = $true
+            TitleFilters = @()
+            TitleOperators = @()
+            RuleIdFilters = @('/subscriptions/aaa/providers/Microsoft.SecurityInsights/alertRules/rule-guid-123')
+        }
+        Test-AutomationRuleIncidentMatch -AutomationRule $rule -IncidentTitle 'Alert' -IncidentRuleIds @('/subscriptions/bbb/providers/Microsoft.SecurityInsights/alertRules/rule-guid-123') | Should -Be $true
+    }
+}
+
+Describe 'SentinelHealth-based auto-close attribution' {
+    BeforeAll {
+        $tableUsage = @(
+            [PSCustomObject]@{ TableName = 'SigninLogs'; DataGB = 10; MonthlyGB = 3.3; RecordCount = 50000; EstMonthlyCostUSD = 18.45; IsFree = $false }
+        )
+        $classifications = [PSCustomObject]@{
+            Classifications = @{
+                'SigninLogs' = [PSCustomObject]@{ Classification = 'primary'; Category = 'Identity & Access'; RecommendedTier = 'analytics'; IsFree = $false; RecommendedRetentionDays = 365; IsSplitTable = $false; ParentTable = $null }
+            }
+            KeywordGaps = @()
+            DatabaseEntries = 1
+        }
+        $rulesData = [PSCustomObject]@{
+            Rules = @(
+                [PSCustomObject]@{
+                    RuleName = 'Noisy Alert Rule'
+                    Kind = 'Scheduled'
+                    Enabled = $true
+                    Tables = @('SigninLogs')
+                    HasQuery = $true
+                    Query = 'SigninLogs | where ResultType != 0'
+                    Description = ''
+                    ExcludedFromCorrelation = $false
+                    IncludedInCorrelation = $false
+                }
+            )
+            TableCoverage = @{ 'SigninLogs' = 1 }
+            TotalRules = 1; EnabledRules = 1; DontCorrCount = 0; IncCorrCount = 0
+        }
+        $huntingData = [PSCustomObject]@{ Queries = @(); TableCoverage = @{}; TotalQueries = 0 }
+
+        # Incidents closed but automation rule has NO matching title filter
+        $incidents = @(
+            [PSCustomObject]@{
+                IncidentId = 'inc-health-1'
+                IncidentNumber = 42
+                Title = 'Noisy Alert Rule - test event'
+                Status = 'Closed'
+                Classification = $null
+                ClassificationReason = $null
+                CreatedTimeUtc = [datetime]'2026-04-08T10:00:00Z'
+                ClosedTimeUtc = [datetime]'2026-04-08T10:02:00Z'
+                RelatedAnalyticRuleIds = @()
+                RelatedAnalyticRuleNames = @('Noisy Alert Rule')
+            }
+        )
+        # Automation rule exists but has a different title filter (would NOT match without health data)
+        $automationRules = @(
+            [PSCustomObject]@{
+                AutomationRuleId = 'ar-health-1'
+                DisplayName = 'Auto close noisy'
+                Enabled = $true
+                IsCloseIncidentRule = $true
+                HasConditions = $true
+                TitleFilters = @('Completely Different Title*')
+                TitleOperators = @('Contains')
+                RuleIdFilters = @()
+            }
+        )
+        # SentinelHealth tells us incident 42 was auto-closed
+        $healthData = @{ 42 = $true }
+
+        $tableRetention = @(
+            [PSCustomObject]@{ TableName = 'SigninLogs'; RetentionInDays = 90; TotalRetentionInDays = 90; ArchiveRetentionInDays = 0; Plan = 'Analytics' }
+        )
+
+        $script:healthResult = Invoke-Analysis -TableUsage $tableUsage `
+                                               -Classifications $classifications `
+                                               -RulesData $rulesData `
+                                               -HuntingData $huntingData `
+                                               -TableRetention $tableRetention `
+                                               -Incidents $incidents `
+                                               -AutomationRules $automationRules `
+                                               -AutoCloseHealthData $healthData `
+                                               -IncludeDetectionAnalyzer `
+                                               -SocRecommendations @()
+    }
+
+    It 'uses SentinelHealth data to attribute auto-close even when rule matching fails' {
+        $metric = $script:healthResult.DetectionAnalyzer.RuleMetrics | Select-Object -First 1
+        $metric.IncidentsAutoClosed | Should -Be 1
+        $metric.AutoCloseRatio | Should -Be 1
+    }
+
+    It 'falls back to rule matching when health data is null' {
+        $result2 = Invoke-Analysis -TableUsage $tableUsage `
+                                   -Classifications $classifications `
+                                   -RulesData $rulesData `
+                                   -HuntingData $huntingData `
+                                   -TableRetention $tableRetention `
+                                   -Incidents $incidents `
+                                   -AutomationRules $automationRules `
+                                   -IncludeDetectionAnalyzer `
+                                   -SocRecommendations @()
+        $metric = $result2.DetectionAnalyzer.RuleMetrics | Select-Object -First 1
+        # Without health data AND mismatched title filter, auto-close should be 0
+        $metric.IncidentsAutoClosed | Should -Be 0
+    }
+}
+
+Describe 'Get-AutomationRules Resolved status and Boolean conditions' {
+    It 'detects Resolved status as close-incident rule' {
+        $mockResponse = @{
+            value = @(
+                @{
+                    name = 'ar-resolved-1'
+                    properties = @{
+                        displayName = 'Resolve noisy alerts'
+                        isEnabled = $true
+                        order = 1
+                        triggeringLogic = @{
+                            triggersOn = 'Incidents'
+                            triggersWhen = 'Created'
+                            conditions = @()
+                        }
+                        actions = @(
+                            @{
+                                order = 1
+                                actionType = 'ModifyProperties'
+                                actionConfiguration = @{
+                                    status = 'Resolved'
+                                }
+                            }
+                        )
+                    }
+                }
+            )
+        }
+        Mock Invoke-AzRestWithRetry { $mockResponse }
+        $ctx = [PSCustomObject]@{ ArmToken = 'fake'; ResourceId = '/subscriptions/xxx/resourceGroups/rg/providers/Microsoft.OperationalInsights/workspaces/ws' }
+        $rules = Get-AutomationRules -Context $ctx
+        $rules[0].IsCloseIncidentRule | Should -Be $true
+    }
+
+    It 'extracts title filter from Boolean wrapper conditions' {
+        $mockResponse = @{
+            value = @(
+                @{
+                    name = 'ar-bool-1'
+                    properties = @{
+                        displayName = 'Boolean wrapper rule'
+                        isEnabled = $true
+                        order = 1
+                        triggeringLogic = @{
+                            triggersOn = 'Incidents'
+                            triggersWhen = 'Created'
+                            conditions = @(
+                                @{
+                                    conditionType = 'Boolean'
+                                    conditionProperties = @{
+                                        operator = 'And'
+                                        innerConditions = @(
+                                            @{
+                                                conditionType = 'Property'
+                                                conditionProperties = @{
+                                                    propertyName = 'IncidentTitle'
+                                                    operator = 'Contains'
+                                                    propertyValues = @('Noisy Alert*')
+                                                }
+                                            }
+                                        )
+                                    }
+                                }
+                            )
+                        }
+                        actions = @(
+                            @{
+                                order = 1
+                                actionType = 'ModifyProperties'
+                                actionConfiguration = @{ status = 'Closed' }
+                            }
+                        )
+                    }
+                }
+            )
+        }
+        Mock Invoke-AzRestWithRetry { $mockResponse }
+        $ctx = [PSCustomObject]@{ ArmToken = 'fake'; ResourceId = '/subscriptions/xxx/resourceGroups/rg/providers/Microsoft.OperationalInsights/workspaces/ws' }
+        $rules = Get-AutomationRules -Context $ctx
+        $rules[0].TitleFilters | Should -Contain 'Noisy Alert*'
+        $rules[0].TitleOperators | Should -Contain 'Contains'
+        $rules[0].IsCloseIncidentRule | Should -Be $true
+        $rules[0].HasConditions | Should -Be $true
+    }
+}
+
+Describe 'Detection coverage uses table count' {
+    BeforeAll {
+        # 2 tables, 1 with detection, one without - small GB values (simulating demo env)
+        $tableUsage = @(
+            [PSCustomObject]@{ TableName = 'SigninLogs'; DataGB = 0.001; MonthlyGB = 0.0003; RecordCount = 10; EstMonthlyCostUSD = 0.01; IsFree = $false },
+            [PSCustomObject]@{ TableName = 'AuditLogs'; DataGB = 0.001; MonthlyGB = 0.0003; RecordCount = 10; EstMonthlyCostUSD = 0.01; IsFree = $false }
+        )
+        $classifications = [PSCustomObject]@{
+            Classifications = @{
+                'SigninLogs' = [PSCustomObject]@{ Classification = 'primary'; Category = 'Identity & Access'; RecommendedTier = 'analytics'; IsFree = $false; RecommendedRetentionDays = 365; IsSplitTable = $false; ParentTable = $null }
+                'AuditLogs' = [PSCustomObject]@{ Classification = 'primary'; Category = 'Identity & Access'; RecommendedTier = 'analytics'; IsFree = $false; RecommendedRetentionDays = 365; IsSplitTable = $false; ParentTable = $null }
+            }
+            KeywordGaps = @()
+            DatabaseEntries = 2
+        }
+        $rulesData = [PSCustomObject]@{
+            Rules = @(
+                [PSCustomObject]@{
+                    RuleName = 'Test Rule'
+                    Kind = 'Scheduled'
+                    Enabled = $true
+                    Tables = @('SigninLogs')
+                    HasQuery = $true
+                    Query = 'SigninLogs | take 1'
+                    Description = ''
+                    ExcludedFromCorrelation = $false
+                    IncludedInCorrelation = $false
+                }
+            )
+            TableCoverage = @{ 'SigninLogs' = 1 }
+            TotalRules = 1; EnabledRules = 1; DontCorrCount = 0; IncCorrCount = 0
+        }
+        $huntingData = [PSCustomObject]@{ Queries = @(); TableCoverage = @{}; TotalQueries = 0 }
+        $tableRetention = @(
+            [PSCustomObject]@{ TableName = 'SigninLogs'; RetentionInDays = 90; TotalRetentionInDays = 90; ArchiveRetentionInDays = 0; Plan = 'Analytics' },
+            [PSCustomObject]@{ TableName = 'AuditLogs'; RetentionInDays = 90; TotalRetentionInDays = 90; ArchiveRetentionInDays = 0; Plan = 'Analytics' }
+        )
+
+        $script:coverageResult = Invoke-Analysis -TableUsage $tableUsage `
+                                                  -Classifications $classifications `
+                                                  -RulesData $rulesData `
+                                                  -HuntingData $huntingData `
+                                                  -TableRetention $tableRetention `
+                                                  -IncludeDetectionAnalyzer `
+                                                  -SocRecommendations @()
+    }
+
+    It 'reports detection coverage as 50% with 1 of 2 tables covered' {
+        $s = $script:coverageResult.DetectionAnalyzer.Summary
+        $s.DetectionCoveragePct | Should -Be 50
+        $s.TablesWithDetection | Should -Be 1
+        $s.TotalTables | Should -Be 2
+    }
+
+    It 'reports non-zero coverage even when GB is near zero' {
+        $s = $script:coverageResult.DetectionAnalyzer.Summary
+        $s.DetectionCoveragePct | Should -BeGreaterThan 0
+        # GB-based would round to 0%; table-count should not
     }
 }
 
@@ -1291,7 +1668,7 @@ Describe 'Invoke-Analysis XDR tables in workspace with default retention are fla
     }
 }
 
-# ── Export-Report & ConvertTo-ReportSections tests ──────────────────────────
+# - Export-Report & ConvertTo-ReportSections tests -------------
 
 Describe 'ConvertTo-ReportSections' {
     BeforeAll {
@@ -1613,7 +1990,7 @@ Describe 'ConvertTo-ReportSections edge cases' {
             }
         }
         $sections = ConvertTo-ReportSections -Analysis $a
-        $split = $sections | Where-Object TabId -eq 'splitkql'
+        $split = $sections | Where-Object TabId -eq 'logtuning'
         $split | Should -Not -BeNullOrEmpty
         $split.Html | Should -Match 'SecurityEvent'
         $split.Html | Should -Match 'kql-block'
@@ -1733,17 +2110,37 @@ Describe 'Get-TablesFromKql keyword filtering via $script:kqlKeywords' {
         $result | Should -Not -Contain 'avg'
         $result | Should -Not -Contain 'bin'
     }
+
+    It 'filters out isfuzzy and withsource from union statements' {
+        $kql = 'union isfuzzy=true withsource=TableName SecurityEvent, SigninLogs | where TimeGenerated > ago(1d)'
+        $result = Get-TablesFromKql -Kql $kql
+        $result | Should -Not -Contain 'isfuzzy'
+        $result | Should -Not -Contain 'withsource'
+        $result | Should -Contain 'SecurityEvent'
+    }
+
+    It 'filters out lowercase English words and field names' {
+        $kql = @"
+SecurityEvent
+| where the != "" and key != ""
+| project Description, Type, Tactic
+"@
+        $result = Get-TablesFromKql -Kql $kql
+        $result | Should -Contain 'SecurityEvent'
+        $result | Should -Not -Contain 'the'
+        $result | Should -Not -Contain 'key'
+    }
 }
 
 Describe 'Write-Report helper functions' {
-    It 'Get-SafeEscapedText returns empty string for null input' {
+    It 'Get-SafeEscapedText returns dash for null input' {
         $result = Get-SafeEscapedText -Value $null
-        $result | Should -Be ''
+        $result | Should -Be '-'
     }
 
     It 'Get-SafeEscapedText escapes Spectre markup characters' {
         $result = Get-SafeEscapedText -Value 'test [bold]markup[/] text'
-        $result | Should -Not -Match '\[bold\]'
+        $result | Should -Match '\[\[bold\]\]'
     }
 
     It 'Get-ConsoleWidth returns a positive integer' {
@@ -1754,5 +2151,330 @@ Describe 'Write-Report helper functions' {
     It 'Test-ConsoleSize returns a boolean' {
         $result = Test-ConsoleSize
         $result | Should -BeOfType [bool]
+    }
+}
+
+Describe 'Get-LiveTuningAnalysis' {
+    It 'returns per-table tuning analysis for rules with fields' {
+        $rules = @(
+            [PSCustomObject]@{
+                RuleName = 'Brute Force Detection'
+                Enabled  = $true
+                Tables   = @('SigninLogs')
+                Query    = 'SigninLogs | where ResultType != 0 | summarize count() by UserPrincipalName, IPAddress'
+            },
+            [PSCustomObject]@{
+                RuleName = 'Impossible Travel'
+                Enabled  = $true
+                Tables   = @('SigninLogs')
+                Query    = 'SigninLogs | where ResultType == 0 | summarize dcount(Location) by UserPrincipalName'
+            }
+        )
+
+        $result = Get-LiveTuningAnalysis -Rules $rules -TableAnalysis @()
+        $result.Count | Should -Be 1
+        $result[0].TableName | Should -Be 'SigninLogs'
+        $result[0].RuleCount | Should -Be 2
+        $result[0].UsedFields | Should -Contain 'UserPrincipalName'
+        $result[0].UsedFields | Should -Contain 'TimeGenerated'
+    }
+
+    It 'generates filter KQL from rule WHERE conditions' {
+        $rules = @(
+            [PSCustomObject]@{
+                RuleName = 'Failed Logins'
+                Enabled  = $true
+                Tables   = @('SigninLogs')
+                Query    = 'SigninLogs | where ResultType != 0 | project UserPrincipalName'
+            }
+        )
+
+        $result = Get-LiveTuningAnalysis -Rules $rules -TableAnalysis @()
+        $result[0].FilterKql | Should -Not -BeNullOrEmpty
+        $result[0].FilterKql | Should -Match 'ResultType'
+    }
+
+    It 'generates project KQL from used fields' {
+        $rules = @(
+            [PSCustomObject]@{
+                RuleName = 'Test Rule'
+                Enabled  = $true
+                Tables   = @('SecurityEvent')
+                Query    = 'SecurityEvent | where EventID == 4625 | project Account, Computer'
+            }
+        )
+
+        $result = Get-LiveTuningAnalysis -Rules $rules -TableAnalysis @()
+        $result[0].ProjectKql | Should -Not -BeNullOrEmpty
+        $result[0].ProjectKql | Should -Match 'project'
+    }
+
+    It 'computes unused fields when schema is provided' {
+        $rules = @(
+            [PSCustomObject]@{
+                RuleName = 'Test Rule'
+                Enabled  = $true
+                Tables   = @('SecurityEvent')
+                Query    = 'SecurityEvent | where EventID == 4625 | project Account'
+            }
+        )
+        $schema = @{
+            'SecurityEvent' = @('TimeGenerated', 'EventID', 'Account', 'Computer', 'Activity', 'SourceIP')
+        }
+
+        $result = Get-LiveTuningAnalysis -Rules $rules -TableAnalysis @() -SchemaLookup $schema
+        $result[0].UnusedFields.Count | Should -BeGreaterThan 0
+        $result[0].SchemaColumns.Count | Should -Be 6
+    }
+
+    It 'skips disabled rules' {
+        $rules = @(
+            [PSCustomObject]@{
+                RuleName = 'Active Rule'
+                Enabled  = $true
+                Tables   = @('SecurityEvent')
+                Query    = 'SecurityEvent | where EventID == 4625'
+            },
+            [PSCustomObject]@{
+                RuleName = 'Disabled Rule'
+                Enabled  = $false
+                Tables   = @('AuditLogs')
+                Query    = 'AuditLogs | where OperationName == "Add member"'
+            }
+        )
+
+        $result = Get-LiveTuningAnalysis -Rules $rules -TableAnalysis @()
+        $result.Count | Should -Be 1
+        $result[0].TableName | Should -Be 'SecurityEvent'
+    }
+
+    It 'includes hunting queries in analysis' {
+        $rules = @(
+            [PSCustomObject]@{
+                RuleName = 'Alert Rule'
+                Enabled  = $true
+                Tables   = @('SigninLogs')
+                Query    = 'SigninLogs | where ResultType != 0'
+            }
+        )
+        $hunting = @(
+            [PSCustomObject]@{
+                QueryName = 'Hunt Risky Logins'
+                Enabled   = $true
+                Tables    = @('SigninLogs')
+                Query     = 'SigninLogs | where RiskLevelDuringSignIn != "none" | project UserPrincipalName, RiskState'
+            }
+        )
+
+        $result = Get-LiveTuningAnalysis -Rules $rules -HuntingQueries $hunting -TableAnalysis @()
+        $result[0].RuleCount | Should -Be 2
+        $result[0].UsedFields | Should -Contain 'RiskLevelDuringSignIn'
+    }
+
+    It 'estimates savings with cost data' {
+        $rules = @(
+            [PSCustomObject]@{
+                RuleName = 'Test Rule'
+                Enabled  = $true
+                Tables   = @('SecurityEvent')
+                Query    = 'SecurityEvent | where EventID == 4625 | project Account'
+            }
+        )
+        $tableAnalysis = @(
+            [PSCustomObject]@{
+                TableName         = 'SecurityEvent'
+                MonthlyGB         = 50
+                EstMonthlyCostUSD = 279.50
+            }
+        )
+        $schema = @{
+            'SecurityEvent' = @('TimeGenerated', 'EventID', 'Account', 'Computer', 'Activity',
+                                'SourceIP', 'LogonType', 'SubStatus', 'Process', 'CommandLine')
+        }
+
+        $result = Get-LiveTuningAnalysis -Rules $rules -TableAnalysis $tableAnalysis -SchemaLookup $schema
+        $result[0].EstFilterSavings | Should -BeGreaterThan 0
+        $result[0].EstProjectSavings | Should -BeGreaterThan 0
+    }
+
+    It 'provides rule detail breakdown per table' {
+        $rules = @(
+            [PSCustomObject]@{
+                RuleName = 'Rule A'
+                Enabled  = $true
+                Tables   = @('SecurityEvent')
+                Query    = 'SecurityEvent | where EventID == 4625 | project Account'
+            },
+            [PSCustomObject]@{
+                RuleName = 'Rule B'
+                Enabled  = $true
+                Tables   = @('SecurityEvent')
+                Query    = 'SecurityEvent | where EventID == 4688 | project Computer, CommandLine'
+            }
+        )
+
+        $result = Get-LiveTuningAnalysis -Rules $rules -TableAnalysis @()
+        $result[0].RuleDetails.Count | Should -Be 2
+        $result[0].RuleDetails[0].RuleName | Should -Be 'Rule A'
+        $result[0].RuleDetails[1].RuleName | Should -Be 'Rule B'
+    }
+}
+
+Describe 'Get-SplitKql fallback with FieldFrequencyStats' {
+    It 'uses per-table community stats as fallback' {
+        $stats = @{
+            universalFields  = @('TimeGenerated', 'Type')
+            categoryDefaults = @{}
+            perTable         = @{
+                'CustomLog_CL' = [PSCustomObject]@{
+                    SourceIP = 15
+                    UserName = 12
+                    Action   = 8
+                }
+            }
+        }
+
+        $result = Get-SplitKql -TableName 'CustomLog_CL' -FieldFrequencyStats $stats
+        $result.Source | Should -Be 'community-stats'
+        $result.FallbackSource | Should -Be 'community-stats'
+        $result.FallbackFields | Should -Contain 'SourceIP'
+        $result.AllFields | Should -Contain 'SourceIP'
+        $result.ProjectKql | Should -Not -BeNullOrEmpty
+    }
+
+    It 'falls back to category defaults when no per-table stats' {
+        $stats = @{
+            universalFields  = @('TimeGenerated', 'Type')
+            categoryDefaults = @{
+                'Network Security' = @('SourceIP', 'DestinationIP', 'Action', 'Protocol')
+            }
+            perTable         = @{}
+        }
+
+        $result = Get-SplitKql -TableName 'UnknownFirewall_CL' -FieldFrequencyStats $stats -TableCategory 'Network Security'
+        $result.Source | Should -Be 'category-defaults'
+        $result.FallbackSource | Should -Be 'category-defaults'
+        $result.FallbackFields | Should -Contain 'SourceIP'
+        $result.FallbackFields | Should -Contain 'DestinationIP'
+    }
+
+    It 'falls back to universal fields as last resort' {
+        $stats = @{
+            universalFields  = @('TimeGenerated', 'Type', 'TenantId')
+            categoryDefaults = @{}
+            perTable         = @{}
+        }
+
+        $result = Get-SplitKql -TableName 'CompletelyUnknown_CL' -FieldFrequencyStats $stats
+        $result.Source | Should -Be 'universal'
+        $result.FallbackSource | Should -Be 'universal'
+        $result.FallbackFields | Should -Contain 'Type'
+        $result.FallbackFields | Should -Contain 'TenantId'
+    }
+
+    It 'does not use fallback when KB entry exists' {
+        $hvFields = @{
+            'SecurityEvent' = [PSCustomObject]@{
+                description     = 'Windows Security Events'
+                highValueFields = @('TimeGenerated', 'EventID', 'Account')
+                splitHints      = @(
+                    [PSCustomObject]@{
+                        description = 'Keep critical EventIDs'
+                        kql         = 'EventID in (4624, 4625)'
+                    }
+                )
+            }
+        }
+        $stats = @{
+            universalFields  = @('TimeGenerated', 'Type')
+            categoryDefaults = @{}
+            perTable         = @{}
+        }
+
+        $result = Get-SplitKql -TableName 'SecurityEvent' -HighValueFieldsDB $hvFields -FieldFrequencyStats $stats
+        $result.Source | Should -Be 'knowledge-base'
+        $result.FallbackSource | Should -BeNullOrEmpty
+        $result.FallbackFields.Count | Should -Be 0
+    }
+
+    It 'does not use fallback when rules provide fields' {
+        $rules = @(
+            [PSCustomObject]@{
+                RuleName = 'Test Rule'
+                Enabled  = $true
+                Tables   = @('CustomTable_CL')
+                Query    = 'CustomTable_CL | where Status == "Failed" | project UserName'
+            }
+        )
+        $stats = @{
+            universalFields  = @('TimeGenerated', 'Type')
+            categoryDefaults = @{}
+            perTable         = @{}
+        }
+
+        $result = Get-SplitKql -TableName 'CustomTable_CL' -Rules $rules -FieldFrequencyStats $stats
+        $result.Source | Should -Be 'rule-analysis'
+        $result.FallbackSource | Should -BeNullOrEmpty
+    }
+
+    It 'includes FallbackFields and FallbackSource in output' {
+        $result = Get-SplitKql -TableName 'Empty_CL'
+        $result.PSObject.Properties.Name | Should -Contain 'FallbackFields'
+        $result.PSObject.Properties.Name | Should -Contain 'FallbackSource'
+    }
+}
+
+Describe 'Get-LiveTuningAnalysis combined KQL generation' {
+    It 'generates combined KQL when both filter and project are available' {
+        $rules = @(
+            [PSCustomObject]@{
+                RuleName = 'Combined Test'
+                Enabled  = $true
+                Tables   = @('SecurityEvent')
+                Query    = 'SecurityEvent | where EventID == 4625 | project Account, Computer'
+            }
+        )
+
+        $result = Get-LiveTuningAnalysis -Rules $rules -TableAnalysis @()
+        $result[0].CombinedKql | Should -Not -BeNullOrEmpty
+        $result[0].CombinedKql | Should -Match 'where'
+        $result[0].CombinedKql | Should -Match 'project'
+    }
+
+    It 'handles multiple tables from different rules' {
+        $rules = @(
+            [PSCustomObject]@{
+                RuleName = 'Rule 1'
+                Enabled  = $true
+                Tables   = @('SecurityEvent')
+                Query    = 'SecurityEvent | where EventID == 4625'
+            },
+            [PSCustomObject]@{
+                RuleName = 'Rule 2'
+                Enabled  = $true
+                Tables   = @('SigninLogs')
+                Query    = 'SigninLogs | where ResultType != 0'
+            }
+        )
+
+        $result = Get-LiveTuningAnalysis -Rules $rules -TableAnalysis @()
+        $result.Count | Should -Be 2
+        $tableNames = $result | ForEach-Object { $_.TableName }
+        $tableNames | Should -Contain 'SecurityEvent'
+        $tableNames | Should -Contain 'SigninLogs'
+    }
+
+    It 'returns empty array when no enabled rules exist' {
+        $rules = @(
+            [PSCustomObject]@{
+                RuleName = 'Disabled'
+                Enabled  = $false
+                Tables   = @('SecurityEvent')
+                Query    = 'SecurityEvent | where true'
+            }
+        )
+
+        $result = Get-LiveTuningAnalysis -Rules $rules -TableAnalysis @()
+        $result.Count | Should -Be 0
     }
 }

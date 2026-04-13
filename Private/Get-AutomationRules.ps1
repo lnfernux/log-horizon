@@ -35,28 +35,67 @@ function Get-AutomationRules {
         $actions = @($props.actions)
         $conditions = @($props.triggeringLogic.conditions)
 
+        # Detect close action: check for Closed or Resolved status
         $closeAction = $actions | Where-Object {
             $_.actionType -eq 'ModifyProperties' -and
             $_.order -ge 0 -and
             $_.actionConfiguration -and
-            $_.actionConfiguration.status -eq 'Closed'
+            ($_.actionConfiguration.status -eq 'Closed' -or $_.actionConfiguration.status -eq 'Resolved')
         }
 
         $titleFilters = [System.Collections.Generic.List[string]]::new()
-        foreach ($cond in $conditions) {
-            if ($cond.conditionType -ne 'Property') { continue }
-            $propertyName = "$($cond.conditionProperties.propertyName)"
-            if ($propertyName -notmatch 'Title') { continue }
+        $titleOperators = [System.Collections.Generic.List[string]]::new()
+        $ruleIdFilters = [System.Collections.Generic.List[string]]::new()
+        $hasConditions = $conditions.Count -gt 0
 
-            $value = $cond.conditionProperties.propertyValues
-            if ($value -is [System.Array]) {
-                foreach ($item in $value) {
-                    if (-not [string]::IsNullOrWhiteSpace("$item")) {
-                        [void]$titleFilters.Add("$item")
-                    }
+        # Recursively extract Property conditions (handles Boolean wrappers)
+        $propertyConditions = [System.Collections.Generic.List[object]]::new()
+        $condStack = [System.Collections.Generic.Stack[object]]::new()
+        foreach ($c in $conditions) { $condStack.Push($c) }
+        while ($condStack.Count -gt 0) {
+            $cond = $condStack.Pop()
+            $condType = "$($cond.conditionType)"
+            if ($condType -eq 'Property') {
+                [void]$propertyConditions.Add($cond)
+            } elseif ($condType -eq 'Boolean' -and $cond.conditionProperties.innerConditions) {
+                foreach ($inner in $cond.conditionProperties.innerConditions) {
+                    $condStack.Push($inner)
                 }
-            } elseif (-not [string]::IsNullOrWhiteSpace("$value")) {
-                [void]$titleFilters.Add("$value")
+            }
+        }
+
+        foreach ($cond in $propertyConditions) {
+            $propertyName = "$($cond.conditionProperties.propertyName)"
+            $operator = "$($cond.conditionProperties.operator)"
+
+            # Title conditions
+            if ($propertyName -match 'Title') {
+                $value = $cond.conditionProperties.propertyValues
+                if ($value -is [System.Array]) {
+                    foreach ($item in $value) {
+                        if (-not [string]::IsNullOrWhiteSpace("$item")) {
+                            [void]$titleFilters.Add("$item")
+                            [void]$titleOperators.Add($operator)
+                        }
+                    }
+                } elseif (-not [string]::IsNullOrWhiteSpace("$value")) {
+                    [void]$titleFilters.Add("$value")
+                    [void]$titleOperators.Add($operator)
+                }
+            }
+
+            # Analytic rule ID conditions
+            if ($propertyName -match 'AnalyticRuleIds') {
+                $value = $cond.conditionProperties.propertyValues
+                if ($value -is [System.Array]) {
+                    foreach ($item in $value) {
+                        if (-not [string]::IsNullOrWhiteSpace("$item")) {
+                            [void]$ruleIdFilters.Add("$item")
+                        }
+                    }
+                } elseif (-not [string]::IsNullOrWhiteSpace("$value")) {
+                    [void]$ruleIdFilters.Add("$value")
+                }
             }
         }
 
@@ -68,7 +107,10 @@ function Get-AutomationRules {
             TriggersOn            = $props.triggeringLogic.triggersOn
             TriggersWhen          = $props.triggeringLogic.triggersWhen
             IsCloseIncidentRule   = $null -ne $closeAction
+            HasConditions         = $hasConditions
             TitleFilters          = @($titleFilters | Select-Object -Unique)
+            TitleOperators        = @($titleOperators)
+            RuleIdFilters         = @($ruleIdFilters | Select-Object -Unique)
             Conditions            = $conditions
             Actions               = $actions
             Raw                   = $rule

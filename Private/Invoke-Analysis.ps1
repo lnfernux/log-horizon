@@ -19,8 +19,10 @@ function Invoke-Analysis {
         [decimal]$PricePerGB = 5.59,
         [PSCustomObject]$DataTransforms,
         [hashtable]$HighValueFields,
+        [hashtable]$FieldFrequencyStats = @{},
         [array]$Incidents = @(),
         [array]$AutomationRules = @(),
+        [hashtable]$AutoCloseHealthData,
         [switch]$IncludeDetectionAnalyzer
     )
 
@@ -112,9 +114,14 @@ function Invoke-Analysis {
         $isSplitTable = if ($cls) { [bool]$cls.IsSplitTable } else { $false }
         $parentTable = if ($cls) { $cls.ParentTable } else { $null }
 
+        # Schema columns from retention data
+        $schemaColumns = if ($ret -and $ret.Columns) { @($ret.Columns) } else { @() }
+
         $splitSuggestion = Get-SplitKql -TableName $name `
                                         -Rules $RulesData.Rules `
-                                        -HighValueFieldsDB $HighValueFields
+                                        -HighValueFieldsDB $HighValueFields `
+                                        -FieldFrequencyStats $FieldFrequencyStats `
+                                        -TableCategory $(if ($cls) { $cls.Category } else { $null })
 
         [PSCustomObject]@{
             TableName                    = $name
@@ -147,6 +154,7 @@ function Invoke-Analysis {
             TransformKql                 = $transformKql
             IsSplitTable                 = $isSplitTable
             ParentTable                  = $parentTable
+            SchemaColumns                = $schemaColumns
             SplitSuggestion              = $splitSuggestion
         }
     }
@@ -156,7 +164,8 @@ function Invoke-Analysis {
         Get-DetectionAnalyzerData -Rules $RulesData.Rules `
                                   -Incidents $Incidents `
                                   -AutomationRules $AutomationRules `
-                                  -CustomDetectionRules $cdrRules
+                                  -CustomDetectionRules $cdrRules `
+                                  -AutoCloseHealthData $AutoCloseHealthData
     }
     else {
         $null
@@ -345,6 +354,20 @@ function Invoke-Analysis {
 
     $sortedRecs = $recommendations | Sort-Object EstSavingsUSD -Descending
 
+    # Build schema lookup for live tuning analysis
+    $schemaLookup = @{}
+    foreach ($t in $tableAnalysis) {
+        if ($t.SchemaColumns -and $t.SchemaColumns.Count -gt 0) {
+            $schemaLookup[$t.TableName] = $t.SchemaColumns
+        }
+    }
+
+    # Live tuning analysis (deployed rules + schema)
+    $liveTuningAnalysis = Get-LiveTuningAnalysis -Rules $RulesData.Rules `
+                                                  -HuntingQueries $HuntingData.Queries `
+                                                  -TableAnalysis $tableAnalysis `
+                                                  -SchemaLookup $schemaLookup
+
     # Summary stats
     $primaryTables   = @($tableAnalysis | Where-Object Classification -eq 'primary')
     $secondaryTables = @($tableAnalysis | Where-Object Classification -eq 'secondary')
@@ -369,16 +392,56 @@ function Invoke-Analysis {
     $splitTables          = @($tableAnalysis | Where-Object { $_.IsSplitTable }).Count
     $transformDCRCount    = if ($DataTransforms) { $DataTransforms.RelevantDCRs.Count } else { 0 }
 
+    # Detection coverage stats (table-count-based, all tables including free)
+    $allTables         = @($tableAnalysis)
+    $totalTableCount   = $allTables.Count
+    $nonFreeTables     = @($tableAnalysis | Where-Object { -not $_.IsFree })
+    $totalNonFreeGB    = ($nonFreeTables | Measure-Object MonthlyGB -Sum).Sum
+    if ($totalNonFreeGB -le 0) { $totalNonFreeGB = 0 }
+
+    $tablesWithDetection = @($allTables | Where-Object { ($_.AnalyticsRules + $_.XDRRules) -gt 0 })
+    $tablesWithHunting   = @($allTables | Where-Object { $_.HuntingQueries -gt 0 })
+    $tablesWithCombined  = @($allTables | Where-Object { $_.EffectiveCoverage -gt 0 })
+
+    $detectionCoveredGB = ($tablesWithDetection | Measure-Object MonthlyGB -Sum).Sum
+    $huntingCoveredGB   = ($tablesWithHunting | Measure-Object MonthlyGB -Sum).Sum
+    $combinedCoveredGB  = ($tablesWithCombined | Measure-Object MonthlyGB -Sum).Sum
+
+    $detectionCoveragePct = if ($totalTableCount -gt 0) { [math]::Round(($tablesWithDetection.Count / $totalTableCount) * 100, 1) } else { 0 }
+    $huntingCoveragePct   = if ($totalTableCount -gt 0) { [math]::Round(($tablesWithHunting.Count / $totalTableCount) * 100, 1) } else { 0 }
+    $combinedCoveragePct  = if ($totalTableCount -gt 0) { [math]::Round(($tablesWithCombined.Count / $totalTableCount) * 100, 1) } else { 0 }
+
+    $avgDetectionsPerTable = if ($tablesWithDetection.Count -gt 0) {
+        [math]::Round((($tablesWithDetection | ForEach-Object { $_.AnalyticsRules + $_.XDRRules } | Measure-Object -Sum).Sum / $tablesWithDetection.Count), 1)
+    } else { 0 }
+
+    # Enrich DetectionAnalyzer Summary with coverage stats
+    if ($detectionAnalyzer) {
+        Add-Member -InputObject $detectionAnalyzer.Summary -NotePropertyName DetectionCoverageGB -NotePropertyValue ([math]::Round($detectionCoveredGB, 2))
+        Add-Member -InputObject $detectionAnalyzer.Summary -NotePropertyName HuntingCoverageGB -NotePropertyValue ([math]::Round($huntingCoveredGB, 2))
+        Add-Member -InputObject $detectionAnalyzer.Summary -NotePropertyName CombinedCoverageGB -NotePropertyValue ([math]::Round($combinedCoveredGB, 2))
+        Add-Member -InputObject $detectionAnalyzer.Summary -NotePropertyName TotalIngestionGB -NotePropertyValue ([math]::Round($totalNonFreeGB, 2))
+        Add-Member -InputObject $detectionAnalyzer.Summary -NotePropertyName DetectionCoveragePct -NotePropertyValue $detectionCoveragePct
+        Add-Member -InputObject $detectionAnalyzer.Summary -NotePropertyName HuntingCoveragePct -NotePropertyValue $huntingCoveragePct
+        Add-Member -InputObject $detectionAnalyzer.Summary -NotePropertyName CombinedCoveragePct -NotePropertyValue $combinedCoveragePct
+        Add-Member -InputObject $detectionAnalyzer.Summary -NotePropertyName AvgDetectionsPerTable -NotePropertyValue $avgDetectionsPerTable
+        Add-Member -InputObject $detectionAnalyzer.Summary -NotePropertyName TablesWithDetection -NotePropertyValue $tablesWithDetection.Count
+        Add-Member -InputObject $detectionAnalyzer.Summary -NotePropertyName TablesWithHunting -NotePropertyValue $tablesWithHunting.Count
+        Add-Member -InputObject $detectionAnalyzer.Summary -NotePropertyName TablesWithCombined -NotePropertyValue $tablesWithCombined.Count
+        Add-Member -InputObject $detectionAnalyzer.Summary -NotePropertyName TotalTables -NotePropertyValue $totalTableCount
+    }
+
     [PSCustomObject]@{
-        TableAnalysis       = $tableAnalysis
-        Recommendations     = @($sortedRecs)
-        KeywordGaps         = $Classifications.KeywordGaps
-        SocRecommendations  = $SocRecommendations
-        CorrelationExcluded = $corrExcluded
-        CorrelationIncluded = $corrIncluded
-        DataTransforms      = $DataTransforms
-        DetectionAnalyzer   = $detectionAnalyzer
-        XdrChecker          = $xdrChecker
+        TableAnalysis        = $tableAnalysis
+        Recommendations      = @($sortedRecs)
+        KeywordGaps          = $Classifications.KeywordGaps
+        SocRecommendations   = $SocRecommendations
+        CorrelationExcluded  = $corrExcluded
+        CorrelationIncluded  = $corrIncluded
+        DataTransforms       = $DataTransforms
+        DetectionAnalyzer    = $detectionAnalyzer
+        XdrChecker           = $xdrChecker
+        LiveTuningAnalysis   = @($liveTuningAnalysis)
         Summary             = [PSCustomObject]@{
             TotalTables            = $tableAnalysis.Count
             PrimaryCount           = $primaryTables.Count
@@ -453,7 +516,8 @@ function Get-DetectionAnalyzerData {
         [array]$Rules,
         [array]$Incidents,
         [array]$AutomationRules,
-        [array]$CustomDetectionRules = @()
+        [array]$CustomDetectionRules = @(),
+        [hashtable]$AutoCloseHealthData
     )
 
     $allRulesEmpty = (-not $Rules -or $Rules.Count -eq 0) -and (-not $CustomDetectionRules -or $CustomDetectionRules.Count -eq 0)
@@ -564,10 +628,24 @@ function Get-DetectionAnalyzerData {
 
         $autoClosed = @()
         foreach ($inc in $closed) {
-            $matched = @($AutomationRules | Where-Object {
-                $_.IsCloseIncidentRule -and $_.Enabled -and (Test-AutomationRuleIncidentMatch -AutomationRule $_ -IncidentTitle $inc.Title)
-            })
-            if ($matched.Count -gt 0) {
+            $isAutoClose = $false
+
+            # Primary: SentinelHealth data (definitive if available)
+            if ($null -ne $AutoCloseHealthData -and $inc.IncidentNumber -and $AutoCloseHealthData.ContainsKey([int]$inc.IncidentNumber)) {
+                $isAutoClose = $true
+            }
+
+            # Fallback: automation rule condition matching
+            if (-not $isAutoClose) {
+                $matched = @($AutomationRules | Where-Object {
+                    $_.IsCloseIncidentRule -and $_.Enabled -and (Test-AutomationRuleIncidentMatch -AutomationRule $_ -IncidentTitle $inc.Title -IncidentRuleIds $inc.RelatedAnalyticRuleIds)
+                })
+                if ($matched.Count -gt 0) {
+                    $isAutoClose = $true
+                }
+            }
+
+            if ($isAutoClose) {
                 $autoClosed += $inc
             }
         }
@@ -820,19 +898,47 @@ function Test-AutomationRuleIncidentMatch {
     [CmdletBinding()]
     param(
         [PSCustomObject]$AutomationRule,
-        [string]$IncidentTitle
+        [string]$IncidentTitle,
+        [string[]]$IncidentRuleIds
     )
 
+    # Blanket close rule: no conditions at all means it matches everything
+    if (-not $AutomationRule.HasConditions) { return $true }
+
+    # Check analytic rule ID conditions
+    $ruleIdFilters = @($AutomationRule.RuleIdFilters)
+    if ($ruleIdFilters.Count -gt 0 -and $IncidentRuleIds.Count -gt 0) {
+        foreach ($filter in $ruleIdFilters) {
+            foreach ($incidentRuleId in $IncidentRuleIds) {
+                # Exact match or GUID-tail match for ARM resource IDs
+                if ($incidentRuleId -eq $filter) { return $true }
+                $filterGuid = ($filter -split '/')[-1]
+                $incidentGuid = ($incidentRuleId -split '/')[-1]
+                if ($filterGuid -and $incidentGuid -and $filterGuid -eq $incidentGuid) { return $true }
+            }
+        }
+    }
+
+    # Check title conditions with operator awareness
     if ([string]::IsNullOrWhiteSpace($IncidentTitle)) { return $false }
 
-    $filters = @($AutomationRule.TitleFilters)
-    if ($filters.Count -eq 0) { return $false }
-
-    foreach ($filter in $filters) {
+    $titleFilters = @($AutomationRule.TitleFilters)
+    $titleOperators = @($AutomationRule.TitleOperators)
+    for ($i = 0; $i -lt $titleFilters.Count; $i++) {
+        $filter = $titleFilters[$i]
         if ([string]::IsNullOrWhiteSpace($filter)) { continue }
+        $op = if ($i -lt $titleOperators.Count) { $titleOperators[$i] } else { 'Contains' }
 
-        $pattern = [regex]::Escape($filter).Replace('\*', '.*')
-        if ($IncidentTitle -match $pattern) { return $true }
+        switch ($op) {
+            'Equals'     { if ($IncidentTitle -eq $filter) { return $true } }
+            'StartsWith' { if ($IncidentTitle.StartsWith($filter, [System.StringComparison]::OrdinalIgnoreCase)) { return $true } }
+            'EndsWith'   { if ($IncidentTitle.EndsWith($filter, [System.StringComparison]::OrdinalIgnoreCase)) { return $true } }
+            default {
+                # Contains or unknown operator: substring match; also support wildcard patterns
+                $pattern = [regex]::Escape($filter).Replace('\*', '.*')
+                if ($IncidentTitle -match $pattern) { return $true }
+            }
+        }
     }
 
     return $false
