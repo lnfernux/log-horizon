@@ -5,7 +5,7 @@
 ### Microsoft Sentinel SIEM Log Source Analyzer
 
 ![PowerShell 7+](https://img.shields.io/badge/PowerShell-7%2B-blue)
-![Module Version](https://img.shields.io/badge/version-0.6.2-green)
+![Module Version](https://img.shields.io/badge/version-0.6.3-green)
 
 ---
 I've had to answer *"what are we actually getting out of these logs?"* or *"what is the recommended logs for Microsoft Sentinel"* more times than I can count. The answer always depend on so many things, but we can be generic. So I built this thingy right here.
@@ -459,6 +459,7 @@ MIT
 
 | Version | Date | Changes |
 |---|---|---|
+| 0.6.2 | 2026-04-11 | Minor update for PSGallery|
 | 0.6.2 | 2026-04-11 | Log Tuning / Transforms menu: live data tuning analysis (per-table field usage from deployed rules/hunting queries, filter/project/combined KQL generation, savings estimates), schema column extraction from Tables API, `Get-SplitKql` fallback hierarchy (community stats → category defaults → universal fields), comprehensive table evaluator with field usage matrix, unified KB + live tuning export sections, `Build-FieldKnowledgeBase.ps1` mining script for Azure-Sentinel GitHub rule corpus. Detection Analyzer: SentinelHealth-based auto-close attribution (primary) with operator-aware rule-matching fallback, Boolean condition wrapper parsing, Resolved status detection, GUID-tail matching for ARM resource IDs. Coverage now table-count-based across all tables (including free tier). Scoring disclaimer added to TUI and exports. 174 tests |
 | 0.6.1 | 2026-04-10 | Bug fixes: `$kqlKeywords` filtering now shared at file scope (was undefined in `Get-TablesFromKql`), `[CmdletBinding()]` added to all helper functions, Defender unified check simplified, removed ghost `-RuleCount` test param. Robustness: `Get-HuntingQueries` pagination, `Invoke-AzRestWithRetry` retry wrapper with exponential backoff for 429/5xx, `PricePerGB` validation, `Write-Verbose` in key functions. Docs: version badge, DB count, prerequisites aligned with manifest |
 | 0.6.0 | 2026-04-10 | Dynamic XDR streaming detection with 21 `KnownXDRTables` (was hardcoded 18), per-table `XDRState` (`NotStreaming`/`Analytics`/`Basic`/`Auxiliary`), Auxiliary recognized as data lake tier, not-streamed XDR tables surfaced as Information/Low recommendations with `NotStreamedCount`, retention analyzer shows not-streamed XDR tables as "XDR only (30d)", overview tier breakdown (analytics/basic/data lake + not streamed), Export-Report Auxiliary→"data lake" labels, classification DB updated to 345 entries (+`DeviceNetworkInfo`, `DeviceInfo`→secondary/datalake, `DeviceImageLoadEvents` and `IdentityQueryEvents`→datalake tier), 15 new Pester tests (121 total) |
