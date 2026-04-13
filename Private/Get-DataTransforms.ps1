@@ -150,6 +150,145 @@ function Get-TransformType {
     'Custom'
 }
 
+function Get-LiveTuningAnalysis {
+    <#
+    .SYNOPSIS
+        Analyzes the customer's deployed rules to build per-table tuning KQL
+        (filter, project, combined) using live rule data and schema columns.
+    .OUTPUTS
+        Array of PSCustomObjects, one per table, with filter/project/combined KQL,
+        field usage stats, and estimated savings.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][AllowEmptyCollection()][array]$Rules,
+        [array]$HuntingQueries = @(),
+        [array]$TableAnalysis = @(),
+        [hashtable]$SchemaLookup = @{}
+    )
+
+    # Build per-table field + condition maps from deployed rules
+    $tableFieldMap = @{}      # TableName -> HashSet of field names
+    $tableConditionMap = @{}  # TableName -> List of WHERE conditions
+    $tableRuleMap = @{}       # TableName -> List of rule objects (for field-by-rule matrix)
+
+    $allSources = @($Rules) + @($HuntingQueries | Where-Object { $_.Query })
+    foreach ($rule in $allSources) {
+        if (-not $rule.Enabled -or -not $rule.Query) { continue }
+        $tables = if ($rule.Tables) { $rule.Tables } else { @() }
+
+        foreach ($tableName in $tables) {
+            if (-not $tableFieldMap.ContainsKey($tableName)) {
+                $tableFieldMap[$tableName] = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+                $tableConditionMap[$tableName] = [System.Collections.Generic.List[string]]::new()
+                $tableRuleMap[$tableName] = [System.Collections.Generic.List[PSCustomObject]]::new()
+            }
+
+            $fields = Get-FieldsFromKql -Kql $rule.Query
+            foreach ($f in $fields) { [void]$tableFieldMap[$tableName].Add($f) }
+
+            # Extract WHERE conditions
+            $whereMatches = [regex]::Matches($rule.Query, '(?i)\|\s*where\s+(.+?)(?:\||$)')
+            foreach ($wm in $whereMatches) {
+                $condition = $wm.Groups[1].Value.Trim()
+                if ($condition.Length -gt 5 -and $condition.Length -lt 200) {
+                    $tableConditionMap[$tableName].Add($condition)
+                }
+            }
+
+            $ruleName = if ($rule.RuleName) { $rule.RuleName } elseif ($rule.QueryName) { $rule.QueryName } elseif ($rule.DisplayName) { $rule.DisplayName } else { 'Unknown' }
+            $tableRuleMap[$tableName].Add([PSCustomObject]@{
+                RuleName = $ruleName
+                Fields   = @($fields)
+            })
+        }
+    }
+
+    # Generate per-table analysis for tables that have at least 1 rule
+    $results = [System.Collections.Generic.List[PSCustomObject]]::new()
+
+    foreach ($tableName in ($tableFieldMap.Keys | Sort-Object)) {
+        $usedFields = $tableFieldMap[$tableName]
+        [void]$usedFields.Add('TimeGenerated')  # Always include
+
+        $conditions = $tableConditionMap[$tableName]
+        $ruleDetails = $tableRuleMap[$tableName]
+
+        # Get schema columns if available
+        $schemaColumns = @()
+        if ($SchemaLookup.ContainsKey($tableName)) {
+            $schemaColumns = @($SchemaLookup[$tableName])
+        }
+
+        # Compute unused fields (schema - used)
+        $unusedFields = @()
+        if ($schemaColumns.Count -gt 0) {
+            $unusedFields = @($schemaColumns | Where-Object { -not $usedFields.Contains($_) } | Sort-Object)
+        }
+
+        # Lookup table analysis entry for cost data
+        $tableEntry = $TableAnalysis | Where-Object { $_.TableName -eq $tableName } | Select-Object -First 1
+        $monthlyGB = if ($tableEntry) { $tableEntry.MonthlyGB } else { 0 }
+        $monthlyCost = if ($tableEntry) { $tableEntry.EstMonthlyCostUSD } else { 0 }
+
+        # Generate filter KQL (condition-only for portal)
+        $filterKql = $null
+        if ($conditions.Count -gt 0) {
+            $uniqueConditions = @($conditions | Select-Object -Unique | Select-Object -First 10)
+            $filterKql = ($uniqueConditions | ForEach-Object { "($($_))" }) -join "`n    or "
+        }
+
+        # Generate project KQL (full source | project syntax for DCR)
+        $sortedUsed = @($usedFields | Sort-Object)
+        $projectKql = $null
+        if ($sortedUsed.Count -gt 1) {
+            $projectKql = "source`n| project $($sortedUsed -join ', ')"
+        }
+
+        # Generate combined KQL
+        $combinedKql = $null
+        if ($filterKql -and $projectKql) {
+            $combinedKql = "source`n| where $filterKql`n| project $($sortedUsed -join ', ')"
+        }
+        elseif ($filterKql) {
+            $combinedKql = "source`n| where $filterKql"
+        }
+        elseif ($projectKql) {
+            $combinedKql = $projectKql
+        }
+
+        # Estimate savings
+        $estFilterSavings = if ($filterKql -and $monthlyCost -gt 0) { [math]::Round($monthlyCost * 0.50, 2) } else { 0 }
+        $estProjectSavings = 0
+        if ($schemaColumns.Count -gt 0 -and $unusedFields.Count -gt 0 -and $monthlyCost -gt 0) {
+            $reductionRatio = $unusedFields.Count / $schemaColumns.Count
+            $estProjectSavings = [math]::Round($monthlyCost * $reductionRatio * 0.80, 2)  # ~80% of proportional savings
+        }
+
+        $results.Add([PSCustomObject]@{
+            TableName          = $tableName
+            MonthlyGB          = $monthlyGB
+            EstMonthlyCostUSD  = $monthlyCost
+            UsedFields         = @($sortedUsed)
+            UnusedFields       = $unusedFields
+            SchemaColumns      = $schemaColumns
+            FieldCount         = $usedFields.Count
+            SchemaColumnCount  = $schemaColumns.Count
+            UnusedFieldCount   = $unusedFields.Count
+            RuleCount          = $ruleDetails.Count
+            ConditionCount     = $conditions.Count
+            FilterKql          = $filterKql
+            ProjectKql         = $projectKql
+            CombinedKql        = $combinedKql
+            EstFilterSavings   = $estFilterSavings
+            EstProjectSavings  = $estProjectSavings
+            RuleDetails        = @($ruleDetails)
+        })
+    }
+
+    @($results)
+}
+
 function Get-SplitKql {
     <#
     .SYNOPSIS
@@ -173,7 +312,9 @@ function Get-SplitKql {
     param(
         [Parameter(Mandatory)][string]$TableName,
         [array]$Rules,
-        [hashtable]$HighValueFieldsDB
+        [hashtable]$HighValueFieldsDB,
+        [hashtable]$FieldFrequencyStats,
+        [string]$TableCategory
     )
 
     # 1. Extract fields from rules targeting this table
@@ -209,11 +350,37 @@ function Get-SplitKql {
         }
     }
 
+    # 2b. Fallback: use field-frequency-stats for tables not in KB and with no rules
+    $fallbackSource = $null
+    $fallbackFields = @()
+    if (-not $hvEntry -and $ruleFields.Count -eq 0 -and $FieldFrequencyStats) {
+        # Try per-table stats first
+        if ($FieldFrequencyStats.perTable -and $FieldFrequencyStats.perTable.$TableName) {
+            $perTableStats = $FieldFrequencyStats.perTable.$TableName
+            # Get top fields by frequency (sorted by count descending)
+            $fallbackFields = @($perTableStats.PSObject.Properties |
+                Sort-Object { [int]$_.Value } -Descending |
+                Select-Object -First 20 -ExpandProperty Name)
+            $fallbackSource = 'community-stats'
+        }
+        # Then try category defaults
+        elseif ($TableCategory -and $FieldFrequencyStats.categoryDefaults -and $FieldFrequencyStats.categoryDefaults.$TableCategory) {
+            $fallbackFields = @($FieldFrequencyStats.categoryDefaults.$TableCategory)
+            $fallbackSource = 'category-defaults'
+        }
+        # Last resort: universal fields
+        elseif ($FieldFrequencyStats.universalFields) {
+            $fallbackFields = @($FieldFrequencyStats.universalFields)
+            $fallbackSource = 'universal'
+        }
+    }
+
     # 3. Merge field sets
     $allFields = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
     [void]$allFields.Add('TimeGenerated')  # Always include
-    foreach ($f in $ruleFields)  { [void]$allFields.Add($f) }
-    foreach ($f in $hvFields)    { [void]$allFields.Add($f) }
+    foreach ($f in $ruleFields)     { [void]$allFields.Add($f) }
+    foreach ($f in $hvFields)       { [void]$allFields.Add($f) }
+    foreach ($f in $fallbackFields) { [void]$allFields.Add($f) }
 
     # 4. Generate KQL (condition-only — the Sentinel portal prepends "source | where" implicitly)
     $splitKql = $null
@@ -244,16 +411,23 @@ function Get-SplitKql {
         $projectKql = "source`n| project $($sortedFields -join ', ')"
     }
 
+    # Determine effective source (including fallback)
+    if ($source -eq 'none' -and $fallbackSource) {
+        $source = $fallbackSource
+    }
+
     [PSCustomObject]@{
         TableName       = $TableName
         SplitKql        = $splitKql
         ProjectKql      = $projectKql
         RuleFields      = @($ruleFields | Sort-Object)
         HighValueFields = $hvFields
+        FallbackFields  = $fallbackFields
         AllFields       = @($allFields | Sort-Object)
         RuleCount       = if ($Rules) { @($Rules | Where-Object { $_.Enabled -and $_.Tables -contains $TableName }).Count } else { 0 }
         ConditionCount  = $ruleConditions.Count
         Source          = $source
+        FallbackSource  = $fallbackSource
         Description     = if ($hvEntry) { $hvEntry.description } else { $null }
     }
 }

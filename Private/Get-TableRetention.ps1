@@ -26,6 +26,15 @@ function Get-TableRetention {
 
     $tables = foreach ($table in $response.value) {
         $props = $table.properties
+
+        # Extract column names from schema (columns + standardColumns), excluding hidden
+        $allCols = @()
+        if ($props.schema) {
+            $schemaCols    = @($props.schema.columns         | Where-Object { -not $_.isHidden } | ForEach-Object { $_.name })
+            $standardCols  = @($props.schema.standardColumns | Where-Object { -not $_.isHidden } | ForEach-Object { $_.name })
+            $allCols = @($schemaCols + $standardCols | Sort-Object -Unique)
+        }
+
         [PSCustomObject]@{
             TableName              = $table.name
             Plan                   = $props.plan                        # Analytics | Basic | Auxiliary
@@ -33,6 +42,7 @@ function Get-TableRetention {
             TotalRetentionInDays   = [int]$props.totalRetentionInDays   # hot + archive
             ArchiveRetentionInDays = [int]$props.archiveRetentionInDays # total - retention
             TableSubType           = $props.tableSubType                # Any | Classic | DataCollectionRuleBased
+            Columns                = $allCols                           # string[] of visible column names
         }
     }
 

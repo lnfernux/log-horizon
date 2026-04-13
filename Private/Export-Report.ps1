@@ -151,7 +151,7 @@ function ConvertTo-ReportSections {
     $sections = [System.Collections.Generic.List[PSCustomObject]]::new()
     $s = $Analysis.Summary
 
-    # ── 1. Summary ──
+    # - 1. Summary -
     $mdSb = [System.Text.StringBuilder]::new()
     [void]$mdSb.AppendLine('## Summary')
     [void]$mdSb.AppendLine('')
@@ -195,7 +195,7 @@ function ConvertTo-ReportSections {
 
     $sections.Add([PSCustomObject]@{ Title = 'Summary'; TabId = 'summary'; Markdown = $mdSb.ToString(); Html = $htmlSb.ToString() })
 
-    # ── 2. Recommendations ──
+    # - 2. Recommendations -
     if ($Analysis.Recommendations.Count -gt 0) {
         $sortedRecs = $Analysis.Recommendations | Sort-Object @{Expression={
             switch ($_.Priority) { 'High' { 1 } 'Medium' { 2 } 'Low' { 3 } default { 4 } }
@@ -236,7 +236,7 @@ function ConvertTo-ReportSections {
         $sections.Add([PSCustomObject]@{ Title = 'Recommendations'; TabId = 'recs'; Markdown = $mdSb.ToString(); Html = $htmlSb.ToString() })
     }
 
-    # ── 3. Table Analysis ──
+    # - 3. Table Analysis -
     $sorted = $Analysis.TableAnalysis | Sort-Object EstMonthlyCostUSD -Descending
 
     $mdSb = [System.Text.StringBuilder]::new()
@@ -264,7 +264,7 @@ function ConvertTo-ReportSections {
 
     $sections.Add([PSCustomObject]@{ Title = 'Tables &amp; Costs'; TabId = 'tables'; Markdown = $mdSb.ToString(); Html = $htmlSb.ToString() })
 
-    # ── 4. Keyword Gaps ──
+    # - 4. Keyword Gaps -
     if ($Analysis.KeywordGaps -and $Analysis.KeywordGaps.Count -gt 0) {
         $mdSb = [System.Text.StringBuilder]::new()
         [void]$mdSb.AppendLine('## Missing Log Sources (Keyword Matches)')
@@ -290,7 +290,7 @@ function ConvertTo-ReportSections {
         $sections.Add([PSCustomObject]@{ Title = 'Keyword Gaps'; TabId = 'keywords'; Markdown = $mdSb.ToString(); Html = $htmlSb.ToString() })
     }
 
-    # ── 5. Retention Assessment ──
+    # - 5. Retention Assessment -
     $nonCompliant = @($Analysis.TableAnalysis | Where-Object { $_.RetentionCompliant -eq $false } | Sort-Object ActualRetentionDays)
     $improvable = @($Analysis.TableAnalysis | Where-Object { $_.RetentionCanImprove -eq $true } | Sort-Object RecommendedRetentionDays -Descending)
 
@@ -362,7 +362,7 @@ function ConvertTo-ReportSections {
         $sections.Add([PSCustomObject]@{ Title = 'Retention'; TabId = 'retention'; Markdown = $mdSb.ToString(); Html = $htmlSb.ToString() })
     }
 
-    # ── 6. Data Transforms ──
+    # - 6. Data Transforms -
     $transforms = $Analysis.DataTransforms
     $tablesWithTransforms = @($Analysis.TableAnalysis | Where-Object { $_.HasTransform })
     $splitTables = @($Analysis.TableAnalysis | Where-Object { $_.IsSplitTable })
@@ -425,57 +425,127 @@ function ConvertTo-ReportSections {
         $sections.Add([PSCustomObject]@{ Title = 'Transforms'; TabId = 'transforms'; Markdown = $mdSb.ToString(); Html = $htmlSb.ToString() })
     }
 
-    # ── 7. Split KQL Suggestions ──
+    # - 7. Log Tuning Suggestions -
     $splitRecs = @($Analysis.Recommendations | Where-Object { $_.Type -eq 'SplitCandidate' -and $_.SplitSuggestion -and $_.SplitSuggestion.Source -ne 'none' })
+    $liveTuning = @($Analysis.LiveTuningAnalysis | Where-Object { $_.RuleCount -gt 0 })
+    $hasLogTuning = ($splitRecs.Count -gt 0) -or ($liveTuning.Count -gt 0)
 
-    if ($splitRecs.Count -gt 0) {
+    if ($hasLogTuning) {
         $mdSb = [System.Text.StringBuilder]::new()
-        [void]$mdSb.AppendLine('## Split KQL Suggestions')
+        [void]$mdSb.AppendLine('## Log Tuning Suggestions')
         [void]$mdSb.AppendLine('')
 
-        foreach ($rec in $splitRecs) {
-            $ss = $rec.SplitSuggestion
-            [void]$mdSb.AppendLine("### $($rec.TableName)")
+        # Live data tuning section
+        if ($liveTuning.Count -gt 0) {
+            [void]$mdSb.AppendLine('### Live Data Tuning')
             [void]$mdSb.AppendLine('')
-            [void]$mdSb.AppendLine("**Source:** $($ss.Source) | **Rules:** $($ss.RuleCount) | **Est. Savings:** `$$($rec.EstSavingsUSD)/mo  ")
+            [void]$mdSb.AppendLine('Based on deployed analytics and hunting rules.')
             [void]$mdSb.AppendLine('')
-            if ($ss.SplitKql) {
-                [void]$mdSb.AppendLine('**Split KQL:**')
-                [void]$mdSb.AppendLine('```kql')
-                [void]$mdSb.AppendLine($ss.SplitKql)
-                [void]$mdSb.AppendLine('```')
-                [void]$mdSb.AppendLine('')
+            [void]$mdSb.AppendLine('| Table | GB/mo | Rules | Fields Used | Unused Cols | Filter Savings | Project Savings |')
+            [void]$mdSb.AppendLine('| --- | --- | --- | --- | --- | --- | --- |')
+            foreach ($lt in ($liveTuning | Sort-Object EstMonthlyCostUSD -Descending)) {
+                $unusedStr = if ($lt.SchemaColumnCount -gt 0) { "$($lt.UnusedFieldCount) of $($lt.SchemaColumnCount)" } else { '-' }
+                $filterStr = if ($lt.EstFilterSavings -gt 0) { "`$$($lt.EstFilterSavings)" } else { '-' }
+                $projectStr = if ($lt.EstProjectSavings -gt 0) { "`$$($lt.EstProjectSavings)" } else { '-' }
+                [void]$mdSb.AppendLine("| $(mdEsc $lt.TableName) | $($lt.MonthlyGB) | $($lt.RuleCount) | $($lt.FieldCount) | $unusedStr | $filterStr | $projectStr |")
             }
-            if ($ss.ProjectKql) {
-                [void]$mdSb.AppendLine('**Projection KQL:**')
-                [void]$mdSb.AppendLine('```kql')
-                [void]$mdSb.AppendLine($ss.ProjectKql)
-                [void]$mdSb.AppendLine('```')
+            [void]$mdSb.AppendLine('')
+
+            foreach ($lt in ($liveTuning | Sort-Object EstMonthlyCostUSD -Descending)) {
+                if ($lt.FilterKql -or $lt.ProjectKql) {
+                    [void]$mdSb.AppendLine("#### $($lt.TableName)")
+                    [void]$mdSb.AppendLine('')
+                    if ($lt.FilterKql) {
+                        [void]$mdSb.AppendLine('**Filter KQL:**')
+                        [void]$mdSb.AppendLine('```kql')
+                        [void]$mdSb.AppendLine($lt.FilterKql)
+                        [void]$mdSb.AppendLine('```')
+                        [void]$mdSb.AppendLine('')
+                    }
+                    if ($lt.ProjectKql) {
+                        [void]$mdSb.AppendLine('**Projection KQL:**')
+                        [void]$mdSb.AppendLine('```kql')
+                        [void]$mdSb.AppendLine($lt.ProjectKql)
+                        [void]$mdSb.AppendLine('```')
+                        [void]$mdSb.AppendLine('')
+                    }
+                }
+            }
+        }
+
+        # Knowledge base tuning section
+        if ($splitRecs.Count -gt 0) {
+            [void]$mdSb.AppendLine('### Knowledge Base Tuning')
+            [void]$mdSb.AppendLine('')
+
+            foreach ($rec in $splitRecs) {
+                $ss = $rec.SplitSuggestion
+                [void]$mdSb.AppendLine("#### $($rec.TableName)")
                 [void]$mdSb.AppendLine('')
+                [void]$mdSb.AppendLine("**Source:** $($ss.Source) | **Rules:** $($ss.RuleCount) | **Est. Savings:** `$$($rec.EstSavingsUSD)/mo  ")
+                [void]$mdSb.AppendLine('')
+                if ($ss.SplitKql) {
+                    [void]$mdSb.AppendLine('**Split KQL:**')
+                    [void]$mdSb.AppendLine('```kql')
+                    [void]$mdSb.AppendLine($ss.SplitKql)
+                    [void]$mdSb.AppendLine('```')
+                    [void]$mdSb.AppendLine('')
+                }
+                if ($ss.ProjectKql) {
+                    [void]$mdSb.AppendLine('**Projection KQL:**')
+                    [void]$mdSb.AppendLine('```kql')
+                    [void]$mdSb.AppendLine($ss.ProjectKql)
+                    [void]$mdSb.AppendLine('```')
+                    [void]$mdSb.AppendLine('')
+                }
             }
         }
 
         $htmlSb = [System.Text.StringBuilder]::new()
-        [void]$htmlSb.AppendLine('            <p>Ready-to-use split KQL statements for high-volume primary tables.</p>')
-        foreach ($rec in $splitRecs) {
-            $ss = $rec.SplitSuggestion
-            [void]$htmlSb.AppendLine("            <article class=`"rec-card`">")
-            [void]$htmlSb.AppendLine("                <div class=`"rec-header`"><strong>$(hEnc $rec.TableName)</strong> <span class=`"badge`">$($ss.Source)</span> <span class=`"badge badge-savings`">Saves `$$($rec.EstSavingsUSD)/mo</span></div>")
-            if ($ss.SplitKql) {
-                [void]$htmlSb.AppendLine("                <p><strong>Split KQL:</strong></p>")
-                [void]$htmlSb.AppendLine("                <pre class=`"kql-block`">$(hEnc $ss.SplitKql)</pre>")
+        [void]$htmlSb.AppendLine('            <p>Log tuning suggestions to reduce ingestion costs via row splitting and column reduction.</p>')
+
+        if ($liveTuning.Count -gt 0) {
+            [void]$htmlSb.AppendLine('            <h3>Live Data Tuning</h3>')
+            [void]$htmlSb.AppendLine('            <p>Based on deployed analytics and hunting rules.</p>')
+            foreach ($lt in ($liveTuning | Sort-Object EstMonthlyCostUSD -Descending)) {
+                if ($lt.FilterKql -or $lt.ProjectKql) {
+                    [void]$htmlSb.AppendLine("            <article class=`"rec-card`">")
+                    [void]$htmlSb.AppendLine("                <div class=`"rec-header`"><strong>$(hEnc $lt.TableName)</strong> <span class=`"badge`">live</span></div>")
+                    if ($lt.FilterKql) {
+                        [void]$htmlSb.AppendLine("                <p><strong>Filter KQL:</strong></p>")
+                        [void]$htmlSb.AppendLine("                <pre class=`"kql-block`">$(hEnc $lt.FilterKql)</pre>")
+                    }
+                    if ($lt.ProjectKql) {
+                        [void]$htmlSb.AppendLine("                <p><strong>Projection KQL:</strong></p>")
+                        [void]$htmlSb.AppendLine("                <pre class=`"kql-block`">$(hEnc $lt.ProjectKql)</pre>")
+                    }
+                    [void]$htmlSb.AppendLine('            </article>')
+                }
             }
-            if ($ss.ProjectKql) {
-                [void]$htmlSb.AppendLine("                <p><strong>Projection KQL:</strong></p>")
-                [void]$htmlSb.AppendLine("                <pre class=`"kql-block`">$(hEnc $ss.ProjectKql)</pre>")
-            }
-            [void]$htmlSb.AppendLine('            </article>')
         }
 
-        $sections.Add([PSCustomObject]@{ Title = 'Split KQLs'; TabId = 'splitkql'; Markdown = $mdSb.ToString(); Html = $htmlSb.ToString() })
+        if ($splitRecs.Count -gt 0) {
+            [void]$htmlSb.AppendLine('            <h3>Knowledge Base Tuning</h3>')
+            foreach ($rec in $splitRecs) {
+                $ss = $rec.SplitSuggestion
+                [void]$htmlSb.AppendLine("            <article class=`"rec-card`">")
+                [void]$htmlSb.AppendLine("                <div class=`"rec-header`"><strong>$(hEnc $rec.TableName)</strong> <span class=`"badge`">$($ss.Source)</span> <span class=`"badge badge-savings`">Saves `$$($rec.EstSavingsUSD)/mo</span></div>")
+                if ($ss.SplitKql) {
+                    [void]$htmlSb.AppendLine("                <p><strong>Split KQL:</strong></p>")
+                    [void]$htmlSb.AppendLine("                <pre class=`"kql-block`">$(hEnc $ss.SplitKql)</pre>")
+                }
+                if ($ss.ProjectKql) {
+                    [void]$htmlSb.AppendLine("                <p><strong>Projection KQL:</strong></p>")
+                    [void]$htmlSb.AppendLine("                <pre class=`"kql-block`">$(hEnc $ss.ProjectKql)</pre>")
+                }
+                [void]$htmlSb.AppendLine('            </article>')
+            }
+        }
+
+        $sections.Add([PSCustomObject]@{ Title = 'Log Tuning'; TabId = 'logtuning'; Markdown = $mdSb.ToString(); Html = $htmlSb.ToString() })
     }
 
-    # ── 8. Correlation Rules ──
+    # - 8. Correlation Rules -
     $corrExcluded = $Analysis.CorrelationExcluded
     $corrIncluded = $Analysis.CorrelationIncluded
     if (($corrExcluded -and $corrExcluded.Count -gt 0) -or ($corrIncluded -and $corrIncluded.Count -gt 0)) {
@@ -536,7 +606,7 @@ function ConvertTo-ReportSections {
         $sections.Add([PSCustomObject]@{ Title = 'Correlation'; TabId = 'correlation'; Markdown = $mdSb.ToString(); Html = $htmlSb.ToString() })
     }
 
-    # ── 9. Defender XDR (conditional) ──
+    # - 9. Defender XDR (conditional) -
     if ($DefenderXDR) {
         $mdSb = [System.Text.StringBuilder]::new()
         [void]$mdSb.AppendLine('## Defender XDR')
@@ -589,7 +659,7 @@ function ConvertTo-ReportSections {
         $sections.Add([PSCustomObject]@{ Title = 'Defender XDR'; TabId = 'xdr'; Markdown = $mdSb.ToString(); Html = $htmlSb.ToString() })
     }
 
-    # ── 10. Detection Analyzer (conditional) ──
+    # - 10. Detection Analyzer (conditional) -
     if ($Analysis.DetectionAnalyzer -and $Analysis.DetectionAnalyzer.RuleMetrics.Count -gt 0) {
         $scored = @($Analysis.DetectionAnalyzer.RuleMetrics | Where-Object { $null -ne $_.NoisinessScore } | Sort-Object NoisinessScore -Descending)
         $unscored = @($Analysis.DetectionAnalyzer.RuleMetrics | Where-Object { $null -eq $_.NoisinessScore })
@@ -598,11 +668,24 @@ function ConvertTo-ReportSections {
         $mdSb = [System.Text.StringBuilder]::new()
         [void]$mdSb.AppendLine('## Detection Analyzer')
         [void]$mdSb.AppendLine('')
-        [void]$mdSb.AppendLine("**Rules analyzed:** $($Analysis.DetectionAnalyzer.Summary.RulesAnalyzed)  ")
-        [void]$mdSb.AppendLine("**Noisy rules (score >= 70):** $($Analysis.DetectionAnalyzer.Summary.NoisyRules)  ")
-        [void]$mdSb.AppendLine("**Incidents analyzed:** $($Analysis.DetectionAnalyzer.Summary.IncidentsAnalyzed)  ")
-        if ($Analysis.DetectionAnalyzer.Summary.CustomDetectionRules -gt 0) {
-            [void]$mdSb.AppendLine("**Custom Detection Rules:** $($Analysis.DetectionAnalyzer.Summary.CustomDetectionRules) ($($Analysis.DetectionAnalyzer.Summary.CDRCorrelatedIncidents) with incidents)  ")
+        $daSummary = $Analysis.DetectionAnalyzer.Summary
+        if ($null -ne $daSummary.TotalTables -and $daSummary.TotalTables -gt 0) {
+            [void]$mdSb.AppendLine('### Ingestion Coverage')
+            [void]$mdSb.AppendLine('')
+            [void]$mdSb.AppendLine("| Metric | Coverage | Tables | Total Tables |")
+            [void]$mdSb.AppendLine("| --- | ---: | ---: | ---: |")
+            [void]$mdSb.AppendLine("| Detection (Analytics/CDR) | $($daSummary.DetectionCoveragePct)% | $($daSummary.TablesWithDetection) | $($daSummary.TotalTables) |")
+            [void]$mdSb.AppendLine("| Hunting Queries | $($daSummary.HuntingCoveragePct)% | $($daSummary.TablesWithHunting) | $($daSummary.TotalTables) |")
+            [void]$mdSb.AppendLine("| Combined | $($daSummary.CombinedCoveragePct)% | $($daSummary.TablesWithCombined) | $($daSummary.TotalTables) |")
+            [void]$mdSb.AppendLine('')
+            [void]$mdSb.AppendLine("**Avg detections per table:** $($daSummary.AvgDetectionsPerTable) (analytics + CDR rules)  ")
+            [void]$mdSb.AppendLine('')
+        }
+        [void]$mdSb.AppendLine("**Rules analyzed:** $($daSummary.RulesAnalyzed)  ")
+        [void]$mdSb.AppendLine("**Noisy rules (score >= 70):** $($daSummary.NoisyRules)  ")
+        [void]$mdSb.AppendLine("**Incidents analyzed:** $($daSummary.IncidentsAnalyzed)  ")
+        if ($daSummary.CustomDetectionRules -gt 0) {
+            [void]$mdSb.AppendLine("**Custom Detection Rules:** $($daSummary.CustomDetectionRules) ($($daSummary.CDRCorrelatedIncidents) with incidents)  ")
         }
         [void]$mdSb.AppendLine('')
         [void]$mdSb.AppendLine('| Rule | Kind | Incidents | AutoClose % | FalsePositive % | Noisiness Score |')
@@ -612,12 +695,27 @@ function ConvertTo-ReportSections {
             [void]$mdSb.AppendLine("| $($r.RuleName) | $($r.RuleKind) | $($r.IncidentsTotal) | $([math]::Round($r.AutoCloseRatio * 100, 1)) | $([math]::Round($r.FalsePositiveRatio * 100, 1)) | $scoreStr |")
         }
         [void]$mdSb.AppendLine('')
+        [void]$mdSb.AppendLine('**Scoring:** Score = (Volume_percentile x 35%) + (AutoClose_percentile x 40%) + (FalsePos_percentile x 25%). >= 70 = noisy, >= 50 = watch, < 50 = healthy.  ')
+        [void]$mdSb.AppendLine('*A high score does not conclusively mean a detection is bad -- it is an indicator that the rule may warrant closer review.*  ')
+        [void]$mdSb.AppendLine('')
 
         $htmlSb = [System.Text.StringBuilder]::new()
-        [void]$htmlSb.AppendLine("            <p><strong>Rules analyzed:</strong> $($Analysis.DetectionAnalyzer.Summary.RulesAnalyzed)</p>")
-        [void]$htmlSb.AppendLine("            <p><strong>Noisy rules:</strong> $($Analysis.DetectionAnalyzer.Summary.NoisyRules)</p>")
-        if ($Analysis.DetectionAnalyzer.Summary.CustomDetectionRules -gt 0) {
-            [void]$htmlSb.AppendLine("            <p><strong>Custom Detection Rules:</strong> $($Analysis.DetectionAnalyzer.Summary.CustomDetectionRules) ($($Analysis.DetectionAnalyzer.Summary.CDRCorrelatedIncidents) with incidents)</p>")
+        if ($null -ne $daSummary.TotalTables -and $daSummary.TotalTables -gt 0) {
+            [void]$htmlSb.AppendLine('            <h3>Ingestion Coverage</h3>')
+            [void]$htmlSb.AppendLine('            <div class="table-wrap"><table>')
+            [void]$htmlSb.AppendLine('                <thead><tr><th>Metric</th><th>Coverage</th><th>Tables</th><th>Total Tables</th></tr></thead>')
+            [void]$htmlSb.AppendLine('                <tbody>')
+            [void]$htmlSb.AppendLine("                <tr><td>Detection (Analytics/CDR)</td><td class=`"num`">$($daSummary.DetectionCoveragePct)%</td><td class=`"num`">$($daSummary.TablesWithDetection)</td><td class=`"num`">$($daSummary.TotalTables)</td></tr>")
+            [void]$htmlSb.AppendLine("                <tr><td>Hunting Queries</td><td class=`"num`">$($daSummary.HuntingCoveragePct)%</td><td class=`"num`">$($daSummary.TablesWithHunting)</td><td class=`"num`">$($daSummary.TotalTables)</td></tr>")
+            [void]$htmlSb.AppendLine("                <tr><td>Combined</td><td class=`"num`">$($daSummary.CombinedCoveragePct)%</td><td class=`"num`">$($daSummary.TablesWithCombined)</td><td class=`"num`">$($daSummary.TotalTables)</td></tr>")
+            [void]$htmlSb.AppendLine('                </tbody>')
+            [void]$htmlSb.AppendLine('            </table></div>')
+            [void]$htmlSb.AppendLine("            <p><strong>Avg detections per table:</strong> $($daSummary.AvgDetectionsPerTable) (analytics + CDR rules)</p>")
+        }
+        [void]$htmlSb.AppendLine("            <p><strong>Rules analyzed:</strong> $($daSummary.RulesAnalyzed)</p>")
+        [void]$htmlSb.AppendLine("            <p><strong>Noisy rules:</strong> $($daSummary.NoisyRules)</p>")
+        if ($daSummary.CustomDetectionRules -gt 0) {
+            [void]$htmlSb.AppendLine("            <p><strong>Custom Detection Rules:</strong> $($daSummary.CustomDetectionRules) ($($daSummary.CDRCorrelatedIncidents) with incidents)</p>")
         }
         [void]$htmlSb.AppendLine('            <div class="table-wrap"><table>')
         [void]$htmlSb.AppendLine('                <thead><tr><th>Rule</th><th>Kind</th><th>Incidents</th><th>AutoClose %</th><th>FalsePositive %</th><th>Noisiness Score</th></tr></thead>')
@@ -628,11 +726,13 @@ function ConvertTo-ReportSections {
         }
         [void]$htmlSb.AppendLine('                </tbody>')
         [void]$htmlSb.AppendLine('            </table></div>')
+        [void]$htmlSb.AppendLine('            <p><strong>Scoring:</strong> Score = (Volume_percentile x 35%) + (AutoClose_percentile x 40%) + (FalsePos_percentile x 25%). &gt;= 70 = noisy, &gt;= 50 = watch, &lt; 50 = healthy.</p>')
+        [void]$htmlSb.AppendLine('            <p><em>A high score does not conclusively mean a detection is bad -- it is an indicator that the rule may warrant closer review.</em></p>')
 
         $sections.Add([PSCustomObject]@{ Title = 'Detection Analyzer'; TabId = 'detanalyzer'; Markdown = $mdSb.ToString(); Html = $htmlSb.ToString() })
     }
 
-    # ── 11. XDR Checker (conditional) ──
+    # - 11. XDR Checker (conditional) -
     if ($Analysis.XdrChecker -and $Analysis.XdrChecker.Findings.Count -gt 0) {
         $mdSb = [System.Text.StringBuilder]::new()
         [void]$mdSb.AppendLine('## XDR Checker')

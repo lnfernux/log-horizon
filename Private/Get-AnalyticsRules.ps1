@@ -1,6 +1,7 @@
 # KQL keywords shared by Get-TablesFromKql and Get-FieldsFromKql.
 # Prevents false-positive matches when regex patterns capture keyword names.
 $script:kqlKeywords = @(
+    # KQL operators and functions
     'source', 'where', 'project', 'extend', 'summarize', 'render', 'sort', 'order',
     'top', 'take', 'count', 'distinct', 'evaluate', 'parse', 'invoke', 'not',
     'limit', 'sample', 'search', 'find', 'print', 'range', 'datatable',
@@ -19,7 +20,19 @@ $script:kqlKeywords = @(
     'replace', 'extract', 'parse_path', 'parse_url', 'parse_urlquery',
     'format_datetime', 'todatetime', 'make_datetime', 'make_timespan',
     'geo_info_from_ip_address', 'ipv4_is_private', 'ipv4_is_match',
-    'case', 'iff', 'coalesce', 'iif', 'ingestion_time'
+    'case', 'iff', 'coalesce', 'iif', 'ingestion_time',
+    # Union/join modifiers captured as false-positive table names
+    'isfuzzy', 'withsource', 'bagexpansion', 'hint', 'shufflekey',
+    # Common KQL field names mistaken for tables
+    'Type', 'CommandLine', 'Description', 'Tactic', 'AccountUPNSuffix',
+    'RegistryValueData', 'key', 'table', 'exists',
+    # English words from KQL comments/YAML descriptions
+    'the', 'that', 'this', 'with', 'from', 'back', 'against', 'resolved',
+    'are', 'for', 'was', 'not', 'but', 'its', 'also', 'into', 'each',
+    'when', 'then', 'than', 'them', 'been', 'have', 'some', 'like',
+    'over', 'such', 'only', 'about', 'after', 'before', 'which',
+    'their', 'there', 'where', 'what', 'will', 'would', 'could',
+    'should', 'other', 'more', 'most', 'same', 'your'
 )
 
 function Get-AnalyticsRules {
@@ -133,8 +146,8 @@ function Get-TablesFromKql {
         $regex2 = [regex]::new('\bjoin\s+(?:kind\s*=\s*\w+\s+)?\(?\s*([A-Z]\w+)', $optsI, $timeout)
         foreach ($m in $regex2.Matches($Kql)) { [void]$tables.Add($m.Groups[1].Value) }
 
-        # Pattern 3: table in union
-        $regex3 = [regex]::new('\bunion\s+(?:isfuzzy\s*=\s*\w+\s+)?([A-Z]\w+)', $optsI, $timeout)
+        # Pattern 3: table in union (skip isfuzzy= and withsource= modifiers)
+        $regex3 = [regex]::new('\bunion\s+(?:(?:isfuzzy|withsource|kind)\s*=\s*\w+[,\s]*)*([A-Z]\w+)', $optsI, $timeout)
         foreach ($m in $regex3.Matches($Kql)) { [void]$tables.Add($m.Groups[1].Value) }
 
         # Pattern 4: table after let assignment (let x = TableName | ...)
@@ -150,7 +163,12 @@ function Get-TablesFromKql {
     }
 
     # Pattern 5: table in datatable() or externaldata() — skip, not real tables
-    $tables | Where-Object { $_ -notin $script:kqlKeywords -and $_ -notin $letNames -and $_.Length -gt 2 }
+    $tables | Where-Object {
+        $_ -notin $script:kqlKeywords -and
+        $_ -notin $letNames -and
+        $_.Length -gt 2 -and
+        $_ -cmatch '^[A-Z]'  # Real table names start with an uppercase letter
+    }
 }
 
 function Get-FieldsFromKql {
@@ -218,5 +236,17 @@ function Get-FieldsFromKql {
     foreach ($m in $m9) { [void]$fields.Add($m.Groups[1].Value) }
 
     # Filter out KQL keywords, functions, and operators (shared file-scope list)
-    @($fields | Where-Object { $_ -notin $script:kqlKeywords -and $_.Length -gt 1 })
+    # Also filter: entity mapping artifacts (*CustomEntity, *_0_*, TI_*Entity),
+    # timespan literals (1d, 5m, 1h), function output aliases (count_, bin*, tostring*),
+    # and lowercase English words that are never real column names
+    @($fields | Where-Object {
+        $_ -notin $script:kqlKeywords -and
+        $_.Length -gt 1 -and
+        $_ -cnotmatch '^\d+[smhd]$' -and                    # timespan literals: 1d, 5m, 1h
+        $_ -notmatch 'CustomEntity$' -and                    # entity mapping artifacts
+        $_ -notmatch '^(Account|IP|Host|DNS|URL|Process|MailMessage|CloudApplication|File|Malware)_\d+_' -and  # entity array refs
+        $_ -notmatch '^(TI|ILE)_\w+Entity$' -and            # TI entity names
+        $_ -cnotmatch '^(count_|bin[A-Z]|tostring[A-Z])' -and  # aggregation/function aliases
+        $_ -cmatch '[A-Z]'                                   # must contain at least one uppercase letter
+    })
 }

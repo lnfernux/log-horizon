@@ -41,6 +41,7 @@ function Get-Incidents {
 
         [PSCustomObject]@{
             IncidentId                 = $incident.name
+            IncidentNumber             = [int]$props.incidentNumber
             Title                      = $props.title
             Status                     = $props.status
             Severity                   = $props.severity
@@ -88,4 +89,87 @@ function Get-NormalizedArray {
     }
 
     return @("$Value")
+}
+
+function Get-AutoCloseFromHealth {
+    <#
+    .SYNOPSIS
+        Queries SentinelHealth for automation rule run events to determine auto-closed incidents.
+    .DESCRIPTION
+        Checks if SentinelHealth table is available (health monitoring enabled), then queries for
+        automation rule run events. Cross-references with known close-incident automation rules
+        to return a set of incident numbers that were auto-closed.
+    .OUTPUTS
+        Hashtable of IncidentNumber (int) -> $true, or $null if SentinelHealth is unavailable.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][PSCustomObject]$Context,
+        [int]$DaysBack = 90,
+        [string[]]$CloseRuleNames = @()
+    )
+
+    $headers = @{
+        Authorization  = "Bearer $($Context.LaToken)"
+        'Content-Type' = 'application/json'
+    }
+    $baseUri = "https://api.loganalytics.io/v1/workspaces/$($Context.WorkspaceId)/query"
+
+    # Check if SentinelHealth table exists
+    $checkQuery = 'SentinelHealth | take 1'
+    $checkBody = @{ query = $checkQuery } | ConvertTo-Json -Compress
+    try {
+        $checkResponse = Invoke-AzRestWithRetry -Uri $baseUri -Method Post -Headers $headers -Body $checkBody
+        if (-not $checkResponse.tables -or $checkResponse.tables[0].rows.Count -eq 0) {
+            Write-Verbose 'SentinelHealth table exists but has no data.'
+        }
+    }
+    catch {
+        Write-Verbose "SentinelHealth table not available: $_"
+        return $null
+    }
+
+    # Query automation rule run events
+    $query = @"
+SentinelHealth
+| where TimeGenerated > ago(${DaysBack}d)
+| where OperationName == "Automation rule run"
+| where Status in ("Success", "Partial success")
+| extend props = parse_json(ExtendedProperties)
+| extend IncidentNumber = toint(props.IncidentNumber)
+| extend RuleName = SentinelResourceName
+| where isnotempty(IncidentNumber)
+| project IncidentNumber, RuleName
+| distinct IncidentNumber, RuleName
+"@
+
+    $body = @{ query = $query } | ConvertTo-Json -Compress
+    try {
+        $response = Invoke-AzRestWithRetry -Uri $baseUri -Method Post -Headers $headers -Body $body
+    }
+    catch {
+        Write-Warning "Failed to query SentinelHealth for auto-close data: $_"
+        return $null
+    }
+
+    $rows = $response.tables[0].rows
+    Write-Verbose "SentinelHealth returned $($rows.Count) automation rule run event(s)."
+
+    if ($rows.Count -eq 0) {
+        return @{}
+    }
+
+    # If we have close rule names, filter to only those rules; otherwise return all
+    $autoClosedSet = @{}
+    foreach ($row in $rows) {
+        $incidentNum = [int]$row[0]
+        $ruleName    = "$($row[1])"
+
+        if ($CloseRuleNames.Count -eq 0 -or $ruleName -in $CloseRuleNames) {
+            $autoClosedSet[$incidentNum] = $true
+        }
+    }
+
+    Write-Verbose "Identified $($autoClosedSet.Count) auto-closed incident(s) from SentinelHealth."
+    $autoClosedSet
 }

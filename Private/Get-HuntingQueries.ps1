@@ -52,6 +52,8 @@ function Get-HuntingQueries {
         [PSCustomObject]@{
             QueryName = $displayName
             Tables    = $tables
+            Query     = $query
+            Enabled   = $true
         }
     }
 
