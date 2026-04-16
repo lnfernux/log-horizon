@@ -6804,5 +6804,385 @@
     "recommendedTier": "analytics",
     "isFree": false,
     "recommendedRetentionDays": 365
+  },
+  {
+    "tableName": "AZFWNetworkRuleAggregation",
+    "connector": "Azure Firewall",
+    "classification": "secondary",
+    "category": "Network Flow",
+    "description": "Azure Firewall aggregated network rule hit counts used by Policy Analytics for identifying unused or over-permissive rules",
+    "keywords": [
+      "firewall",
+      "network",
+      "rule",
+      "aggregation",
+      "azure firewall",
+      "policy analytics"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "datalake",
+    "isFree": false,
+    "recommendedRetentionDays": 180
+  },
+  {
+    "tableName": "AZFWApplicationRuleAggregation",
+    "connector": "Azure Firewall",
+    "classification": "secondary",
+    "category": "Network Flow",
+    "description": "Azure Firewall aggregated application rule hit counts used by Policy Analytics for FQDN-based rule optimization",
+    "keywords": [
+      "firewall",
+      "application",
+      "rule",
+      "aggregation",
+      "azure firewall",
+      "policy analytics"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "datalake",
+    "isFree": false,
+    "recommendedRetentionDays": 180
+  },
+  {
+    "tableName": "AZFWDnsFlowTrace",
+    "connector": "Azure Firewall",
+    "classification": "secondary",
+    "category": "Network Flow",
+    "description": "Azure Firewall DNS proxy flow trace logs showing full DNS resolution between client, firewall, and upstream DNS server",
+    "keywords": [
+      "firewall",
+      "dns",
+      "flow",
+      "trace",
+      "azure firewall",
+      "proxy",
+      "resolution"
+    ],
+    "mitreSources": [
+      "Network Traffic: Network Traffic Content"
+    ],
+    "recommendedTier": "datalake",
+    "isFree": false,
+    "recommendedRetentionDays": 180
+  },
+  {
+    "tableName": "AGWAccessLogs",
+    "connector": "Azure Application Gateway",
+    "classification": "secondary",
+    "category": "Network Flow",
+    "description": "Azure Application Gateway access logs including caller IP, requested URL, response code, and latency",
+    "keywords": [
+      "application gateway",
+      "access",
+      "http",
+      "traffic",
+      "waf",
+      "load balancer"
+    ],
+    "mitreSources": [
+      "Network Traffic: Network Traffic Flow"
+    ],
+    "recommendedTier": "datalake",
+    "isFree": false,
+    "recommendedRetentionDays": 180
+  },
+  {
+    "tableName": "AGWFirewallLogs",
+    "connector": "Azure Application Gateway WAF",
+    "classification": "primary",
+    "category": "Network Security",
+    "description": "Azure Application Gateway WAF logs with OWASP rule matches, blocked requests, and web attack detections",
+    "keywords": [
+      "application gateway",
+      "waf",
+      "firewall",
+      "owasp",
+      "sql injection",
+      "xss",
+      "web attack"
+    ],
+    "mitreSources": [
+      "Network Traffic: Network Traffic Content"
+    ],
+    "recommendedTier": "analytics",
+    "isFree": false,
+    "recommendedRetentionDays": 365
+  },
+  {
+    "tableName": "ContainerRegistryRepositoryEvents",
+    "connector": "Azure Container Registry",
+    "classification": "primary",
+    "category": "Container & Kubernetes",
+    "description": "Azure Container Registry repository operations including image push, pull, delete, and tag events",
+    "keywords": [
+      "container",
+      "registry",
+      "repository",
+      "push",
+      "pull",
+      "image",
+      "acr"
+    ],
+    "mitreSources": [
+      "Container: Container Creation"
+    ],
+    "recommendedTier": "analytics",
+    "isFree": false,
+    "recommendedRetentionDays": 365
+  },
+  {
+    "tableName": "ContainerRegistryLoginEvents",
+    "connector": "Azure Container Registry",
+    "classification": "primary",
+    "category": "Container & Kubernetes",
+    "description": "Azure Container Registry authentication events including login attempts, identity, and result status",
+    "keywords": [
+      "container",
+      "registry",
+      "login",
+      "authentication",
+      "acr"
+    ],
+    "mitreSources": [
+      "User Account: Authentication"
+    ],
+    "recommendedTier": "analytics",
+    "isFree": false,
+    "recommendedRetentionDays": 365
+  },
+  {
+    "tableName": "REDConnectionEvents",
+    "connector": "Azure Cache for Redis Enterprise",
+    "classification": "secondary",
+    "category": "Infrastructure Diagnostics",
+    "description": "Azure Cache for Redis Enterprise client connection events including new connections, authentication, and disconnections",
+    "keywords": [
+      "redis",
+      "cache",
+      "connection",
+      "enterprise",
+      "authentication"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "datalake",
+    "isFree": false,
+    "recommendedRetentionDays": 180
+  },
+  {
+    "tableName": "ACRConnectedClientList",
+    "connector": "Azure Cache for Redis",
+    "classification": "secondary",
+    "category": "Infrastructure Diagnostics",
+    "description": "Azure Cache for Redis connected client snapshots showing client IPs and connection counts per instance",
+    "keywords": [
+      "redis",
+      "cache",
+      "connected",
+      "clients",
+      "inventory"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "datalake",
+    "isFree": false,
+    "recommendedRetentionDays": 90
+  },
+  {
+    "tableName": "SynapseRbacOperations",
+    "connector": "Azure Synapse Analytics",
+    "classification": "secondary",
+    "category": "Data Platform",
+    "description": "Azure Synapse Analytics RBAC role assignment changes within the workspace",
+    "keywords": [
+      "synapse",
+      "rbac",
+      "role",
+      "assignment",
+      "access control"
+    ],
+    "mitreSources": [
+      "Cloud Service: Cloud Service Modification"
+    ],
+    "recommendedTier": "datalake",
+    "isFree": false,
+    "recommendedRetentionDays": 365
+  },
+  {
+    "tableName": "Operation",
+    "connector": "Azure Monitor / Log Analytics",
+    "classification": "secondary",
+    "category": "Platform Health",
+    "description": "Log Analytics workspace operational events including data capping warnings, ingestion errors, and service notifications",
+    "keywords": [
+      "operation",
+      "log analytics",
+      "workspace",
+      "health",
+      "ingestion",
+      "capping"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "datalake",
+    "isFree": false,
+    "recommendedRetentionDays": 90
+  },
+  {
+    "tableName": "NTATopologyDetails",
+    "connector": "Azure Network Watcher / Traffic Analytics",
+    "classification": "secondary",
+    "category": "Network Flow",
+    "description": "Network topology discovery records for virtual networks, subnets, gateways, NSGs, and other Azure network resources",
+    "keywords": [
+      "topology",
+      "network",
+      "traffic analytics",
+      "vnet",
+      "subnet",
+      "nsg",
+      "inventory"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "datalake",
+    "isFree": false,
+    "recommendedRetentionDays": 90
+  },
+  {
+    "tableName": "AzureNetworkAnalytics_CL",
+    "connector": "Azure Network Watcher / Traffic Analytics",
+    "classification": "secondary",
+    "category": "Network Flow",
+    "description": "Traffic Analytics processed NSG flow log data with aggregated flow records, allow/deny status, and threat intelligence enrichment",
+    "keywords": [
+      "traffic analytics",
+      "nsg",
+      "flow",
+      "network",
+      "allow",
+      "deny",
+      "threat intelligence"
+    ],
+    "mitreSources": [
+      "Network Traffic: Network Traffic Flow"
+    ],
+    "recommendedTier": "datalake",
+    "isFree": false,
+    "recommendedRetentionDays": 180
+  },
+  {
+    "tableName": "AzureNetworkAnalyticsIPDetails_CL",
+    "connector": "Azure Network Watcher / Traffic Analytics",
+    "classification": "secondary",
+    "category": "Network Flow",
+    "description": "Traffic Analytics public IP enrichment data with WHOIS, geolocation, and Microsoft threat intelligence for IPs in flow data",
+    "keywords": [
+      "traffic analytics",
+      "ip",
+      "threat intelligence",
+      "geolocation",
+      "whois",
+      "malicious"
+    ],
+    "mitreSources": [
+      "Network Traffic: Network Traffic Flow"
+    ],
+    "recommendedTier": "datalake",
+    "isFree": false,
+    "recommendedRetentionDays": 180
+  },
+  {
+    "tableName": "SignalRServiceDiagnosticLogs",
+    "connector": "Azure SignalR Service",
+    "classification": "secondary",
+    "category": "Infrastructure Diagnostics",
+    "description": "Azure SignalR Service diagnostic logs covering connection lifecycle, authorization, throttling, and message tracing",
+    "keywords": [
+      "signalr",
+      "diagnostic",
+      "connection",
+      "authorization",
+      "messaging"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "datalake",
+    "isFree": false,
+    "recommendedRetentionDays": 180
+  },
+  {
+    "tableName": "AZMSRunTimeAuditLogs",
+    "connector": "Azure Service Bus / Event Hubs",
+    "classification": "secondary",
+    "category": "Infrastructure Diagnostics",
+    "description": "Azure Messaging runtime audit logs for Service Bus and Event Hubs data plane operations including authentication type, client IP, and protocol",
+    "keywords": [
+      "service bus",
+      "event hubs",
+      "messaging",
+      "runtime",
+      "audit",
+      "amqp"
+    ],
+    "mitreSources": [
+      "Application Log: Application Log Content"
+    ],
+    "recommendedTier": "datalake",
+    "isFree": false,
+    "recommendedRetentionDays": 180
+  },
+  {
+    "tableName": "FusionAuthAuditLog_CL",
+    "connector": "FusionAuth (Custom)",
+    "classification": "primary",
+    "category": "Identity & Access",
+    "description": "FusionAuth identity platform audit events including authentication, user management, and configuration changes",
+    "keywords": [
+      "fusionauth",
+      "audit",
+      "authentication",
+      "identity",
+      "user management"
+    ],
+    "mitreSources": [
+      "User Account: Authentication"
+    ],
+    "recommendedTier": "analytics",
+    "isFree": false,
+    "recommendedRetentionDays": 365
+  },
+  {
+    "tableName": "FusionAuthWebhookEventLog_CL",
+    "connector": "FusionAuth (Custom)",
+    "classification": "primary",
+    "category": "Identity & Access",
+    "description": "FusionAuth webhook delivery events for integration notifications triggered by identity lifecycle user actions",
+    "keywords": [
+      "fusionauth",
+      "webhook",
+      "event",
+      "notification",
+      "integration"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "datalake",
+    "isFree": false,
+    "recommendedRetentionDays": 180
+  },
+  {
+    "tableName": "HetznerCloudActions_CL",
+    "connector": "Hetzner Cloud (Custom)",
+    "classification": "primary",
+    "category": "Cloud Control Plane",
+    "description": "Hetzner Cloud API action events for infrastructure operations including server, network, and firewall changes",
+    "keywords": [
+      "hetzner",
+      "cloud",
+      "actions",
+      "infrastructure",
+      "api"
+    ],
+    "mitreSources": [
+      "Cloud Service: Cloud Service Modification"
+    ],
+    "recommendedTier": "analytics",
+    "isFree": false,
+    "recommendedRetentionDays": 365
   }
 ]
