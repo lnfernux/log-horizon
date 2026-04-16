@@ -406,10 +406,16 @@ function Invoke-Analysis {
     $detectionCoveredGB = ($tablesWithDetection | Measure-Object MonthlyGB -Sum).Sum
     $huntingCoveredGB   = ($tablesWithHunting | Measure-Object MonthlyGB -Sum).Sum
     $combinedCoveredGB  = ($tablesWithCombined | Measure-Object MonthlyGB -Sum).Sum
+    $totalAllGB         = ($allTables | Measure-Object MonthlyGB -Sum).Sum
+    if ($totalAllGB -le 0) { $totalAllGB = 0 }
 
     $detectionCoveragePct = if ($totalTableCount -gt 0) { [math]::Round(($tablesWithDetection.Count / $totalTableCount) * 100, 1) } else { 0 }
     $huntingCoveragePct   = if ($totalTableCount -gt 0) { [math]::Round(($tablesWithHunting.Count / $totalTableCount) * 100, 1) } else { 0 }
     $combinedCoveragePct  = if ($totalTableCount -gt 0) { [math]::Round(($tablesWithCombined.Count / $totalTableCount) * 100, 1) } else { 0 }
+
+    $detectionCoverageGBPct = if ($totalAllGB -gt 0) { [math]::Round(($detectionCoveredGB / $totalAllGB) * 100, 1) } else { 0 }
+    $huntingCoverageGBPct   = if ($totalAllGB -gt 0) { [math]::Round(($huntingCoveredGB / $totalAllGB) * 100, 1) } else { 0 }
+    $combinedCoverageGBPct  = if ($totalAllGB -gt 0) { [math]::Round(($combinedCoveredGB / $totalAllGB) * 100, 1) } else { 0 }
 
     $avgDetectionsPerTable = if ($tablesWithDetection.Count -gt 0) {
         [math]::Round((($tablesWithDetection | ForEach-Object { $_.AnalyticsRules + $_.XDRRules } | Measure-Object -Sum).Sum / $tablesWithDetection.Count), 1)
@@ -421,9 +427,13 @@ function Invoke-Analysis {
         Add-Member -InputObject $detectionAnalyzer.Summary -NotePropertyName HuntingCoverageGB -NotePropertyValue ([math]::Round($huntingCoveredGB, 2))
         Add-Member -InputObject $detectionAnalyzer.Summary -NotePropertyName CombinedCoverageGB -NotePropertyValue ([math]::Round($combinedCoveredGB, 2))
         Add-Member -InputObject $detectionAnalyzer.Summary -NotePropertyName TotalIngestionGB -NotePropertyValue ([math]::Round($totalNonFreeGB, 2))
+        Add-Member -InputObject $detectionAnalyzer.Summary -NotePropertyName TotalAllGB -NotePropertyValue ([math]::Round($totalAllGB, 2))
         Add-Member -InputObject $detectionAnalyzer.Summary -NotePropertyName DetectionCoveragePct -NotePropertyValue $detectionCoveragePct
         Add-Member -InputObject $detectionAnalyzer.Summary -NotePropertyName HuntingCoveragePct -NotePropertyValue $huntingCoveragePct
         Add-Member -InputObject $detectionAnalyzer.Summary -NotePropertyName CombinedCoveragePct -NotePropertyValue $combinedCoveragePct
+        Add-Member -InputObject $detectionAnalyzer.Summary -NotePropertyName DetectionCoverageGBPct -NotePropertyValue $detectionCoverageGBPct
+        Add-Member -InputObject $detectionAnalyzer.Summary -NotePropertyName HuntingCoverageGBPct -NotePropertyValue $huntingCoverageGBPct
+        Add-Member -InputObject $detectionAnalyzer.Summary -NotePropertyName CombinedCoverageGBPct -NotePropertyValue $combinedCoverageGBPct
         Add-Member -InputObject $detectionAnalyzer.Summary -NotePropertyName AvgDetectionsPerTable -NotePropertyValue $avgDetectionsPerTable
         Add-Member -InputObject $detectionAnalyzer.Summary -NotePropertyName TablesWithDetection -NotePropertyValue $tablesWithDetection.Count
         Add-Member -InputObject $detectionAnalyzer.Summary -NotePropertyName TablesWithHunting -NotePropertyValue $tablesWithHunting.Count

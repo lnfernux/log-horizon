@@ -383,6 +383,42 @@ function Write-Recommendations {
 function Write-DetectionAssessment {
     param([PSCustomObject]$Analysis)
 
+    # Cost-value matrix: classification rows x assessment columns
+    $assessmentOrder = @('High Value', 'Good Value', 'Missing Coverage', 'Optimize', 'Low Value', 'Underutilized', 'Free Tier')
+    $classRows = @('primary', 'secondary')
+    $matrixTable = @()
+
+    foreach ($cls in $classRows) {
+        $subset = $Analysis.TableAnalysis | Where-Object { $_.Classification -eq $cls }
+        $row = [ordered]@{
+            'Classification' = if ($cls -eq 'primary') { '[green]Primary[/]' } else { '[grey]Secondary[/]' }
+        }
+        foreach ($assess in $assessmentOrder) {
+            $count = ($subset | Where-Object { $_.Assessment -eq $assess }).Count
+            $cellValue = if ($count -eq 0) { '[dim]-[/]' }
+                elseif ($assess -in @('Missing Coverage', 'Low Value', 'Optimize')) { "[yellow]$count[/]" }
+                elseif ($assess -in @('High Value', 'Good Value', 'Free Tier')) { "[green]$count[/]" }
+                else { "$count" }
+            $row[$assess] = $cellValue
+        }
+        $total = ($subset | Measure-Object).Count
+        $row['Total'] = "[bold]$total[/]"
+        $matrixTable += [PSCustomObject]$row
+    }
+
+    # Totals row
+    $allTables = $Analysis.TableAnalysis
+    $totalsRow = [ordered]@{ 'Classification' = '[bold]Total[/]' }
+    foreach ($assess in $assessmentOrder) {
+        $count = ($allTables | Where-Object { $_.Assessment -eq $assess }).Count
+        $totalsRow[$assess] = "[bold]$count[/]"
+    }
+    $totalsRow['Total'] = "[bold]$(($allTables | Measure-Object).Count)[/]"
+    $matrixTable += [PSCustomObject]$totalsRow
+
+    $matrixTable | Format-SpectreTable -Border Rounded -Color DodgerBlue2 -HeaderColor DodgerBlue2 -AllowMarkup
+    Write-SpectreHost ""
+
     $lines = @()
 
     # Well covered
@@ -449,6 +485,79 @@ function Write-DetectionAssessment {
 
     $body = $lines -join "`n"
     $body | Format-SpectrePanel -Header "[dodgerblue2] DETECTION ASSESSMENT [/]" -Border Rounded -Color DodgerBlue2
+
+    # Submenu loop for drill-down tables
+    $submenuContinue = $true
+    while ($submenuContinue) {
+        $choices = @('Show primary tables', 'Show secondary tables', 'Back')
+        $pick = Read-SpectreSelection -Title "[deepskyblue1]Select an option:[/]" `
+                    -Choices $choices `
+                    -Color DodgerBlue2
+
+        switch ($pick) {
+            'Back' { $submenuContinue = $false }
+            default {
+                $classification = if ($pick -eq 'Show primary tables') { 'primary' } else { 'secondary' }
+                Write-DetectionAssessmentTable -TableAnalysis $Analysis.TableAnalysis -Classification $classification
+            }
+        }
+    }
+}
+
+function Write-DetectionAssessmentTable {
+    param(
+        [array]$TableAnalysis,
+        [string]$Classification
+    )
+
+    $width = Get-ConsoleWidth
+    $showHunting = ($width -ge 120)
+
+    $filtered = $TableAnalysis |
+        Where-Object { $_.Classification -eq $Classification } |
+        Sort-Object EstMonthlyCostUSD -Descending
+
+    if ($filtered.Count -eq 0) {
+        Write-SpectreHost "[dim]No $Classification tables found.[/]"
+        return
+    }
+
+    $table = @()
+    $rank = 0
+    foreach ($t in $filtered) {
+        $rank++
+
+        $assessMarkup = switch ($t.Assessment) {
+            'High Value'       { '[green]High Value[/]' }
+            'Good Value'       { '[green]Good Value[/]' }
+            'Missing Coverage' { '[yellow]Missing Coverage[/]' }
+            'Optimize'         { '[yellow]Optimize[/]' }
+            'Low Value'        { '[red]Low Value[/]' }
+            'Underutilized'    { '[grey]Underutilized[/]' }
+            'Free Tier'        { '[deepskyblue1]Free[/]' }
+            default            { '[grey]-[/]' }
+        }
+
+        $costStr = if ($t.IsFree) { '[deepskyblue1]FREE[/]' } else { "`$$($t.EstMonthlyCostUSD)" }
+
+        $row = [ordered]@{
+            '#'              = $rank
+            'Table'          = Get-SafeEscapedText $t.TableName
+            'GB/mo'          = $t.MonthlyGB
+            'Cost/mo'        = $costStr
+            'Cost Tier'      = $t.CostTier
+            'Detection Tier' = $t.DetectionTier
+            'Rules'          = $t.AnalyticsRules
+        }
+        if ($showHunting) { $row['Hunting'] = $t.HuntingQueries }
+        $row['Assessment'] = $assessMarkup
+
+        $table += [PSCustomObject]$row
+    }
+
+    $label = if ($Classification -eq 'primary') { 'PRIMARY' } else { 'SECONDARY' }
+    $table | Format-SpectreTable -Border Rounded -Color DodgerBlue2 -HeaderColor DodgerBlue2 -AllowMarkup
+    Write-SpectreHost "[dim]  $($filtered.Count) $label tables.[/]"
 }
 
 # SOC optimization
@@ -1483,7 +1592,9 @@ function Write-DetectionAnalyzer {
     # Coverage stats panel
     $s = $Analysis.DetectionAnalyzer.Summary
     if ($null -ne $s.TotalTables -and $s.TotalTables -gt 0) {
-        $barWidth = 30
+        $consoleW = Get-ConsoleWidth
+        # Dynamic bar width: scale with terminal, floor 10, cap 30
+        $barWidth = [math]::Max(10, [math]::Min(30, [math]::Floor(($consoleW - 60) * 0.5)))
         $detFill   = [math]::Max([math]::Round(($s.DetectionCoveragePct / 100) * $barWidth), 0)
         $huntFill  = [math]::Max([math]::Round(($s.HuntingCoveragePct / 100) * $barWidth), 0)
         $combFill  = [math]::Max([math]::Round(($s.CombinedCoveragePct / 100) * $barWidth), 0)
@@ -1492,15 +1603,50 @@ function Write-DetectionAnalyzer {
         $huntBar = "[green]$([string]::new([char]0x2588, $huntFill))[/][dim]$([string]::new([char]0x2591, $barWidth - $huntFill))[/]"
         $combBar = "[yellow]$([string]::new([char]0x2588, $combFill))[/][dim]$([string]::new([char]0x2591, $barWidth - $combFill))[/]"
 
-        $coverageLines = @(
-            "[bold]Ingestion Coverage[/] [dim]($($s.TotalTables) tables, $($s.TotalIngestionGB) GB/month)[/]"
-            ""
-            "  Detection (Analytics/CDR)  $detBar  [deepskyblue1]$($s.DetectionCoveragePct)%[/] [dim]($($s.TablesWithDetection)/$($s.TotalTables) tables)[/]"
-            "  Hunting Queries            $huntBar  [green]$($s.HuntingCoveragePct)%[/] [dim]($($s.TablesWithHunting)/$($s.TotalTables) tables)[/]"
-            "  Combined                   $combBar  [yellow]$($s.CombinedCoveragePct)%[/] [dim]($($s.TablesWithCombined)/$($s.TotalTables) tables)[/]"
-            ""
-            "  Avg detections per table:  [bold]$($s.AvgDetectionsPerTable)[/] [dim](analytics + CDR rules)[/]"
-        )
+        # GB-weighted coverage bars
+        $detGBFill  = [math]::Max([math]::Round(($s.DetectionCoverageGBPct / 100) * $barWidth), 0)
+        $huntGBFill = [math]::Max([math]::Round(($s.HuntingCoverageGBPct / 100) * $barWidth), 0)
+        $combGBFill = [math]::Max([math]::Round(($s.CombinedCoverageGBPct / 100) * $barWidth), 0)
+
+        $detGBBar  = "[deepskyblue1]$([string]::new([char]0x2588, $detGBFill))[/][dim]$([string]::new([char]0x2591, $barWidth - $detGBFill))[/]"
+        $huntGBBar = "[green]$([string]::new([char]0x2588, $huntGBFill))[/][dim]$([string]::new([char]0x2591, $barWidth - $huntGBFill))[/]"
+        $combGBBar = "[yellow]$([string]::new([char]0x2588, $combGBFill))[/][dim]$([string]::new([char]0x2591, $barWidth - $combGBFill))[/]"
+
+        if ($consoleW -ge 120) {
+            # Full layout with aligned labels
+            $coverageLines = @(
+                "[bold]Ingestion Coverage[/] [dim]($($s.TotalTables) tables, $($s.TotalAllGB) GB/month)[/]"
+                ""
+                "  Detection (Analytics/CDR)  $detBar  [deepskyblue1]$($s.DetectionCoveragePct)%[/] [dim]($($s.TablesWithDetection)/$($s.TotalTables) tables)[/]"
+                "  Hunting Queries            $huntBar  [green]$($s.HuntingCoveragePct)%[/] [dim]($($s.TablesWithHunting)/$($s.TotalTables) tables)[/]"
+                "  Combined                   $combBar  [yellow]$($s.CombinedCoveragePct)%[/] [dim]($($s.TablesWithCombined)/$($s.TotalTables) tables)[/]"
+                ""
+                "[bold]Volume Coverage[/] [dim](GB with detections / total GB)[/]"
+                ""
+                "  Detection (Analytics/CDR)  $detGBBar  [deepskyblue1]$($s.DetectionCoverageGBPct)%[/] [dim]($($s.DetectionCoverageGB)/$($s.TotalAllGB) GB)[/]"
+                "  Hunting Queries            $huntGBBar  [green]$($s.HuntingCoverageGBPct)%[/] [dim]($($s.HuntingCoverageGB)/$($s.TotalAllGB) GB)[/]"
+                "  Combined                   $combGBBar  [yellow]$($s.CombinedCoverageGBPct)%[/] [dim]($($s.CombinedCoverageGB)/$($s.TotalAllGB) GB)[/]"
+                ""
+                "  Avg detections per table:  [bold]$($s.AvgDetectionsPerTable)[/] [dim](analytics + CDR rules)[/]"
+            )
+        } else {
+            # Compact layout with shorter labels
+            $coverageLines = @(
+                "[bold]Coverage[/] [dim]($($s.TotalTables) tables, $($s.TotalAllGB) GB/mo)[/]"
+                ""
+                "  Detection  $detBar  [deepskyblue1]$($s.DetectionCoveragePct)%[/] [dim]($($s.TablesWithDetection)/$($s.TotalTables))[/]"
+                "  Hunting    $huntBar  [green]$($s.HuntingCoveragePct)%[/] [dim]($($s.TablesWithHunting)/$($s.TotalTables))[/]"
+                "  Combined   $combBar  [yellow]$($s.CombinedCoveragePct)%[/] [dim]($($s.TablesWithCombined)/$($s.TotalTables))[/]"
+                ""
+                "[bold]Volume[/] [dim](GB coverage)[/]"
+                ""
+                "  Detection  $detGBBar  [deepskyblue1]$($s.DetectionCoverageGBPct)%[/] [dim]($($s.DetectionCoverageGB)/$($s.TotalAllGB) GB)[/]"
+                "  Hunting    $huntGBBar  [green]$($s.HuntingCoverageGBPct)%[/] [dim]($($s.HuntingCoverageGB)/$($s.TotalAllGB) GB)[/]"
+                "  Combined   $combGBBar  [yellow]$($s.CombinedCoverageGBPct)%[/] [dim]($($s.CombinedCoverageGB)/$($s.TotalAllGB) GB)[/]"
+                ""
+                "  Avg detections/table: [bold]$($s.AvgDetectionsPerTable)[/]"
+            )
+        }
         ($coverageLines -join "`n") | Format-SpectrePanel -Header "[dodgerblue2] DETECTION COVERAGE [/]" -Border Rounded -Color DodgerBlue2
         Write-SpectreHost ""
     }
@@ -1510,6 +1656,11 @@ function Write-DetectionAnalyzer {
     $unscored = @($Analysis.DetectionAnalyzer.RuleMetrics | Where-Object { $null -eq $_.NoisinessScore })
     $metrics = @($scored) + @($unscored)
     $displayMetrics = @($metrics | Select-Object -First 15)
+
+    $width = Get-ConsoleWidth
+    $showKind = ($width -ge 100)
+    # Reserve space for table borders + other columns; remaining goes to rule name
+    $maxNameLen = if ($width -ge 140) { 80 } elseif ($width -ge 120) { 55 } elseif ($width -ge 100) { 40 } else { 30 }
 
     $table = @()
     foreach ($r in $displayMetrics) {
@@ -1529,14 +1680,21 @@ function Write-DetectionAnalyzer {
             default           { $r.RuleKind }
         }
 
-        $table += [PSCustomObject]@{
-            'Rule'        = Get-SafeEscapedText $r.RuleName
-            'Kind'        = $kindMarkup
-            'Incidents'   = $r.IncidentsTotal
-            'AutoClose%'  = [math]::Round(($r.AutoCloseRatio * 100), 1)
-            'FalsePos%'   = [math]::Round(($r.FalsePositiveRatio * 100), 1)
-            'Score'       = $scoreMarkup
+        $displayName = $r.RuleName
+        if ($displayName.Length -gt $maxNameLen) {
+            $displayName = $displayName.Substring(0, $maxNameLen - 3) + '...'
         }
+
+        $row = [ordered]@{
+            'Rule'        = Get-SafeEscapedText $displayName
+        }
+        if ($showKind) { $row['Kind'] = $kindMarkup }
+        $row['Incidents']   = $r.IncidentsTotal
+        $row['AutoClose%']  = [math]::Round(($r.AutoCloseRatio * 100), 1)
+        $row['FalsePos%']   = [math]::Round(($r.FalsePositiveRatio * 100), 1)
+        $row['Score']       = $scoreMarkup
+
+        $table += [PSCustomObject]$row
     }
 
     $table | Format-SpectreTable -Border Rounded -Color DodgerBlue2 -HeaderColor DodgerBlue2 -AllowMarkup
@@ -1582,6 +1740,9 @@ function Write-DetectionAnalyzer {
 
             { $_ -like 'Show all *' } {
                 Write-SpectreHost ""
+                $allWidth = Get-ConsoleWidth
+                $allShowKind = ($allWidth -ge 100)
+                $allMaxNameLen = if ($allWidth -ge 140) { 80 } elseif ($allWidth -ge 120) { 55 } elseif ($allWidth -ge 100) { 40 } else { 30 }
                 $fullTable = @()
                 foreach ($r in $metrics) {
                     $scoreMarkup = if ($null -eq $r.NoisinessScore) {
@@ -1600,14 +1761,21 @@ function Write-DetectionAnalyzer {
                         default           { $r.RuleKind }
                     }
 
-                    $fullTable += [PSCustomObject]@{
-                        'Rule'        = Get-SafeEscapedText $r.RuleName
-                        'Kind'        = $kindMarkup
-                        'Incidents'   = $r.IncidentsTotal
-                        'AutoClose%'  = [math]::Round(($r.AutoCloseRatio * 100), 1)
-                        'FalsePos%'   = [math]::Round(($r.FalsePositiveRatio * 100), 1)
-                        'Score'       = $scoreMarkup
+                    $displayName = $r.RuleName
+                    if ($displayName.Length -gt $allMaxNameLen) {
+                        $displayName = $displayName.Substring(0, $allMaxNameLen - 3) + '...'
                     }
+
+                    $row = [ordered]@{
+                        'Rule'        = Get-SafeEscapedText $displayName
+                    }
+                    if ($allShowKind) { $row['Kind'] = $kindMarkup }
+                    $row['Incidents']   = $r.IncidentsTotal
+                    $row['AutoClose%']  = [math]::Round(($r.AutoCloseRatio * 100), 1)
+                    $row['FalsePos%']   = [math]::Round(($r.FalsePositiveRatio * 100), 1)
+                    $row['Score']       = $scoreMarkup
+
+                    $fullTable += [PSCustomObject]$row
                 }
                 $fullTable | Format-SpectreTable -Border Rounded -Color DodgerBlue2 -HeaderColor DodgerBlue2 -AllowMarkup
                 Write-SpectreHost ""

@@ -5,7 +5,7 @@
 ### Microsoft Sentinel SIEM Log Source Analyzer
 
 ![PowerShell 7+](https://img.shields.io/badge/PowerShell-7%2B-blue)
-![Module Version](https://img.shields.io/badge/version-0.6.3-green)
+![Module Version](https://img.shields.io/badge/version-0.7.0-green)
 
 ---
 I've had to answer *"what are we actually getting out of these logs?"* or *"what is the recommended logs for Microsoft Sentinel"* more times than I can count. The answer always depend on so many things, but we can be generic. So I built this thingy right here.
@@ -460,6 +460,7 @@ MIT
 
 | Version | Date | Changes |
 |---|---|---|
+| 0.7.0 | 2026-04-16 | Detection Assessment updated with cost-value matrix summary table (Primary/Secondary x7 assessment categories with color coding), drill-down submenu for primary/secondary tables with cost/detection tier columns. Detection Analyzer updated with GB-weighted volume coverage bars (detection/hunting/combined GB as percentage of total ingestion alongside existing table-count bars). Adaptive display improvements for Detection Analyzer (dynamic bar width, rule name truncation, conditional column hiding based on console width). 193 tests passing|
 | 0.6.3 | 2026-04-11 | Minor update for PSGallery|
 | 0.6.2 | 2026-04-11 | Log Tuning / Transforms menu: live data tuning analysis (per-table field usage from deployed rules/hunting queries, filter/project/combined KQL generation, savings estimates), schema column extraction from Tables API, `Get-SplitKql` fallback hierarchy (community stats → category defaults → universal fields), comprehensive table evaluator with field usage matrix, unified KB + live tuning export sections, `Build-FieldKnowledgeBase.ps1` mining script for Azure-Sentinel GitHub rule corpus. Detection Analyzer: SentinelHealth-based auto-close attribution (primary) with operator-aware rule-matching fallback, Boolean condition wrapper parsing, Resolved status detection, GUID-tail matching for ARM resource IDs. Coverage now table-count-based across all tables (including free tier). Scoring disclaimer added to TUI and exports. 174 tests |
 | 0.6.1 | 2026-04-10 | Bug fixes: `$kqlKeywords` filtering now shared at file scope (was undefined in `Get-TablesFromKql`), `[CmdletBinding()]` added to all helper functions, Defender unified check simplified, removed ghost `-RuleCount` test param. Robustness: `Get-HuntingQueries` pagination, `Invoke-AzRestWithRetry` retry wrapper with exponential backoff for 429/5xx, `PricePerGB` validation, `Write-Verbose` in key functions. Docs: version badge, DB count, prerequisites aligned with manifest |

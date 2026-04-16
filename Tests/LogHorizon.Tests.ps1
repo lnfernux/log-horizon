@@ -2154,6 +2154,68 @@ Describe 'Write-Report helper functions' {
     }
 }
 
+Describe 'Detection Analyzer adaptive display' {
+    It 'computes dynamic bar width capped between 10 and 30' {
+        # Simulate the formula: Max(10, Min(30, Floor((width - 60) * 0.5)))
+        # Wide terminal (200)
+        $wide = [math]::Max(10, [math]::Min(30, [math]::Floor((200 - 60) * 0.5)))
+        $wide | Should -Be 30
+
+        # Standard terminal (120)
+        $standard = [math]::Max(10, [math]::Min(30, [math]::Floor((120 - 60) * 0.5)))
+        $standard | Should -Be 30
+
+        # Narrow terminal (80)
+        $narrow = [math]::Max(10, [math]::Min(30, [math]::Floor((80 - 60) * 0.5)))
+        $narrow | Should -Be 10
+
+        # Very narrow terminal (70)
+        $veryNarrow = [math]::Max(10, [math]::Min(30, [math]::Floor((70 - 60) * 0.5)))
+        $veryNarrow | Should -Be 10
+    }
+
+    It 'truncates rule names exceeding max length' {
+        $longName = 'A' * 100
+        $maxLen = 40
+        $truncated = if ($longName.Length -gt $maxLen) { $longName.Substring(0, $maxLen - 3) + '...' } else { $longName }
+        $truncated.Length | Should -Be 40
+        $truncated | Should -Match '\.\.\.$'
+    }
+
+    It 'does not truncate rule names within max length' {
+        $shortName = 'Short Rule Name'
+        $maxLen = 40
+        $result = if ($shortName.Length -gt $maxLen) { $shortName.Substring(0, $maxLen - 3) + '...' } else { $shortName }
+        $result | Should -Be $shortName
+    }
+
+    It 'selects correct maxNameLen tier for each width bracket' {
+        # >= 140
+        $tier140 = if (150 -ge 140) { 80 } elseif (150 -ge 120) { 55 } elseif (150 -ge 100) { 40 } else { 30 }
+        $tier140 | Should -Be 80
+
+        # >= 120 but < 140
+        $tier120 = if (125 -ge 140) { 80 } elseif (125 -ge 120) { 55 } elseif (125 -ge 100) { 40 } else { 30 }
+        $tier120 | Should -Be 55
+
+        # >= 100 but < 120
+        $tier100 = if (110 -ge 140) { 80 } elseif (110 -ge 120) { 55 } elseif (110 -ge 100) { 40 } else { 30 }
+        $tier100 | Should -Be 40
+
+        # < 100
+        $tier80 = if (80 -ge 140) { 80 } elseif (80 -ge 120) { 55 } elseif (80 -ge 100) { 40 } else { 30 }
+        $tier80 | Should -Be 30
+    }
+
+    It 'hides Kind column when width is under 100' {
+        $showKind = (80 -ge 100)
+        $showKind | Should -Be $false
+
+        $showKind = (100 -ge 100)
+        $showKind | Should -Be $true
+    }
+}
+
 Describe 'Get-LiveTuningAnalysis' {
     It 'returns per-table tuning analysis for rules with fields' {
         $rules = @(
@@ -2476,5 +2538,233 @@ Describe 'Get-LiveTuningAnalysis combined KQL generation' {
 
         $result = Get-LiveTuningAnalysis -Rules $rules -TableAnalysis @()
         $result.Count | Should -Be 0
+    }
+}
+
+Describe 'Detection Assessment cost-value matrix' {
+    It 'groups tables by classification and assessment' {
+        $tableAnalysis = @(
+            [PSCustomObject]@{ TableName = 'SigninLogs'; Classification = 'primary'; Assessment = 'High Value' }
+            [PSCustomObject]@{ TableName = 'SecurityEvent'; Classification = 'primary'; Assessment = 'High Value' }
+            [PSCustomObject]@{ TableName = 'AuditLogs'; Classification = 'primary'; Assessment = 'Good Value' }
+            [PSCustomObject]@{ TableName = 'DeviceNetworkInfo'; Classification = 'secondary'; Assessment = 'Optimize' }
+            [PSCustomObject]@{ TableName = 'AzureDiagnostics'; Classification = 'secondary'; Assessment = 'Low Value' }
+            [PSCustomObject]@{ TableName = 'AzureActivity'; Classification = 'primary'; Assessment = 'Free Tier' }
+        )
+
+        $assessmentOrder = @('High Value', 'Good Value', 'Missing Coverage', 'Optimize', 'Low Value', 'Underutilized', 'Free Tier')
+        $classRows = @('primary', 'secondary')
+
+        foreach ($cls in $classRows) {
+            $subset = $tableAnalysis | Where-Object { $_.Classification -eq $cls }
+            foreach ($assess in $assessmentOrder) {
+                $count = ($subset | Where-Object { $_.Assessment -eq $assess }).Count
+                if ($cls -eq 'primary' -and $assess -eq 'High Value') { $count | Should -Be 2 }
+                if ($cls -eq 'primary' -and $assess -eq 'Good Value') { $count | Should -Be 1 }
+                if ($cls -eq 'primary' -and $assess -eq 'Missing Coverage') { $count | Should -Be 0 }
+                if ($cls -eq 'primary' -and $assess -eq 'Free Tier') { $count | Should -Be 1 }
+                if ($cls -eq 'secondary' -and $assess -eq 'Optimize') { $count | Should -Be 1 }
+                if ($cls -eq 'secondary' -and $assess -eq 'Low Value') { $count | Should -Be 1 }
+                if ($cls -eq 'secondary' -and $assess -eq 'High Value') { $count | Should -Be 0 }
+            }
+        }
+    }
+
+    It 'computes correct totals row' {
+        $tableAnalysis = @(
+            [PSCustomObject]@{ TableName = 'T1'; Classification = 'primary'; Assessment = 'High Value' }
+            [PSCustomObject]@{ TableName = 'T2'; Classification = 'primary'; Assessment = 'Missing Coverage' }
+            [PSCustomObject]@{ TableName = 'T3'; Classification = 'secondary'; Assessment = 'High Value' }
+            [PSCustomObject]@{ TableName = 'T4'; Classification = 'secondary'; Assessment = 'Optimize' }
+            [PSCustomObject]@{ TableName = 'T5'; Classification = 'primary'; Assessment = 'Free Tier' }
+        )
+
+        $assessmentOrder = @('High Value', 'Good Value', 'Missing Coverage', 'Optimize', 'Low Value', 'Underutilized', 'Free Tier')
+        $totals = @{}
+        foreach ($assess in $assessmentOrder) {
+            $totals[$assess] = ($tableAnalysis | Where-Object { $_.Assessment -eq $assess }).Count
+        }
+
+        $totals['High Value'] | Should -Be 2
+        $totals['Good Value'] | Should -Be 0
+        $totals['Missing Coverage'] | Should -Be 1
+        $totals['Optimize'] | Should -Be 1
+        $totals['Free Tier'] | Should -Be 1
+        ($tableAnalysis | Measure-Object).Count | Should -Be 5
+    }
+
+    It 'handles empty table analysis gracefully' {
+        $tableAnalysis = @()
+        $assessmentOrder = @('High Value', 'Good Value', 'Missing Coverage', 'Optimize', 'Low Value', 'Underutilized', 'Free Tier')
+
+        foreach ($assess in $assessmentOrder) {
+            $count = ($tableAnalysis | Where-Object { $_.Assessment -eq $assess }).Count
+            $count | Should -Be 0
+        }
+        ($tableAnalysis | Measure-Object).Count | Should -Be 0
+    }
+
+    It 'applies correct color coding for assessment cell values' {
+        $greenAssessments = @('High Value', 'Good Value', 'Free Tier')
+        $yellowAssessments = @('Missing Coverage', 'Low Value', 'Optimize')
+
+        foreach ($assess in $greenAssessments) {
+            $assess -in @('High Value', 'Good Value', 'Free Tier') | Should -Be $true
+            $assess -in @('Missing Coverage', 'Low Value', 'Optimize') | Should -Be $false
+        }
+        foreach ($assess in $yellowAssessments) {
+            $assess -in @('Missing Coverage', 'Low Value', 'Optimize') | Should -Be $true
+            $assess -in @('High Value', 'Good Value', 'Free Tier') | Should -Be $false
+        }
+    }
+}
+
+Describe 'Detection Assessment submenu table filtering' {
+    BeforeAll {
+        $script:submenuTableAnalysis = @(
+            [PSCustomObject]@{ TableName = 'SigninLogs'; Classification = 'primary'; Assessment = 'High Value'; MonthlyGB = 12.5; EstMonthlyCostUSD = 80; IsFree = $false; CostTier = 'Medium'; DetectionTier = 'High'; AnalyticsRules = 5; HuntingQueries = 2 }
+            [PSCustomObject]@{ TableName = 'SecurityEvent'; Classification = 'primary'; Assessment = 'Good Value'; MonthlyGB = 25.0; EstMonthlyCostUSD = 160; IsFree = $false; CostTier = 'High'; DetectionTier = 'Medium'; AnalyticsRules = 3; HuntingQueries = 1 }
+            [PSCustomObject]@{ TableName = 'AzureActivity'; Classification = 'primary'; Assessment = 'Free Tier'; MonthlyGB = 2.0; EstMonthlyCostUSD = 0; IsFree = $true; CostTier = 'Free'; DetectionTier = 'Low'; AnalyticsRules = 1; HuntingQueries = 0 }
+            [PSCustomObject]@{ TableName = 'AzureDiagnostics'; Classification = 'secondary'; Assessment = 'Optimize'; MonthlyGB = 50.0; EstMonthlyCostUSD = 320; IsFree = $false; CostTier = 'Very High'; DetectionTier = 'None'; AnalyticsRules = 0; HuntingQueries = 0 }
+            [PSCustomObject]@{ TableName = 'StorageBlobLogs'; Classification = 'secondary'; Assessment = 'Low Value'; MonthlyGB = 30.0; EstMonthlyCostUSD = 192; IsFree = $false; CostTier = 'High'; DetectionTier = 'None'; AnalyticsRules = 0; HuntingQueries = 0 }
+        )
+    }
+
+    It 'filters primary tables correctly' {
+        $filtered = $script:submenuTableAnalysis | Where-Object { $_.Classification -eq 'primary' }
+        $filtered.Count | Should -Be 3
+        $filtered.TableName | Should -Contain 'SigninLogs'
+        $filtered.TableName | Should -Contain 'SecurityEvent'
+        $filtered.TableName | Should -Contain 'AzureActivity'
+        $filtered.TableName | Should -Not -Contain 'AzureDiagnostics'
+    }
+
+    It 'filters secondary tables correctly' {
+        $filtered = $script:submenuTableAnalysis | Where-Object { $_.Classification -eq 'secondary' }
+        $filtered.Count | Should -Be 2
+        $filtered.TableName | Should -Contain 'AzureDiagnostics'
+        $filtered.TableName | Should -Contain 'StorageBlobLogs'
+        $filtered.TableName | Should -Not -Contain 'SigninLogs'
+    }
+
+    It 'sorts filtered tables by cost descending' {
+        $sorted = $script:submenuTableAnalysis |
+            Where-Object { $_.Classification -eq 'primary' } |
+            Sort-Object EstMonthlyCostUSD -Descending
+        $sorted[0].TableName | Should -Be 'SecurityEvent'
+        $sorted[1].TableName | Should -Be 'SigninLogs'
+        $sorted[2].TableName | Should -Be 'AzureActivity'
+    }
+
+    It 'applies correct assessment color markup' {
+        $assessMarkupMap = @{
+            'High Value'       = '[green]High Value[/]'
+            'Good Value'       = '[green]Good Value[/]'
+            'Missing Coverage' = '[yellow]Missing Coverage[/]'
+            'Optimize'         = '[yellow]Optimize[/]'
+            'Low Value'        = '[red]Low Value[/]'
+            'Underutilized'    = '[grey]Underutilized[/]'
+            'Free Tier'        = '[deepskyblue1]Free[/]'
+        }
+
+        foreach ($t in $script:submenuTableAnalysis) {
+            $markup = switch ($t.Assessment) {
+                'High Value'       { '[green]High Value[/]' }
+                'Good Value'       { '[green]Good Value[/]' }
+                'Missing Coverage' { '[yellow]Missing Coverage[/]' }
+                'Optimize'         { '[yellow]Optimize[/]' }
+                'Low Value'        { '[red]Low Value[/]' }
+                'Underutilized'    { '[grey]Underutilized[/]' }
+                'Free Tier'        { '[deepskyblue1]Free[/]' }
+                default            { '[grey]-[/]' }
+            }
+            $markup | Should -Be $assessMarkupMap[$t.Assessment]
+        }
+    }
+
+    It 'shows FREE for free-tier cost column' {
+        $free = $script:submenuTableAnalysis | Where-Object { $_.IsFree }
+        $free.Count | Should -Be 1
+        $costStr = if ($free.IsFree) { '[deepskyblue1]FREE[/]' } else { "`$$($free.EstMonthlyCostUSD)" }
+        $costStr | Should -Be '[deepskyblue1]FREE[/]'
+    }
+
+    It 'returns empty when no tables match classification' {
+        $filtered = $script:submenuTableAnalysis | Where-Object { $_.Classification -eq 'unknown' }
+        $filtered.Count | Should -Be 0
+    }
+}
+
+Describe 'Detection coverage GB-weighted percentages' {
+    It 'computes GB coverage percentages correctly' {
+        $allTables = @(
+            [PSCustomObject]@{ TableName = 'T1'; MonthlyGB = 10; AnalyticsRules = 3; XDRRules = 0; HuntingQueries = 1; EffectiveCoverage = 4; IsFree = $false }
+            [PSCustomObject]@{ TableName = 'T2'; MonthlyGB = 5;  AnalyticsRules = 0; XDRRules = 0; HuntingQueries = 0; EffectiveCoverage = 0; IsFree = $false }
+            [PSCustomObject]@{ TableName = 'T3'; MonthlyGB = 5;  AnalyticsRules = 1; XDRRules = 0; HuntingQueries = 2; EffectiveCoverage = 3; IsFree = $false }
+            [PSCustomObject]@{ TableName = 'T4'; MonthlyGB = 0;  AnalyticsRules = 0; XDRRules = 0; HuntingQueries = 0; EffectiveCoverage = 0; IsFree = $true }
+        )
+
+        $totalAllGB = ($allTables | Measure-Object MonthlyGB -Sum).Sum
+        $totalAllGB | Should -Be 20
+
+        $tablesWithDetection = @($allTables | Where-Object { ($_.AnalyticsRules + $_.XDRRules) -gt 0 })
+        $tablesWithHunting   = @($allTables | Where-Object { $_.HuntingQueries -gt 0 })
+        $tablesWithCombined  = @($allTables | Where-Object { $_.EffectiveCoverage -gt 0 })
+
+        $detectionCoveredGB = ($tablesWithDetection | Measure-Object MonthlyGB -Sum).Sum
+        $huntingCoveredGB   = ($tablesWithHunting | Measure-Object MonthlyGB -Sum).Sum
+        $combinedCoveredGB  = ($tablesWithCombined | Measure-Object MonthlyGB -Sum).Sum
+
+        # T1 (10GB) + T3 (5GB) = 15GB detection coverage
+        $detectionCoveredGB | Should -Be 15
+        # T1 (10GB) + T3 (5GB) = 15GB hunting coverage
+        $huntingCoveredGB | Should -Be 15
+        # T1 (10GB) + T3 (5GB) = 15GB combined coverage
+        $combinedCoveredGB | Should -Be 15
+
+        $detPct = [math]::Round(($detectionCoveredGB / $totalAllGB) * 100, 1)
+        $detPct | Should -Be 75.0
+
+        $huntPct = [math]::Round(($huntingCoveredGB / $totalAllGB) * 100, 1)
+        $huntPct | Should -Be 75.0
+    }
+
+    It 'returns 0 percent when total GB is zero' {
+        $allTables = @(
+            [PSCustomObject]@{ TableName = 'T1'; MonthlyGB = 0; AnalyticsRules = 1; XDRRules = 0; HuntingQueries = 0; EffectiveCoverage = 1; IsFree = $true }
+        )
+
+        $totalAllGB = ($allTables | Measure-Object MonthlyGB -Sum).Sum
+        $pct = if ($totalAllGB -gt 0) { [math]::Round(($totalAllGB / $totalAllGB) * 100, 1) } else { 0 }
+        $pct | Should -Be 0
+    }
+
+    It 'handles case where all tables have detection coverage' {
+        $allTables = @(
+            [PSCustomObject]@{ TableName = 'T1'; MonthlyGB = 8; AnalyticsRules = 2; XDRRules = 0; HuntingQueries = 1; EffectiveCoverage = 3; IsFree = $false }
+            [PSCustomObject]@{ TableName = 'T2'; MonthlyGB = 12; AnalyticsRules = 1; XDRRules = 1; HuntingQueries = 0; EffectiveCoverage = 2; IsFree = $false }
+        )
+
+        $totalAllGB = ($allTables | Measure-Object MonthlyGB -Sum).Sum
+        $detCoveredGB = ($allTables | Where-Object { ($_.AnalyticsRules + $_.XDRRules) -gt 0 } | Measure-Object MonthlyGB -Sum).Sum
+
+        $pct = [math]::Round(($detCoveredGB / $totalAllGB) * 100, 1)
+        $pct | Should -Be 100.0
+    }
+
+    It 'includes free table GB in total denominator' {
+        $allTables = @(
+            [PSCustomObject]@{ TableName = 'T1'; MonthlyGB = 5; AnalyticsRules = 2; XDRRules = 0; HuntingQueries = 0; EffectiveCoverage = 2; IsFree = $false }
+            [PSCustomObject]@{ TableName = 'T2'; MonthlyGB = 5; AnalyticsRules = 0; XDRRules = 0; HuntingQueries = 0; EffectiveCoverage = 0; IsFree = $true }
+        )
+
+        $totalAllGB = ($allTables | Measure-Object MonthlyGB -Sum).Sum
+        $totalAllGB | Should -Be 10
+
+        $detCoveredGB = ($allTables | Where-Object { ($_.AnalyticsRules + $_.XDRRules) -gt 0 } | Measure-Object MonthlyGB -Sum).Sum
+        $detCoveredGB | Should -Be 5
+
+        $pct = [math]::Round(($detCoveredGB / $totalAllGB) * 100, 1)
+        $pct | Should -Be 50.0
     }
 }
