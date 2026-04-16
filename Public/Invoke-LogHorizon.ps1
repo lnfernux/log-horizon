@@ -7,6 +7,8 @@ function Invoke-LogHorizon {
         log source as primary or secondary security data, evaluates cost vs.
         detection value, and produces actionable optimisation recommendations.
 
+        Optionally connects to Defender XDR via Graph.
+
     .EXAMPLE
         Invoke-LogHorizon -SubscriptionId '00000000-...' -ResourceGroup 'rg-sentinel' -WorkspaceName 'my-sentinel-ws'
 

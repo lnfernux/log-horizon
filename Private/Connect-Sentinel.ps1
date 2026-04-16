@@ -61,7 +61,7 @@ function Connect-Sentinel {
         }
     }
     catch {
-        Write-Verbose 'Could not determine Defender unified experience status.'
+        Write-Verbose 'Could not determine Defender XDR  and Microsoft Sentinel unified experience status.'
     }
 
     [PSCustomObject]@{
