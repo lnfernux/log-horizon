@@ -99,8 +99,7 @@ function Invoke-LogHorizon {
             try { $result.Incidents = Get-Incidents -Context $ctx -DaysBack $DetectionLookbackDays } catch { }
             try { $result.AutomationRules = Get-AutomationRules -Context $ctx } catch { }
             try {
-                $closeRuleNames = @($result.AutomationRules | Where-Object { $_.IsCloseIncidentRule -and $_.Enabled } | ForEach-Object { $_.DisplayName })
-                $result.AutoCloseHealth = Get-AutoCloseFromHealth -Context $ctx -DaysBack $DetectionLookbackDays -CloseRuleNames $closeRuleNames
+                $result.AutoCloseHealth = Get-AutoCloseFromHealth -Context $ctx -DaysBack $DetectionLookbackDays
             } catch { }
         }
 

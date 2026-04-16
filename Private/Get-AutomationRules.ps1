@@ -43,6 +43,9 @@ function Get-AutomationRules {
             ($_.actionConfiguration.status -eq 'Closed' -or $_.actionConfiguration.status -eq 'Resolved')
         }
 
+        # Detect playbook action: automation rule triggers a playbook (may close incidents indirectly)
+        $playbookAction = $actions | Where-Object { $_.actionType -eq 'RunPlaybook' }
+
         $titleFilters = [System.Collections.Generic.List[string]]::new()
         $titleOperators = [System.Collections.Generic.List[string]]::new()
         $ruleIdFilters = [System.Collections.Generic.List[string]]::new()
@@ -107,6 +110,7 @@ function Get-AutomationRules {
             TriggersOn            = $props.triggeringLogic.triggersOn
             TriggersWhen          = $props.triggeringLogic.triggersWhen
             IsCloseIncidentRule   = $null -ne $closeAction
+            HasPlaybookAction     = $null -ne $playbookAction
             HasConditions         = $hasConditions
             TitleFilters          = @($titleFilters | Select-Object -Unique)
             TitleOperators        = @($titleOperators)

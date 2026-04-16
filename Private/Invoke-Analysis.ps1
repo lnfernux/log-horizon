@@ -648,9 +648,17 @@ function Get-DetectionAnalyzerData {
             # Fallback: automation rule condition matching
             if (-not $isAutoClose) {
                 $matched = @($AutomationRules | Where-Object {
-                    $_.IsCloseIncidentRule -and $_.Enabled -and (Test-AutomationRuleIncidentMatch -AutomationRule $_ -IncidentTitle $inc.Title -IncidentRuleIds $inc.RelatedAnalyticRuleIds)
+                    ($_.IsCloseIncidentRule -or $_.HasPlaybookAction) -and $_.Enabled -and (Test-AutomationRuleIncidentMatch -AutomationRule $_ -IncidentTitle $inc.Title -IncidentRuleIds $inc.RelatedAnalyticRuleIds)
                 })
                 if ($matched.Count -gt 0) {
+                    $isAutoClose = $true
+                }
+            }
+
+            # Timing heuristic: incidents closed within minutes of creation are most likely automation closures
+            if (-not $isAutoClose -and $inc.CreatedTimeUtc -and $inc.ClosedTimeUtc) {
+                $closeDelta = ($inc.ClosedTimeUtc - $inc.CreatedTimeUtc).TotalMinutes
+                if ($closeDelta -ge 0 -and $closeDelta -le 5) {
                     $isAutoClose = $true
                 }
             }
