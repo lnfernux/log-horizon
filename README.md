@@ -62,7 +62,7 @@ Install-Module -Name Az.Accounts, Az.Resources -Scope CurrentUser
 Install-Module -Name PwshSpectreConsole -Scope CurrentUser
 
 # Clone and import
-git clone <repo-url> log-horizon
+git clone https://github.com/lnfernux/log-horizon
 Import-Module ./log-horizon/LogHorizon.psd1
 ```
 
