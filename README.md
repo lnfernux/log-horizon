@@ -62,13 +62,21 @@ Install-Module -Name Az.Accounts, Az.Resources -Scope CurrentUser
 Install-Module -Name PwshSpectreConsole -Scope CurrentUser
 
 # Clone and import
-git clone <repo-url> log-horizon
+git clone https://github.com/lnfernux/log-horizon
 Import-Module ./log-horizon/LogHorizon.psd1
 ```
 
 ## Usage
 
 ### The basics
+
+Start by connecting to Azure and making sure you select the right account and subscription:
+
+```powershell
+Connect-AzAccount
+```
+
+Then we can invoke the tool:
 
 ```powershell
 Invoke-LogHorizon -SubscriptionId '00000000-0000-0000-0000-000000000000' -ResourceGroup 'rg-sentinel' -WorkspaceName 'my-sentinel-ws'
