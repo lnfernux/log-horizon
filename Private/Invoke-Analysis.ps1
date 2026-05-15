@@ -99,6 +99,21 @@ function Invoke-Analysis {
         $actualInteractive = if ($ret) { [int]$ret.RetentionInDays } else { $null }
         $tablePlan = if ($ret) { $ret.Plan } else { $null }
         $tableSubType = if ($ret) { $ret.TableSubType } else { $null }
+        $observedPlanBreakdown = if ($table.ObservedPlanBreakdown) { @($table.ObservedPlanBreakdown) } else { @() }
+        $observedPlans = if ($table.ObservedPlans) { @($table.ObservedPlans) } else { @() }
+        $observedKnownPlans = @($observedPlans | Where-Object { -not [string]::IsNullOrWhiteSpace($_) -and $_ -ne 'Unknown' } | Sort-Object -Unique)
+        $observedPlanCount = $observedKnownPlans.Count
+        $observedPlanSummary = if ($observedPlanBreakdown.Count -gt 0) {
+            (($observedPlanBreakdown | ForEach-Object { "$($_.Plan) $($_.MonthlyGB) GB/mo" }) -join '; ')
+        } else {
+            $null
+        }
+        $hasMultipleObservedPlans = $observedPlanCount -gt 1
+        $observedPlanMismatch = if ($tablePlan -and $observedPlanCount -gt 0) {
+            $tablePlan -notin $observedKnownPlans
+        } else {
+            $false
+        }
         # Compliant = at least 90 days total retention (baseline)
         $retentionCompliant = if ($null -ne $actualTotal -and $tablePlan -eq 'Analytics') { $actualTotal -ge 90 } else { $null }
         # Can improve = meets 90d baseline but below category-specific recommendation
@@ -147,6 +162,13 @@ function Invoke-Analysis {
             RecommendedRetentionDays     = $recommendedRetention
             TablePlan                    = $tablePlan
             TableSubType                 = $tableSubType
+            ObservedPlans                = $observedPlans
+            ObservedKnownPlans           = $observedKnownPlans
+            ObservedPlanCount            = $observedPlanCount
+            ObservedPlanBreakdown        = $observedPlanBreakdown
+            ObservedPlanSummary          = $observedPlanSummary
+            HasMultipleObservedPlans     = $hasMultipleObservedPlans
+            ObservedPlanMismatch         = $observedPlanMismatch
             RetentionCompliant           = $retentionCompliant
             RetentionCanImprove          = $retentionCanImprove
             HasTransform                 = $hasTransform
@@ -290,6 +312,36 @@ function Invoke-Analysis {
                 SplitSuggestion = $splitSuggestion
             })
         }
+
+        # 10. Tables observed under multiple plans during the selected period
+        if ($t.HasMultipleObservedPlans) {
+            $configuredPlan = if ($t.TablePlan) { $t.TablePlan } else { 'Unknown' }
+            $recommendations.Add([PSCustomObject]@{
+                Priority      = 'Low'
+                Type          = 'PlanUsage'
+                TableName     = $t.TableName
+                Title         = "$($t.TableName) was observed under multiple plans"
+                Detail        = "Usage records show $($t.ObservedKnownPlans -join ', ') during the selected period. " +
+                                "Configured plan is $configuredPlan. Review whether the transition was expected."
+                EstSavingsUSD = 0
+                CurrentCost   = $t.EstMonthlyCostUSD
+            })
+        }
+
+        # 11. Tables whose configured plan does not appear in observed Usage data
+        if (-not $t.HasMultipleObservedPlans -and $t.ObservedPlanMismatch) {
+            $observedPlan = if ($t.ObservedKnownPlans.Count -gt 0) { $t.ObservedKnownPlans -join ', ' } else { 'Unknown' }
+            $recommendations.Add([PSCustomObject]@{
+                Priority      = 'Low'
+                Type          = 'PlanUsage'
+                TableName     = $t.TableName
+                Title         = "$($t.TableName) configured plan differs from observed usage"
+                Detail        = "Configured plan is $($t.TablePlan), but Usage records show $observedPlan during the selected period. " +
+                                "Review recent table plan changes and confirm expected billing behavior."
+                EstSavingsUSD = 0
+                CurrentCost   = $t.EstMonthlyCostUSD
+            })
+        }
     }
 
     # Correlation data pass-through
@@ -386,6 +438,8 @@ function Invoke-Analysis {
     $retentionNonCompliant    = @($tableAnalysis | Where-Object { $_.RetentionCompliant -eq $false }).Count
     $retentionChecked         = $retentionCompliantCount + $retentionNonCompliant
     $retentionImprovableCount = @($tableAnalysis | Where-Object { $_.RetentionCanImprove -eq $true }).Count
+    $multiPlanUsageCount      = @($tableAnalysis | Where-Object { $_.HasMultipleObservedPlans }).Count
+    $observedPlanMismatchCount = @($tableAnalysis | Where-Object { $_.ObservedPlanMismatch }).Count
 
     # Transform stats
     $tablesWithTransforms = @($tableAnalysis | Where-Object { $_.HasTransform }).Count
@@ -472,6 +526,8 @@ function Invoke-Analysis {
             RetentionNonCompliant  = $retentionNonCompliant
             RetentionChecked       = $retentionChecked
             RetentionImprovable    = $retentionImprovableCount
+            MultiPlanUsageTables   = $multiPlanUsageCount
+            ObservedPlanMismatches = $observedPlanMismatchCount
             TablesWithTransforms   = $tablesWithTransforms
             SplitTables            = $splitTables
             TransformDCRs          = $transformDCRCount
@@ -635,6 +691,9 @@ function Get-DetectionAnalyzerData {
         $ruleIncidents = @($incidentBuckets[$rule.RuleName])
         $total = $ruleIncidents.Count
         $closed = @($ruleIncidents | Where-Object { $_.Status -eq 'Closed' })
+        $enabledAutoCloseRules = @($AutomationRules | Where-Object {
+            ($_.IsCloseIncidentRule -or $_.HasPlaybookAction) -and $_.Enabled
+        })
 
         $autoClosed = @()
         foreach ($inc in $closed) {
@@ -647,16 +706,17 @@ function Get-DetectionAnalyzerData {
 
             # Fallback: automation rule condition matching
             if (-not $isAutoClose) {
-                $matched = @($AutomationRules | Where-Object {
-                    ($_.IsCloseIncidentRule -or $_.HasPlaybookAction) -and $_.Enabled -and (Test-AutomationRuleIncidentMatch -AutomationRule $_ -IncidentTitle $inc.Title -IncidentRuleIds $inc.RelatedAnalyticRuleIds)
+                $matched = @($enabledAutoCloseRules | Where-Object {
+                    Test-AutomationRuleIncidentMatch -AutomationRule $_ -IncidentTitle $inc.Title -IncidentRuleIds $inc.RelatedAnalyticRuleIds
                 })
                 if ($matched.Count -gt 0) {
                     $isAutoClose = $true
                 }
             }
 
-            # Timing heuristic: incidents closed within minutes of creation are most likely automation closures
-            if (-not $isAutoClose -and $inc.CreatedTimeUtc -and $inc.ClosedTimeUtc) {
+            # Timing heuristic: only use this when no enabled close/playbook rule exists
+            # to avoid overriding an explicit non-match on automation conditions.
+            if (-not $isAutoClose -and $enabledAutoCloseRules.Count -eq 0 -and $inc.CreatedTimeUtc -and $inc.ClosedTimeUtc) {
                 $closeDelta = ($inc.ClosedTimeUtc - $inc.CreatedTimeUtc).TotalMinutes
                 if ($closeDelta -ge 0 -and $closeDelta -le 5) {
                     $isAutoClose = $true

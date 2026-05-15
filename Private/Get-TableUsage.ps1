@@ -1,9 +1,10 @@
 function Get-TableUsage {
     <#
     .SYNOPSIS
-        Queries the Usage table and _BilledSize to get per-table ingestion volumes.
+        Queries the Usage table to get per-table ingestion volumes.
     .OUTPUTS
-        Array of PSCustomObjects: TableName, DataGB, RecordCount, EstMonthlyCostUSD
+        Array of PSCustomObjects with per-table totals plus observed Usage.Plan
+        breakdown data.
     #>
     [CmdletBinding()]
     param(
@@ -21,10 +22,11 @@ function Get-TableUsage {
     $query = @"
 Usage
 | where TimeGenerated > ago(${DaysBack}d)
+| extend ObservedPlan = iff(isempty(Plan), 'Unknown', Plan)
 | summarize DataGB = sum(Quantity) / 1024.0,
             RecordCount = count()
-  by DataType
-| sort by DataGB desc
+  by DataType, ObservedPlan
+| sort by DataType asc, DataGB desc
 "@
 
     $body = @{ query = $query } | ConvertTo-Json -Compress
@@ -38,27 +40,47 @@ Usage
 
     $rows = $response.tables[0].rows
 
-    Write-Verbose "Usage query returned $($rows.Count) table(s) over last $DaysBack day(s)."
+    Write-Verbose "Usage query returned $($rows.Count) table/plan row(s) over last $DaysBack day(s)."
 
-    $results = foreach ($row in $rows) {
-        $tableName = $row[0]
-        $dataGB    = [math]::Round([double]$row[1], 4)
-        $records   = [long]$row[2]
+    $monthFactor = 30.0 / $DaysBack
 
-        $isFree    = $tableName -in $freeTables
-        $monthFactor = 30.0 / $DaysBack
+    $results = foreach ($group in ($rows | Group-Object { $_[0] })) {
+        $tableName = [string]$group.Name
+        $isFree = $tableName -in $freeTables
+
+        # Preserve the existing one-row-per-table contract while carrying a
+        # per-plan breakdown sourced from Usage.Plan.
+        $observedPlanBreakdown = foreach ($row in $group.Group) {
+            $plan = if ([string]::IsNullOrWhiteSpace([string]$row[1])) { 'Unknown' } else { [string]$row[1] }
+            $dataGB = [math]::Round([double]$row[2], 4)
+            $records = [long]$row[3]
+
+            [PSCustomObject]@{
+                Plan        = $plan
+                DataGB      = $dataGB
+                MonthlyGB   = [math]::Round($dataGB * $monthFactor, 2)
+                RecordCount = $records
+            }
+        }
+
+        $dataGB = [math]::Round((($observedPlanBreakdown | Measure-Object -Property DataGB -Sum).Sum), 4)
+        $records = [long](($observedPlanBreakdown | Measure-Object -Property RecordCount -Sum).Sum)
         $monthlyGB = [math]::Round($dataGB * $monthFactor, 2)
-        $cost      = if ($isFree) { 0 } else { [math]::Round($monthlyGB * $PricePerGB, 2) }
+        $cost = if ($isFree) { 0 } else { [math]::Round($monthlyGB * $PricePerGB, 2) }
+        $observedPlans = @($observedPlanBreakdown | ForEach-Object { $_.Plan } | Sort-Object -Unique)
 
         [PSCustomObject]@{
-            TableName        = $tableName
-            DataGB           = $dataGB
-            MonthlyGB        = $monthlyGB
-            RecordCount      = $records
-            EstMonthlyCostUSD = $cost
-            IsFree           = $isFree
+            TableName             = $tableName
+            DataGB                = $dataGB
+            MonthlyGB             = $monthlyGB
+            RecordCount           = $records
+            EstMonthlyCostUSD     = $cost
+            IsFree                = $isFree
+            ObservedPlans         = $observedPlans
+            ObservedPlanCount     = $observedPlans.Count
+            ObservedPlanBreakdown = @($observedPlanBreakdown | Sort-Object MonthlyGB -Descending)
         }
     }
 
-    $results
+    $results | Sort-Object DataGB -Descending
 }

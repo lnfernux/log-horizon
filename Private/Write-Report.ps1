@@ -87,6 +87,41 @@ function Get-SafeEscapedText {
     Get-SpectreEscapedText $Value
 }
 
+function Get-TablePlanDisplay {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)][PSCustomObject]$Table)
+
+    $configuredPlan = if (-not [string]::IsNullOrWhiteSpace($Table.TablePlan)) {
+        Get-SafeEscapedText $Table.TablePlan
+    } else {
+        $null
+    }
+
+    $observedPlans = if ($Table.ObservedKnownPlans) {
+        @($Table.ObservedKnownPlans)
+    } elseif ($Table.ObservedPlans) {
+        @($Table.ObservedPlans | Where-Object { -not [string]::IsNullOrWhiteSpace($_) -and $_ -ne 'Unknown' })
+    } else {
+        @()
+    }
+
+    $observedPlans = @($observedPlans | Sort-Object -Unique)
+    if ($observedPlans.Count -eq 0) {
+        return $(if ($configuredPlan) { $configuredPlan } else { '[grey]-[/]' })
+    }
+
+    if ($configuredPlan -and $observedPlans.Count -eq 1 -and $observedPlans[0] -eq $Table.TablePlan) {
+        return $configuredPlan
+    }
+
+    $observedDisplay = ($observedPlans | ForEach-Object { Get-SafeEscapedText $_ }) -join ', '
+    if ($configuredPlan) {
+        return "$configuredPlan [dim](obs: $observedDisplay)[/]"
+    }
+
+    return "[dim]Observed:[/] $observedDisplay"
+}
+
 # Banner
 function Write-LogHorizonBanner {
     $art = @'
@@ -225,6 +260,7 @@ function Write-Dashboard {
         $table += [PSCustomObject]@{
             '#'          = $rank
             'Table'      = Get-SafeEscapedText $t.TableName
+            'Plans'      = Get-TablePlanDisplay -Table $t
             'GB/mo'      = $t.MonthlyGB
             'Cost/mo'    = $costStr
             'Class'      = $clsMarkup
@@ -1006,6 +1042,10 @@ function Write-TableEvaluation {
         "[bold]Rules:[/]          $($table.AnalyticsRules) analytics  |  $($table.HuntingQueries) hunting$(if ($table.XDRRules -gt 0) { "  |  $($table.XDRRules) XDR" })"
     )
 
+    if ($table.ObservedPlanSummary) {
+        $infoLines += "[bold]Observed plans:[/] $(Get-SafeEscapedText $table.ObservedPlanSummary)"
+    }
+
     if ($table.SchemaColumns -and $table.SchemaColumns.Count -gt 0) {
         $usedCount = if ($liveEntry) { $liveEntry.FieldCount } elseif ($s -and $s.AllFields) { $s.AllFields.Count } else { 0 }
         $infoLines += "[bold]Schema columns:[/]  $($table.SchemaColumns.Count) total  |  $usedCount used by rules"
@@ -1389,13 +1429,11 @@ function Write-AllTables {
         } else {
             "[grey]$($t.ActualRetentionDays)d[/]"
         }
-        if ($t.TablePlan -and $t.TablePlan -ne 'Analytics') {
-            $retStr += " [dim]($($t.TablePlan))[/]"
-        }
 
         $row = [ordered]@{
             '#'          = $rank
             'Table'      = Get-SafeEscapedText $t.TableName
+            'Plans'      = Get-TablePlanDisplay -Table $t
             'GB/mo'      = $t.MonthlyGB
             'Cost/mo'    = $costStr
             'Class'      = $clsMarkup
@@ -1488,11 +1526,10 @@ function Write-RetentionAssessment {
         $table = @()
         foreach ($t in $nonCompliant) {
             $shortfall = 90 - $t.ActualRetentionDays
-            $planStr = if ($t.TablePlan) { $t.TablePlan } else { '-' }
 
             $table += [PSCustomObject]@{
                 'Table'     = Get-SafeEscapedText $t.TableName
-                'Plan'      = $planStr
+                'Plans'     = Get-TablePlanDisplay -Table $t
                 'Current'   = "$($t.ActualRetentionDays)d"
                 'Baseline'  = '90d'
                 'Shortfall' = "[red]+${shortfall}d needed[/]"
@@ -1535,6 +1572,7 @@ function Write-RetentionAssessment {
             $tableLabel = if ($t.IsXDRStreaming) { "$(Get-SafeEscapedText $t.TableName) [dim](XDR)[/]" } else { Get-SafeEscapedText $t.TableName }
             $impTable += [PSCustomObject]@{
                 'Table'       = $tableLabel
+                'Plans'       = Get-TablePlanDisplay -Table $t
                 'Category'    = Get-SafeEscapedText $t.Category
                 'Current'     = $currentStr
                 'Recommended' = "[deepskyblue1]$($t.RecommendedRetentionDays)d[/]"
@@ -1547,6 +1585,7 @@ function Write-RetentionAssessment {
             $currentStr = if ($null -ne $t.ActualRetentionDays) { "$($t.ActualRetentionDays)d" } else { '-' }
             $impTable += [PSCustomObject]@{
                 'Table'       = "$(Get-SafeEscapedText $t.TableName) [dim](XDR)[/]"
+                'Plans'       = Get-TablePlanDisplay -Table $t
                 'Category'    = Get-SafeEscapedText $t.Category
                 'Current'     = $currentStr
                 'Recommended' = '[yellow]365d[/]'
@@ -1558,6 +1597,7 @@ function Write-RetentionAssessment {
         foreach ($f in ($xdrNotStreamed | Sort-Object TableName)) {
             $impTable += [PSCustomObject]@{
                 'Table'       = "$(Get-SafeEscapedText $f.TableName) [dim](XDR)[/]"
+                'Plans'       = '[grey]-[/]'
                 'Category'    = 'Defender XDR'
                 'Current'     = '[dim]XDR only (30d)[/]'
                 'Recommended' = '[yellow]365d[/]'

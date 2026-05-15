@@ -242,22 +242,26 @@ function ConvertTo-ReportSections {
     $mdSb = [System.Text.StringBuilder]::new()
     [void]$mdSb.AppendLine('## Table Analysis')
     [void]$mdSb.AppendLine('')
-    [void]$mdSb.AppendLine('| Table | Class | GB/mo | Cost/mo | Rules | Hunting | Assessment |')
-    [void]$mdSb.AppendLine('| --- | --- | ---: | ---: | ---: | ---: | --- |')
+    [void]$mdSb.AppendLine('| Table | Class | Plan | Observed Plans | GB/mo | Cost/mo | Rules | Hunting | Assessment |')
+    [void]$mdSb.AppendLine('| --- | --- | --- | --- | ---: | ---: | ---: | ---: | --- |')
     foreach ($t in $sorted) {
         $costStr = if ($t.IsFree) { 'FREE' } else { "`$$($t.EstMonthlyCostUSD)" }
-        [void]$mdSb.AppendLine("| $($t.TableName) | $($t.Classification) | $($t.MonthlyGB) | $costStr | $($t.AnalyticsRules) | $($t.HuntingQueries) | $($t.Assessment) |")
+        $configuredPlan = if ($t.TablePlan) { $t.TablePlan } else { '-' }
+        $observedPlans = if ($t.ObservedPlanSummary) { $t.ObservedPlanSummary } else { '-' }
+        [void]$mdSb.AppendLine("| $($t.TableName) | $($t.Classification) | $configuredPlan | $observedPlans | $($t.MonthlyGB) | $costStr | $($t.AnalyticsRules) | $($t.HuntingQueries) | $($t.Assessment) |")
     }
     [void]$mdSb.AppendLine('')
 
     $htmlSb = [System.Text.StringBuilder]::new()
     [void]$htmlSb.AppendLine('            <div class="table-wrap"><table>')
-    [void]$htmlSb.AppendLine('                <thead><tr><th>Table</th><th>Class</th><th>GB/mo</th><th>Cost/mo</th><th>Rules</th><th>Hunting</th><th>Assessment</th></tr></thead>')
+    [void]$htmlSb.AppendLine('                <thead><tr><th>Table</th><th>Class</th><th>Plan</th><th>Observed Plans</th><th>GB/mo</th><th>Cost/mo</th><th>Rules</th><th>Hunting</th><th>Assessment</th></tr></thead>')
     [void]$htmlSb.AppendLine('                <tbody>')
     foreach ($t in $sorted) {
         $clsClass = switch ($t.Classification) { 'primary' { 'cls-primary' } 'secondary' { 'cls-secondary' } default { 'cls-unknown' } }
         $costStr = if ($t.IsFree) { '<span class="badge badge-savings">FREE</span>' } else { "`$$($t.EstMonthlyCostUSD)" }
-        [void]$htmlSb.AppendLine("                <tr><td>$(hEnc $t.TableName)</td><td class=`"$clsClass`">$($t.Classification.ToUpper())</td><td class=`"num`">$($t.MonthlyGB)</td><td class=`"num`">$costStr</td><td class=`"num`">$($t.TotalCoverage)</td><td class=`"num`">$($t.HuntingQueries)</td><td>$(hEnc $t.Assessment)</td></tr>")
+        $configuredPlan = if ($t.TablePlan) { hEnc $t.TablePlan } else { '-' }
+        $observedPlans = if ($t.ObservedPlanSummary) { hEnc $t.ObservedPlanSummary } else { '-' }
+        [void]$htmlSb.AppendLine("                <tr><td>$(hEnc $t.TableName)</td><td class=`"$clsClass`">$($t.Classification.ToUpper())</td><td>$configuredPlan</td><td>$observedPlans</td><td class=`"num`">$($t.MonthlyGB)</td><td class=`"num`">$costStr</td><td class=`"num`">$($t.TotalCoverage)</td><td class=`"num`">$($t.HuntingQueries)</td><td>$(hEnc $t.Assessment)</td></tr>")
     }
     [void]$htmlSb.AppendLine('                </tbody>')
     [void]$htmlSb.AppendLine('            </table></div>')

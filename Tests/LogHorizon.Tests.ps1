@@ -2,6 +2,7 @@ BeforeAll {
     # Dot-source the private functions directly for unit testing
     $privatePath = Join-Path $PSScriptRoot '..\Private'
     . "$privatePath\Get-AnalyticsRules.ps1"
+    . "$privatePath\Get-TableUsage.ps1"
     . "$privatePath\Invoke-Classification.ps1"
     . "$privatePath\Invoke-Analysis.ps1"
     . "$privatePath\Export-Report.ps1"
@@ -35,6 +36,13 @@ BeforeAll {
                     ActualRetentionDays    = 90
                     RecommendedRetentionDays = 365
                     TablePlan              = 'Analytics'
+                    ObservedPlans          = @('Analytics')
+                    ObservedKnownPlans     = @('Analytics')
+                    ObservedPlanCount      = 1
+                    ObservedPlanBreakdown  = @([PSCustomObject]@{ Plan = 'Analytics'; DataGB = 50; MonthlyGB = 50; RecordCount = 1000000 })
+                    ObservedPlanSummary    = 'Analytics 50 GB/mo'
+                    HasMultipleObservedPlans = $false
+                    ObservedPlanMismatch   = $false
                     IsXDRStreaming         = $false
                     XDRState               = $null
                     SplitSuggestion        = $null
@@ -60,6 +68,16 @@ BeforeAll {
                     ActualRetentionDays    = 30
                     RecommendedRetentionDays = 90
                     TablePlan              = 'Analytics'
+                    ObservedPlans          = @('Analytics', 'Basic')
+                    ObservedKnownPlans     = @('Analytics', 'Basic')
+                    ObservedPlanCount      = 2
+                    ObservedPlanBreakdown  = @(
+                        [PSCustomObject]@{ Plan = 'Analytics'; DataGB = 70; MonthlyGB = 70; RecordCount = 3500000 },
+                        [PSCustomObject]@{ Plan = 'Basic'; DataGB = 30; MonthlyGB = 30; RecordCount = 1500000 }
+                    )
+                    ObservedPlanSummary    = 'Analytics 70 GB/mo; Basic 30 GB/mo'
+                    HasMultipleObservedPlans = $true
+                    ObservedPlanMismatch   = $false
                     IsXDRStreaming         = $false
                     XDRState               = $null
                     SplitSuggestion        = $null
@@ -253,6 +271,55 @@ Describe 'Get-Assessment' {
     }
 }
 
+Describe 'Get-TableUsage' {
+    BeforeEach {
+        Mock Invoke-AzRestWithRetry {
+            [PSCustomObject]@{
+                tables = @(
+                    [PSCustomObject]@{
+                        rows = @(
+                            @('SigninLogs', 'Analytics', 10.0, 100),
+                            @('SigninLogs', 'Basic', 2.0, 20),
+                            @('AzureActivity', $null, 5.0, 50)
+                        )
+                    }
+                )
+            }
+        }
+    }
+
+    It 'aggregates table-plan rows back to one table object while preserving observed plan breakdown' {
+        $context = [PSCustomObject]@{ LaToken = 'token'; WorkspaceId = 'workspace-id' }
+
+        $result = Get-TableUsage -Context $context -DaysBack 30 -PricePerGB 5.59
+
+        $result.Count | Should -Be 2
+
+        $signin = $result | Where-Object TableName -eq 'SigninLogs'
+        $signin | Should -Not -BeNullOrEmpty
+        $signin.DataGB | Should -Be 12
+        $signin.MonthlyGB | Should -Be 12
+        $signin.RecordCount | Should -Be 120
+        $signin.ObservedPlanCount | Should -Be 2
+        $signin.ObservedPlans | Should -Contain 'Analytics'
+        $signin.ObservedPlans | Should -Contain 'Basic'
+        @($signin.ObservedPlanBreakdown).Count | Should -Be 2
+        (@($signin.ObservedPlanBreakdown | Where-Object Plan -eq 'Basic')[0]).MonthlyGB | Should -Be 2
+    }
+
+    It 'marks free tables and normalizes missing plan values to Unknown' {
+        $context = [PSCustomObject]@{ LaToken = 'token'; WorkspaceId = 'workspace-id' }
+
+        $result = Get-TableUsage -Context $context -DaysBack 30 -PricePerGB 5.59
+
+        $activity = $result | Where-Object TableName -eq 'AzureActivity'
+        $activity | Should -Not -BeNullOrEmpty
+        $activity.IsFree | Should -Be $true
+        $activity.EstMonthlyCostUSD | Should -Be 0
+        $activity.ObservedPlans | Should -Contain 'Unknown'
+    }
+}
+
 Describe 'Invoke-Classification' {
     It 'loads the classification database' {
         $tableUsage = @(
@@ -431,6 +498,99 @@ Describe 'Invoke-Analysis retention logic' {
         $script:retResult.Summary.RetentionCompliant | Should -Be 1
         $script:retResult.Summary.RetentionNonCompliant | Should -Be 1
         $script:retResult.Summary.RetentionImprovable | Should -Be 1
+    }
+}
+
+Describe 'Invoke-Analysis observed plan usage' {
+    BeforeAll {
+        $tableUsage = @(
+            [PSCustomObject]@{
+                TableName = 'SigninLogs'
+                DataGB = 12
+                MonthlyGB = 12
+                RecordCount = 120
+                EstMonthlyCostUSD = 67.08
+                IsFree = $false
+                ObservedPlans = @('Analytics', 'Basic')
+                ObservedPlanCount = 2
+                ObservedPlanBreakdown = @(
+                    [PSCustomObject]@{ Plan = 'Analytics'; DataGB = 10; MonthlyGB = 10; RecordCount = 100 },
+                    [PSCustomObject]@{ Plan = 'Basic'; DataGB = 2; MonthlyGB = 2; RecordCount = 20 }
+                )
+            }
+            [PSCustomObject]@{
+                TableName = 'DeviceEvents'
+                DataGB = 8
+                MonthlyGB = 8
+                RecordCount = 80
+                EstMonthlyCostUSD = 44.72
+                IsFree = $false
+                ObservedPlans = @('Analytics')
+                ObservedPlanCount = 1
+                ObservedPlanBreakdown = @(
+                    [PSCustomObject]@{ Plan = 'Analytics'; DataGB = 8; MonthlyGB = 8; RecordCount = 80 }
+                )
+            }
+        )
+
+        $classifications = [PSCustomObject]@{
+            Classifications = @{
+                'SigninLogs' = [PSCustomObject]@{ Classification = 'primary'; Category = 'Identity'; RecommendedTier = 'analytics'; IsFree = $false; RecommendedRetentionDays = 365 }
+                'DeviceEvents' = [PSCustomObject]@{ Classification = 'primary'; Category = 'Endpoint'; RecommendedTier = 'analytics'; IsFree = $false; RecommendedRetentionDays = 180 }
+            }
+            KeywordGaps = @()
+            DatabaseEntries = 2
+        }
+
+        $rulesData = [PSCustomObject]@{
+            Rules = @()
+            TableCoverage = @{ 'SigninLogs' = 1; 'DeviceEvents' = 1 }
+            TotalRules = 2
+            EnabledRules = 2
+            DontCorrCount = 0
+            IncCorrCount = 0
+        }
+
+        $huntingData = [PSCustomObject]@{
+            Queries = @()
+            TableCoverage = @{}
+            TotalQueries = 0
+        }
+
+        $tableRetention = @(
+            [PSCustomObject]@{ TableName = 'SigninLogs'; RetentionInDays = 30; TotalRetentionInDays = 90; ArchiveRetentionInDays = 0; Plan = 'Basic' },
+            [PSCustomObject]@{ TableName = 'DeviceEvents'; RetentionInDays = 30; TotalRetentionInDays = 90; ArchiveRetentionInDays = 0; Plan = 'Basic' }
+        )
+
+        $script:observedPlanResult = Invoke-Analysis -TableUsage $tableUsage `
+            -Classifications $classifications `
+            -RulesData $rulesData `
+            -HuntingData $huntingData `
+            -TableRetention $tableRetention `
+            -SocRecommendations @()
+    }
+
+    It 'tracks multiple observed plans without replacing the configured table plan' {
+        $signin = $script:observedPlanResult.TableAnalysis | Where-Object TableName -eq 'SigninLogs'
+        $signin.TablePlan | Should -Be 'Basic'
+        $signin.HasMultipleObservedPlans | Should -Be $true
+        $signin.ObservedPlanMismatch | Should -Be $false
+        $signin.ObservedPlanSummary | Should -Be 'Analytics 10 GB/mo; Basic 2 GB/mo'
+    }
+
+    It 'flags configured plan mismatches when observed usage does not include the configured plan' {
+        $device = $script:observedPlanResult.TableAnalysis | Where-Object TableName -eq 'DeviceEvents'
+        $device.TablePlan | Should -Be 'Basic'
+        $device.HasMultipleObservedPlans | Should -Be $false
+        $device.ObservedPlanMismatch | Should -Be $true
+    }
+
+    It 'adds plan usage review recommendations and summary counts' {
+        $planRecs = @($script:observedPlanResult.Recommendations | Where-Object Type -eq 'PlanUsage')
+        $planRecs.TableName | Should -Contain 'SigninLogs'
+        $planRecs.TableName | Should -Contain 'DeviceEvents'
+        $script:observedPlanResult.Summary.MultiPlanUsageTables | Should -Be 1
+        $script:observedPlanResult.Summary.ObservedPlanMismatches | Should -Be 1
     }
 }
 
@@ -1287,6 +1447,20 @@ Describe 'SentinelHealth-based auto-close attribution' {
         # Without health data AND mismatched title filter, auto-close should be 0
         $metric.IncidentsAutoClosed | Should -Be 0
     }
+
+    It 'uses the timing heuristic only when no enabled automation rules exist' {
+        $result3 = Invoke-Analysis -TableUsage $tableUsage `
+                                   -Classifications $classifications `
+                                   -RulesData $rulesData `
+                                   -HuntingData $huntingData `
+                                   -TableRetention $tableRetention `
+                                   -Incidents $incidents `
+                                   -AutomationRules @() `
+                                   -IncludeDetectionAnalyzer `
+                                   -SocRecommendations @()
+        $metric = $result3.DetectionAnalyzer.RuleMetrics | Select-Object -First 1
+        $metric.IncidentsAutoClosed | Should -Be 1
+    }
 }
 
 Describe 'Get-AutomationRules Resolved status and Boolean conditions' {
@@ -1715,6 +1889,13 @@ Describe 'ConvertTo-ReportSections' {
         $idxAWS = $tables.Html.IndexOf('AWSVPCFlow')
         $idxSE  = $tables.Html.IndexOf('SecurityEvent')
         $idxAWS | Should -BeLessThan $idxSE
+    }
+
+    It 'includes configured and observed plan columns in the Tables section' {
+        $sections = ConvertTo-ReportSections -Analysis $script:analysis
+        $tables = $sections | Where-Object TabId -eq 'tables'
+        $tables.Markdown | Should -Match 'Observed Plans'
+        $tables.Markdown | Should -Match 'Analytics 70 GB/mo; Basic 30 GB/mo'
     }
 
     It 'produces a Keyword Gaps section' {
@@ -2151,6 +2332,39 @@ Describe 'Write-Report helper functions' {
     It 'Test-ConsoleSize returns a boolean' {
         $result = Test-ConsoleSize
         $result | Should -BeOfType [bool]
+    }
+
+    It 'Get-TablePlanDisplay returns the configured plan when observed usage matches it' {
+        $table = [PSCustomObject]@{
+            TablePlan         = 'Analytics'
+            ObservedKnownPlans = @('Analytics')
+            ObservedPlans     = @('Analytics')
+        }
+
+        $result = Get-TablePlanDisplay -Table $table
+        $result | Should -Be 'Analytics'
+    }
+
+    It 'Get-TablePlanDisplay appends observed plans when usage spans multiple plans' {
+        $table = [PSCustomObject]@{
+            TablePlan          = 'Analytics'
+            ObservedKnownPlans = @('Analytics', 'Basic')
+            ObservedPlans      = @('Analytics', 'Basic')
+        }
+
+        $result = Get-TablePlanDisplay -Table $table
+        $result | Should -Be 'Analytics [dim](obs: Analytics, Basic)[/]'
+    }
+
+    It 'Get-TablePlanDisplay falls back to observed usage when no configured plan is available' {
+        $table = [PSCustomObject]@{
+            TablePlan          = $null
+            ObservedKnownPlans = @('Auxiliary')
+            ObservedPlans      = @('Auxiliary')
+        }
+
+        $result = Get-TablePlanDisplay -Table $table
+        $result | Should -Be '[dim]Observed:[/] Auxiliary'
     }
 }
 
