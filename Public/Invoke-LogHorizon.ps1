@@ -18,6 +18,7 @@ function Invoke-LogHorizon {
     .EXAMPLE
         Invoke-LogHorizon -SubscriptionId '...' -ResourceGroup 'rg' -WorkspaceName 'ws' -Output json -OutputPath ./report.json -PricePerGB 4.61
     #>
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSReviewUnusedParameter', '', Justification = 'Parameters are captured and used inside nested status scriptblocks.')]
     [CmdletBinding()]
     param(
         [Parameter(Mandatory, HelpMessage = 'Azure subscription ID')]
@@ -90,7 +91,7 @@ function Invoke-LogHorizon {
         # Defender XDR (optional)
         $result.DefenderXDR = $null
         if ($IncludeDefenderXDR) {
-            try { $result.DefenderXDR = Get-DefenderXDR -Context $ctx } catch { }
+            try { $result.DefenderXDR = Get-DefenderXDR -Context $ctx } catch { Write-Verbose "Get-DefenderXDR failed: $($_.Exception.Message)" }
         }
 
         # Detection analyzer inputs (optional)
@@ -98,11 +99,11 @@ function Invoke-LogHorizon {
         $result.AutomationRules = @()
         $result.AutoCloseHealth = $null
         if ($IncludeDetectionAnalyzer) {
-            try { $result.Incidents = Get-Incidents -Context $ctx -DaysBack $DetectionLookbackDays } catch { }
-            try { $result.AutomationRules = Get-AutomationRules -Context $ctx } catch { }
+            try { $result.Incidents = Get-Incidents -Context $ctx -DaysBack $DetectionLookbackDays } catch { Write-Verbose "Get-Incidents failed: $($_.Exception.Message)" }
+            try { $result.AutomationRules = Get-AutomationRules -Context $ctx } catch { Write-Verbose "Get-AutomationRules failed: $($_.Exception.Message)" }
             try {
                 $result.AutoCloseHealth = Get-AutoCloseFromHealth -Context $ctx -DaysBack $DetectionLookbackDays
-            } catch { }
+            } catch { Write-Verbose "Get-AutoCloseFromHealth failed: $($_.Exception.Message)" }
         }
 
         # SOC Optimization
@@ -217,7 +218,8 @@ function Invoke-LogHorizon {
                      -WorkspaceName $ctx.WorkspaceName `
                      -DefenderXDR $defenderXDR `
                      -ExportFormat $Output `
-                     -ExportPath $OutputPath
+                     -ExportPath $OutputPath `
+                     -Context $ctx
     }
 
     # Phase 5 - Cleanup

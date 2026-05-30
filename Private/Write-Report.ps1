@@ -1,4 +1,4 @@
-function Write-Report {
+﻿function Write-Report {
     <#
     .SYNOPSIS
         Renders the Log Horizon analysis report using Spectre.Console via
@@ -10,7 +10,8 @@ function Write-Report {
         [string]$WorkspaceName,
         [PSCustomObject]$DefenderXDR,
         [string]$ExportFormat,
-        [string]$ExportPath
+        [string]$ExportPath,
+        [PSCustomObject]$Context
     )
 
     # Banner
@@ -34,13 +35,14 @@ function Write-Report {
     # Interactive menu loop
     Write-InteractiveMenu -Analysis $Analysis -WorkspaceName $WorkspaceName `
                           -DefenderXDR $DefenderXDR `
-                          -ExportFormat $ExportFormat -ExportPath $ExportPath
+                          -ExportFormat $ExportFormat -ExportPath $ExportPath `
+                          -Context $Context
 }
 
 function Get-ConsoleWidth {
     [CmdletBinding()]
     param()
-    try { $Host.UI.RawUI.WindowSize.Width } catch { 120 }
+    try { $Host.UI.RawUI.WindowSize.Width } catch { Write-Verbose 'Unable to determine console width. Falling back to 120.'; 120 }
 }
 
 function Test-ConsoleSize {
@@ -70,7 +72,7 @@ function Invoke-ConsoleSizeCheck {
     }
 
     $current = $null
-    try { $current = $Host.UI.RawUI.WindowSize } catch { }
+    try { $current = $Host.UI.RawUI.WindowSize } catch { Write-Verbose 'Unable to determine current console size.' }
 
     $currentWidth = if ($current) { $current.Width } else { '?' }
     $currentHeight = if ($current) { $current.Height } else { '?' }
@@ -154,50 +156,50 @@ function Write-Dashboard {
         [PSCustomObject]$DefenderXDR
     )
 
-    $s = $Analysis.Summary
+    $summary = $Analysis.Summary
 
     # Overview panel
-    $filled = [math]::Floor($s.CoveragePercent / 10)
+    $filled = [math]::Floor($summary.CoveragePercent / 10)
     $empty  = 10 - $filled
-    $coverageColor = if ($s.CoveragePercent -ge 60) { 'green' } elseif ($s.CoveragePercent -ge 30) { 'yellow' } else { 'red' }
-    $bar = "[${coverageColor}]$('█' * $filled)[/][grey]$('░' * $empty)[/] $($s.CoveragePercent)%"
+    $coverageColor = if ($summary.CoveragePercent -ge 60) { 'green' } elseif ($summary.CoveragePercent -ge 30) { 'yellow' } else { 'red' }
+    $bar = "[${coverageColor}]$('█' * $filled)[/][grey]$('░' * $empty)[/] $($summary.CoveragePercent)%"
 
     $overviewLines = @(
         "[bold]Workspace:[/]        [deepskyblue1]$(Get-SafeEscapedText $WorkspaceName)[/]"
         "[bold]Scanned:[/]          $(Get-Date -Format 'yyyy-MM-dd')"
         ""
-        "[bold]Tables:[/]           $($s.TotalTables)  [dim]([green]$($s.PrimaryCount) primary[/] [yellow]$($s.SecondaryCount) secondary[/]$(if ($s.UnknownCount -gt 0) { " [red]$($s.UnknownCount) unknown[/]" }))[/]"
-        "[bold]Ingestion:[/]        $($s.TotalMonthlyGB) GB/mo"
-        "[bold]Est. Cost:[/]        [bold]`$$($s.TotalMonthlyCost)/mo[/] [dim]@ `$$($s.PricePerGB)/GB[/]"
-        "[bold]Rules:[/]            $($s.EnabledRules) active  |  [bold]Hunting:[/] $($s.HuntingQueries)$(if ($s.DontCorrCount -gt 0) { "  |  [yellow]$($s.DontCorrCount) excluded from correlation[/]" })"
+        "[bold]Tables:[/]           $($summary.TotalTables)  [dim]([green]$($summary.PrimaryCount) primary[/] [yellow]$($summary.SecondaryCount) secondary[/]$(if ($summary.UnknownCount -gt 0) { " [red]$($summary.UnknownCount) unknown[/]" }))[/]"
+        "[bold]Ingestion:[/]        $($summary.TotalMonthlyGB) GB/mo"
+        "[bold]Est. Cost:[/]        [bold]`$$($summary.TotalMonthlyCost)/mo[/] [dim]@ `$$($summary.PricePerGB)/GB[/]"
+        "[bold]Rules:[/]            $($summary.EnabledRules) active  |  [bold]Hunting:[/] $($summary.HuntingQueries)$(if ($summary.DontCorrCount -gt 0) { "  |  [yellow]$($summary.DontCorrCount) excluded from correlation[/]" })"
         "[bold]Coverage:[/]         $bar"
     )
 
-    if ($s.RetentionChecked -gt 0) {
-        $retColor = if ($s.RetentionNonCompliant -eq 0) { 'green' } elseif ($s.RetentionNonCompliant -le 5) { 'yellow' } else { 'red' }
-        $overviewLines += "[bold]Retention:[/]        [${retColor}]$($s.RetentionCompliant) of $($s.RetentionChecked) Analytics tables >= 90d[/]"
-        if ($s.RetentionImprovable -gt 0) {
-            $overviewLines += "                    [dim]$($s.RetentionImprovable) table(s) could benefit from extended retention[/]"
+    if ($summary.RetentionChecked -gt 0) {
+        $retColor = if ($summary.RetentionNonCompliant -eq 0) { 'green' } elseif ($summary.RetentionNonCompliant -le 5) { 'yellow' } else { 'red' }
+        $overviewLines += "[bold]Retention:[/]        [${retColor}]$($summary.RetentionCompliant) of $($summary.RetentionChecked) Analytics tables >= 90d[/]"
+        if ($summary.RetentionImprovable -gt 0) {
+            $overviewLines += "                    [dim]$($summary.RetentionImprovable) table(s) could benefit from extended retention[/]"
         }
     }
-    if ($s.WorkspaceRetentionDays -gt 0 -and $s.WorkspaceRetentionDays -lt 90) {
-        $overviewLines += "[bold yellow]:warning: Workspace default retention is $($s.WorkspaceRetentionDays)d - increase to 90d[/]"
+    if ($summary.WorkspaceRetentionDays -gt 0 -and $summary.WorkspaceRetentionDays -lt 90) {
+        $overviewLines += "[bold yellow]:warning: Workspace default retention is $($summary.WorkspaceRetentionDays)d - increase to 90d[/]"
     }
 
-    if ($s.TablesWithTransforms -gt 0 -or $s.SplitTables -gt 0) {
+    if ($summary.TablesWithTransforms -gt 0 -or $summary.SplitTables -gt 0) {
         $transformParts = @()
-        if ($s.TablesWithTransforms -gt 0) { $transformParts += "[deepskyblue1]$($s.TablesWithTransforms) table(s) with transforms[/]" }
-        if ($s.SplitTables -gt 0) { $transformParts += "[yellow]$($s.SplitTables) split table(s)[/]" }
-        if ($s.TransformDCRs -gt 0) { $transformParts += "[dim]$($s.TransformDCRs) DCR(s)[/]" }
+        if ($summary.TablesWithTransforms -gt 0) { $transformParts += "[deepskyblue1]$($summary.TablesWithTransforms) table(s) with transforms[/]" }
+        if ($summary.SplitTables -gt 0) { $transformParts += "[yellow]$($summary.SplitTables) split table(s)[/]" }
+        if ($summary.TransformDCRs -gt 0) { $transformParts += "[dim]$($summary.TransformDCRs) DCR(s)[/]" }
         $overviewLines += "[bold]Transforms:[/]       $($transformParts -join '  |  ')"
     }
 
-    if ($s.EstTotalSavings -gt 0) {
-        $overviewLines += "[bold]Savings Potential:[/] [green]`$$($s.EstTotalSavings)/mo[/]"
+    if ($summary.EstTotalSavings -gt 0) {
+        $overviewLines += "[bold]Savings Potential:[/] [green]`$$($summary.EstTotalSavings)/mo[/]"
     }
 
-    if ($s.DetectionRulesAnalyzed -gt 0) {
-        $overviewLines += "[bold]Rule Quality:[/]     [deepskyblue1]$($s.DetectionRulesAnalyzed) analyzed[/] | [yellow]$($s.NoisyRulesDetected) noisy[/] | [dim]$($s.AutoClosedIncidents) auto-closed incidents[/]"
+    if ($summary.DetectionRulesAnalyzed -gt 0) {
+        $overviewLines += "[bold]Rule Quality:[/]     [deepskyblue1]$($summary.DetectionRulesAnalyzed) analyzed[/] | [yellow]$($summary.NoisyRulesDetected) noisy[/] | [dim]$($summary.AutoClosedIncidents) auto-closed incidents[/]"
     }
 
     if ($DefenderXDR) {
@@ -217,10 +219,6 @@ function Write-Dashboard {
         $notStreamedCount = $Analysis.XdrChecker.Summary.NotStreamedCount
         $notStreamedPart = if ($notStreamedCount -gt 0) { " | [dim]$notStreamedCount not streamed[/]" } else { '' }
         $overviewLines += "[bold]Defender XDR:[/]     [deepskyblue1]$($DefenderXDR.TotalXDRRules) custom detections[/]${cdrCorrelated} | [dim]$xdrStreamingCount streaming tables${tierDetail}[/]${notStreamedPart}"
-    }
-
-    if ($s.XdrCheckerIssues -gt 0) {
-        $overviewLines += "[bold]XDR Checker:[/]      [yellow]$($s.XdrCheckerIssues) advisory issue(s)[/] | [dim]target $($s.XdrAdvisoryRetention)d retention path[/]"
     }
 
     $overviewText = $overviewLines -join "`n"
@@ -283,7 +281,8 @@ function Write-InteractiveMenu {
         [string]$WorkspaceName,
         [PSCustomObject]$DefenderXDR,
         [string]$ExportFormat,
-        [string]$ExportPath
+        [string]$ExportPath,
+        [PSCustomObject]$Context
     )
 
     $menuItems = [ordered]@{
@@ -297,12 +296,31 @@ function Write-InteractiveMenu {
         'View All Tables'               = 'tables'
     }
 
+    if ($Context) {
+        $menuItems['Manage table retention and type'] = 'manageretention'
+    }
+
     $menuItems['Export Report']       = 'export'
     $menuItems['Quit']                = 'quit'
 
+    $script:LogHorizonSkipNextHomeRedraw = $false
     $continue = $true
+    $isFirstMenuRender = $true
     while ($continue) {
         Invoke-ConsoleSizeCheck
+        $skipHomeRedraw = $false
+        if ($script:LogHorizonSkipNextHomeRedraw) {
+            $skipHomeRedraw = $true
+            $script:LogHorizonSkipNextHomeRedraw = $false
+        }
+
+        if (-not $isFirstMenuRender -and -not $skipHomeRedraw) {
+            Clear-LogHorizonScreen
+            Write-LogHorizonBanner
+            Write-Dashboard -Analysis $Analysis -WorkspaceName $WorkspaceName -DefenderXDR $DefenderXDR
+        }
+        $isFirstMenuRender = $false
+
         Write-SpectreRule -Title "[dodgerblue2]MENU[/]" -Color DodgerBlue2
         Write-SpectreHost ""
 
@@ -315,14 +333,15 @@ function Write-InteractiveMenu {
         Write-SpectreHost ""
 
         switch ($action) {
-            'recommendations' { Write-Recommendations -Analysis $Analysis }
+            'recommendations' { Write-RecommendationView -Analysis $Analysis }
             'detection'       { Write-DetectionAssessment -Analysis $Analysis }
             'detanalyzer'     { Write-DetectionAnalyzer -Analysis $Analysis }
             'soc'             { Write-SocOptimization -Analysis $Analysis }
             'retention'       { Write-RetentionAssessment -Analysis $Analysis }
-            'transforms'      { Write-DataTransforms -Analysis $Analysis }
-            'logtuning'       { Write-LogTuningMenu -Analysis $Analysis }
-            'tables'          { Write-AllTables -Analysis $Analysis }
+            'transforms'      { Write-DataTransformView -Analysis $Analysis }
+            'logtuning'       { Write-LogTuningMenu -Analysis $Analysis -Context $Context }
+            'tables'          { Write-TableInventory -Analysis $Analysis }
+            'manageretention' { Invoke-ManageRetentionWizard -Analysis $Analysis -Context $Context }
             'export'          {
                 Invoke-ExportFromMenu -Analysis $Analysis `
                                       -WorkspaceName $WorkspaceName `
@@ -341,7 +360,7 @@ function Write-InteractiveMenu {
 }
 
 # Recommendations
-function Write-Recommendations {
+function Write-RecommendationView {
     param([PSCustomObject]$Analysis)
 
     if ($Analysis.Recommendations.Count -eq 0) {
@@ -724,7 +743,7 @@ function Write-SocRecommendationDrillDown {
 }
 
 # Data transforms
-function Write-DataTransforms {
+function Write-DataTransformView {
     param([PSCustomObject]$Analysis)
 
     $transforms = $Analysis.DataTransforms
@@ -825,7 +844,10 @@ function Write-DataTransforms {
 
 # Log Tuning / Transforms sub-menu
 function Write-LogTuningMenu {
-    param([PSCustomObject]$Analysis)
+    param(
+        [PSCustomObject]$Analysis,
+        [PSCustomObject]$Context
+    )
 
     # Help text explaining the three transform types
     $helpLines = @(
@@ -865,16 +887,16 @@ function Write-LogTuningMenu {
         Write-SpectreHost ""
 
         switch ($subAction) {
-            'live'     { Write-LiveTuningSuggestions -Analysis $Analysis }
-            'kb'       { Write-SplitKqlSuggestions -Analysis $Analysis }
-            'evaluate' { Write-TableEvaluation -Analysis $Analysis }
+            'live'     { Write-LiveTuningView -Analysis $Analysis }
+            'kb'       { Write-SplitKqlSuggestionView -Analysis $Analysis }
+            'evaluate' { Write-TableEvaluation -Analysis $Analysis -Context $Context }
             'back'     { $subContinue = $false }
         }
     }
 }
 
 # Live data tuning suggestions
-function Write-LiveTuningSuggestions {
+function Write-LiveTuningView {
     param([PSCustomObject]$Analysis)
 
     $liveTuning = @($Analysis.LiveTuningAnalysis | Where-Object { $_.RuleCount -gt 0 })
@@ -1010,7 +1032,10 @@ function Write-LiveTuningDetail {
 
 # Enhanced table evaluation
 function Write-TableEvaluation {
-    param([PSCustomObject]$Analysis)
+    param(
+        [PSCustomObject]$Analysis,
+        [PSCustomObject]$Context
+    )
 
     $allTables = @($Analysis.TableAnalysis | Sort-Object TableName)
     if ($allTables.Count -eq 0) { return }
@@ -1024,7 +1049,7 @@ function Write-TableEvaluation {
     if ($pick -eq 'Back') { return }
 
     $table = $allTables | Where-Object { $_.TableName -eq $pick } | Select-Object -First 1
-    $s = $table.SplitSuggestion
+    $splitSuggestion = $table.SplitSuggestion
 
     # Get live tuning data for this table if available
     $liveEntry = $Analysis.LiveTuningAnalysis | Where-Object { $_.TableName -eq $pick } | Select-Object -First 1
@@ -1047,7 +1072,7 @@ function Write-TableEvaluation {
     }
 
     if ($table.SchemaColumns -and $table.SchemaColumns.Count -gt 0) {
-        $usedCount = if ($liveEntry) { $liveEntry.FieldCount } elseif ($s -and $s.AllFields) { $s.AllFields.Count } else { 0 }
+        $usedCount = if ($liveEntry) { $liveEntry.FieldCount } elseif ($splitSuggestion -and $splitSuggestion.AllFields) { $splitSuggestion.AllFields.Count } else { 0 }
         $infoLines += "[bold]Schema columns:[/]  $($table.SchemaColumns.Count) total  |  $usedCount used by rules"
     }
 
@@ -1114,8 +1139,8 @@ function Write-TableEvaluation {
             $recommendation = "[dim]Low tuning potential for this table based on current rule coverage.[/]"
         }
     }
-    elseif ($s -and $s.Source -ne 'none') {
-        $recommendation = "[bold yellow]Recommended: Use knowledge-base suggestion (source: $($s.Source))[/]"
+    elseif ($splitSuggestion -and $splitSuggestion.Source -ne 'none') {
+        $recommendation = "[bold yellow]Recommended: Use knowledge-base suggestion (source: $($splitSuggestion.Source))[/]"
     }
 
     Write-SpectreHost "[bold]Tuning Recommendation:[/]"
@@ -1131,15 +1156,19 @@ function Write-TableEvaluation {
         $kqlSource = if ($liveEntry) { $liveEntry } else { $null }
 
         if ($kqlSource -and $kqlSource.FilterKql)    { $evalMenu['View WHERE filter KQL'] = 'filter' }
-        elseif ($s -and $s.SplitKql)                 { $evalMenu['View WHERE filter KQL (KB)'] = 'kbfilter' }
+        elseif ($splitSuggestion -and $splitSuggestion.SplitKql)                 { $evalMenu['View WHERE filter KQL (KB)'] = 'kbfilter' }
 
         if ($kqlSource -and $kqlSource.ProjectKql)   { $evalMenu['View column reduction KQL'] = 'project' }
-        elseif ($s -and $s.ProjectKql)               { $evalMenu['View column reduction KQL (KB)'] = 'kbproject' }
+        elseif ($splitSuggestion -and $splitSuggestion.ProjectKql)               { $evalMenu['View column reduction KQL (KB)'] = 'kbproject' }
 
         if ($kqlSource -and $kqlSource.CombinedKql)  { $evalMenu['View combined KQL'] = 'combined' }
 
         if ($liveEntry -and $liveEntry.RuleDetails.Count -gt 0) {
             $evalMenu['View field-by-rule breakdown'] = 'fields'
+        }
+
+        if ($Context) {
+            $evalMenu['Manage retention/type for this table'] = 'updateretention'
         }
 
         $evalMenu['Back'] = 'back'
@@ -1161,7 +1190,7 @@ function Write-TableEvaluation {
             }
             'kbfilter' {
                 Write-SpectreHost "[bold]Split Transform KQL[/] [dim](from knowledge base, condition-only)[/]"
-                Write-SpectreHost "[deepskyblue1]$(Get-SafeEscapedText $s.SplitKql)[/]"
+                Write-SpectreHost "[deepskyblue1]$(Get-SafeEscapedText $splitSuggestion.SplitKql)[/]"
                 Write-SpectreHost ""
             }
             'project' {
@@ -1171,7 +1200,7 @@ function Write-TableEvaluation {
             }
             'kbproject' {
                 Write-SpectreHost "[bold]Column Reduction KQL[/] [dim](from knowledge base)[/]"
-                Write-SpectreHost "[deepskyblue1]$(Get-SafeEscapedText $s.ProjectKql)[/]"
+                Write-SpectreHost "[deepskyblue1]$(Get-SafeEscapedText $splitSuggestion.ProjectKql)[/]"
                 Write-SpectreHost ""
             }
             'combined' {
@@ -1188,13 +1217,16 @@ function Write-TableEvaluation {
                 }
                 Write-SpectreHost ""
             }
+            'updateretention' {
+                Invoke-ManageRetentionWizard -Analysis $Analysis -Context $Context -TableNames @($table.TableName)
+            }
             'back' { $evalContinue = $false }
         }
     }
 }
 
 # Split KQL suggestions (knowledge base path)
-function Write-SplitKqlSuggestions {
+function Write-SplitKqlSuggestionView {
     param([PSCustomObject]$Analysis)
 
     $splitRecs = @($Analysis.Recommendations | Where-Object { $_.Type -eq 'SplitCandidate' -and $_.SplitSuggestion })
@@ -1217,8 +1249,8 @@ function Write-SplitKqlSuggestions {
     # Summary table
     $table = @()
     foreach ($rec in $splitRecs) {
-        $s = $rec.SplitSuggestion
-        $sourceMarkup = switch ($s.Source) {
+        $splitSuggestion = $rec.SplitSuggestion
+        $sourceMarkup = switch ($splitSuggestion.Source) {
             'knowledge-base'   { '[green]Knowledge Base[/]' }
             'rule-analysis'    { '[deepskyblue1]Rule Analysis[/]' }
             'combined'         { '[green]Combined[/]' }
@@ -1228,15 +1260,15 @@ function Write-SplitKqlSuggestions {
             default            { '[grey]None[/]' }
         }
 
-        $fieldsSummary = "$($s.RuleFields.Count) rule + $($s.HighValueFields.Count) KB"
-        if ($s.FallbackFields -and $s.FallbackFields.Count -gt 0) {
-            $fieldsSummary += " + $($s.FallbackFields.Count) fallback"
+        $fieldsSummary = "$($splitSuggestion.RuleFields.Count) rule + $($splitSuggestion.HighValueFields.Count) KB"
+        if ($splitSuggestion.FallbackFields -and $splitSuggestion.FallbackFields.Count -gt 0) {
+            $fieldsSummary += " + $($splitSuggestion.FallbackFields.Count) fallback"
         }
 
         $table += [PSCustomObject]@{
             'Table'       = Get-SafeEscapedText $rec.TableName
             'GB/mo'       = ($Analysis.TableAnalysis | Where-Object TableName -eq $rec.TableName).MonthlyGB
-            'Rules'       = $s.RuleCount
+            'Rules'       = $splitSuggestion.RuleCount
             'Fields'      = $fieldsSummary
             'Source'      = $sourceMarkup
             'Est Savings' = "`$$($rec.EstSavingsUSD)/mo"
@@ -1252,13 +1284,13 @@ function Write-SplitKqlSuggestions {
 
     if ($pick -ne 'Back') {
         $rec = $splitRecs | Where-Object { $_.TableName -eq $pick } | Select-Object -First 1
-        $s = $rec.SplitSuggestion
+        $splitSuggestion = $rec.SplitSuggestion
 
         Write-SpectreHost ""
         Write-SpectreHost "[dodgerblue2][bold]$($rec.TableName)[/] — Knowledge Base Tuning[/]"
 
-        if ($s.Description) {
-            Write-SpectreHost "[dim]$(Get-SafeEscapedText $s.Description)[/]"
+        if ($splitSuggestion.Description) {
+            Write-SpectreHost "[dim]$(Get-SafeEscapedText $splitSuggestion.Description)[/]"
         }
         Write-SpectreHost ""
 
@@ -1266,8 +1298,8 @@ function Write-SplitKqlSuggestions {
         $kbContinue = $true
         while ($kbContinue) {
             $kbMenu = [ordered]@{}
-            if ($s.SplitKql)   { $kbMenu['View WHERE filter KQL'] = 'filter' }
-            if ($s.ProjectKql) { $kbMenu['View column reduction KQL'] = 'project' }
+            if ($splitSuggestion.SplitKql)   { $kbMenu['View WHERE filter KQL'] = 'filter' }
+            if ($splitSuggestion.ProjectKql) { $kbMenu['View column reduction KQL'] = 'project' }
             $kbMenu['View field analysis'] = 'fields'
             $kbMenu['Back'] = 'back'
 
@@ -1278,7 +1310,7 @@ function Write-SplitKqlSuggestions {
             switch ($kbAction) {
                 'filter' {
                     Write-SpectreHost "[bold]Split Transform KQL[/] [dim](condition-only — the portal prepends 'source | where' automatically)[/]"
-                    Write-SpectreHost "[deepskyblue1]$(Get-SafeEscapedText $s.SplitKql)[/]"
+                    Write-SpectreHost "[deepskyblue1]$(Get-SafeEscapedText $splitSuggestion.SplitKql)[/]"
                     if ($rec.EstSavingsUSD -gt 0) {
                         Write-SpectreHost "[dim]Estimated savings: ~`$$($rec.EstSavingsUSD)/mo[/]"
                     }
@@ -1286,32 +1318,32 @@ function Write-SplitKqlSuggestions {
                 }
                 'project' {
                     Write-SpectreHost "[bold]Column Reduction KQL[/] [dim](keeps only detection-relevant fields)[/]"
-                    Write-SpectreHost "[deepskyblue1]$(Get-SafeEscapedText $s.ProjectKql)[/]"
+                    Write-SpectreHost "[deepskyblue1]$(Get-SafeEscapedText $splitSuggestion.ProjectKql)[/]"
                     Write-SpectreHost ""
                 }
                 'fields' {
-                    if ($s.RuleFields.Count -gt 0) {
-                        $ruleFieldStr = ($s.RuleFields | Select-Object -First 20) -join ', '
-                        Write-SpectreHost "[bold]Fields from analytics rules ($($s.RuleFields.Count)):[/]"
+                    if ($splitSuggestion.RuleFields.Count -gt 0) {
+                        $ruleFieldStr = ($splitSuggestion.RuleFields | Select-Object -First 20) -join ', '
+                        Write-SpectreHost "[bold]Fields from analytics rules ($($splitSuggestion.RuleFields.Count)):[/]"
                         Write-SpectreHost "  [white]$(Get-SafeEscapedText $ruleFieldStr)[/]"
                         Write-SpectreHost ""
                     }
 
-                    if ($s.HighValueFields.Count -gt 0) {
-                        $hvFieldStr = ($s.HighValueFields | Select-Object -First 20) -join ', '
-                        Write-SpectreHost "[bold]Fields from knowledge base ($($s.HighValueFields.Count)):[/]"
+                    if ($splitSuggestion.HighValueFields.Count -gt 0) {
+                        $hvFieldStr = ($splitSuggestion.HighValueFields | Select-Object -First 20) -join ', '
+                        Write-SpectreHost "[bold]Fields from knowledge base ($($splitSuggestion.HighValueFields.Count)):[/]"
                         Write-SpectreHost "  [white]$(Get-SafeEscapedText $hvFieldStr)[/]"
                         Write-SpectreHost ""
                     }
 
-                    if ($s.FallbackFields -and $s.FallbackFields.Count -gt 0) {
-                        $fbFieldStr = ($s.FallbackFields | Select-Object -First 20) -join ', '
-                        Write-SpectreHost "[bold]Fields from fallback ($($s.FallbackFields.Count)) [dim](source: $($s.FallbackSource))[/]:[/]"
+                    if ($splitSuggestion.FallbackFields -and $splitSuggestion.FallbackFields.Count -gt 0) {
+                        $fbFieldStr = ($splitSuggestion.FallbackFields | Select-Object -First 20) -join ', '
+                        Write-SpectreHost "[bold]Fields from fallback ($($splitSuggestion.FallbackFields.Count)) [dim](source: $($splitSuggestion.FallbackSource))[/]:[/]"
                         Write-SpectreHost "  [yellow]$(Get-SafeEscapedText $fbFieldStr)[/]"
                         Write-SpectreHost ""
                     }
 
-                    Write-SpectreHost "[dim]Source: $($s.Source) | $($s.RuleCount) rule(s) | $($s.ConditionCount) condition(s) extracted[/]"
+                    Write-SpectreHost "[dim]Source: $($splitSuggestion.Source) | $($splitSuggestion.RuleCount) rule(s) | $($splitSuggestion.ConditionCount) condition(s) extracted[/]"
                     Write-SpectreHost ""
                 }
                 'back' { $kbContinue = $false }
@@ -1335,56 +1367,56 @@ function Write-TableKqlSuggestion {
 
     if ($pick -ne 'Back') {
         $table = $allTables | Where-Object { $_.TableName -eq $pick } | Select-Object -First 1
-        $s = $table.SplitSuggestion
+        $splitSuggestion = $table.SplitSuggestion
 
         Write-SpectreHost ""
         Write-SpectreHost "[dodgerblue2][bold]$($table.TableName)[/] — Target Field and KQL Evaluation[/]"
 
-        if (-not $s -or $s.Source -eq 'none') {
+        if (-not $splitSuggestion -or $splitSuggestion.Source -eq 'none') {
             Write-SpectreHost "[dim]No KQL suggestions could be automatically generated for this table (no knowledge-base hits or mapped analytics rules).[/]"
             return
         }
 
-        if ($s.Description) {
-            Write-SpectreHost "[dim]$(Get-SafeEscapedText $s.Description)[/]"
+        if ($splitSuggestion.Description) {
+            Write-SpectreHost "[dim]$(Get-SafeEscapedText $splitSuggestion.Description)[/]"
         }
         Write-SpectreHost ""
 
         # Show split KQL
-        if ($s.SplitKql) {
+        if ($splitSuggestion.SplitKql) {
             Write-SpectreHost "[bold]Split Transform KQL[/] [dim](condition-only — the portal prepends 'source | where' automatically)[/]"
-            Write-SpectreHost "[deepskyblue1]$(Get-SafeEscapedText $s.SplitKql)[/]"
+            Write-SpectreHost "[deepskyblue1]$(Get-SafeEscapedText $splitSuggestion.SplitKql)[/]"
             Write-SpectreHost ""
         }
 
         # Show projection KQL
-        if ($s.ProjectKql) {
+        if ($splitSuggestion.ProjectKql) {
             Write-SpectreHost "[bold]Column Reduction KQL[/] [dim](keeps only detection-relevant fields)[/]"
-            Write-SpectreHost "[deepskyblue1]$(Get-SafeEscapedText $s.ProjectKql)[/]"
+            Write-SpectreHost "[deepskyblue1]$(Get-SafeEscapedText $splitSuggestion.ProjectKql)[/]"
             Write-SpectreHost ""
         }
 
         # Show field analysis
-        if ($s.RuleFields.Count -gt 0) {
-            $ruleFieldStr = ($s.RuleFields | Sort-Object) -join ', '
-            Write-SpectreHost "[bold]Fields from analytics rules ($($s.RuleFields.Count)):[/]"
+        if ($splitSuggestion.RuleFields.Count -gt 0) {
+            $ruleFieldStr = ($splitSuggestion.RuleFields | Sort-Object) -join ', '
+            Write-SpectreHost "[bold]Fields from analytics rules ($($splitSuggestion.RuleFields.Count)):[/]"
             Write-SpectreHost "  [white]$(Get-SafeEscapedText $ruleFieldStr)[/]"
             Write-SpectreHost ""
         }
 
-        if ($s.HighValueFields.Count -gt 0) {
-            $hvFieldStr = ($s.HighValueFields | Sort-Object) -join ', '
-            Write-SpectreHost "[bold]Fields from knowledge base ($($s.HighValueFields.Count)):[/]"
+        if ($splitSuggestion.HighValueFields.Count -gt 0) {
+            $hvFieldStr = ($splitSuggestion.HighValueFields | Sort-Object) -join ', '
+            Write-SpectreHost "[bold]Fields from knowledge base ($($splitSuggestion.HighValueFields.Count)):[/]"
             Write-SpectreHost "  [white]$(Get-SafeEscapedText $hvFieldStr)[/]"
             Write-SpectreHost ""
         }
 
-        Write-SpectreHost "[dim]Source: $($s.Source) | $($s.RuleCount) mapped rule(s) | $($s.ConditionCount) condition(s) extracted[/]"
+        Write-SpectreHost "[dim]Source: $($splitSuggestion.Source) | $($splitSuggestion.RuleCount) mapped rule(s) | $($splitSuggestion.ConditionCount) condition(s) extracted[/]"
     }
 }
 
 # All tables
-function Write-AllTables {
+function Write-TableInventory {
     param([PSCustomObject]$Analysis)
 
     $width = Get-ConsoleWidth
@@ -1454,8 +1486,8 @@ function Write-AllTables {
 function Write-RetentionAssessment {
     param([PSCustomObject]$Analysis)
 
-    $s = $Analysis.Summary
-    if ($s.RetentionChecked -eq 0) {
+    $summary = $Analysis.Summary
+    if ($summary.RetentionChecked -eq 0) {
         Write-SpectreHost "[dim]No retention data available. Tables API may not have returned results.[/]"
         return
     }
@@ -1491,13 +1523,13 @@ function Write-RetentionAssessment {
 
     # Overview panel
     $lines = @()
-    if ($s.WorkspaceRetentionDays -gt 0) {
-        $wsColor = if ($s.WorkspaceRetentionDays -ge 90) { 'green' } else { 'red' }
-        $lines += "[bold]Workspace Default:[/] [${wsColor}]$($s.WorkspaceRetentionDays)d[/]$(if ($s.WorkspaceRetentionDays -lt 90) { ' [yellow](increase to 90d)[/]' })"
+    if ($summary.WorkspaceRetentionDays -gt 0) {
+        $wsColor = if ($summary.WorkspaceRetentionDays -ge 90) { 'green' } else { 'red' }
+        $lines += "[bold]Workspace Default:[/] [${wsColor}]$($summary.WorkspaceRetentionDays)d[/]$(if ($summary.WorkspaceRetentionDays -lt 90) { ' [yellow](increase to 90d)[/]' })"
     }
-    $lines += "[bold]Baseline (>=90d):[/]  [green]$($s.RetentionCompliant)[/] of $($s.RetentionChecked) Analytics tables"
-    if ($s.RetentionNonCompliant -gt 0) {
-        $lines += "[bold]Below Baseline:[/]   [red]$($s.RetentionNonCompliant)[/] table(s) below 90d"
+    $lines += "[bold]Baseline (>=90d):[/]  [green]$($summary.RetentionCompliant)[/] of $($summary.RetentionChecked) Analytics tables"
+    if ($summary.RetentionNonCompliant -gt 0) {
+        $lines += "[bold]Below Baseline:[/]   [red]$($summary.RetentionNonCompliant)[/] table(s) below 90d"
     }
     if ($totalExtended -gt 0) {
         $lines += "[bold]Extended (>90d):[/]  [deepskyblue1]$totalExtended[/] table(s) recommended for extended retention"
@@ -1630,23 +1662,23 @@ function Write-DetectionAnalyzer {
     }
 
     # Coverage stats panel
-    $s = $Analysis.DetectionAnalyzer.Summary
-    if ($null -ne $s.TotalTables -and $s.TotalTables -gt 0) {
+    $detectionSummary = $Analysis.DetectionAnalyzer.Summary
+    if ($null -ne $detectionSummary.TotalTables -and $detectionSummary.TotalTables -gt 0) {
         $consoleW = Get-ConsoleWidth
         # Dynamic bar width: scale with terminal, floor 10, cap 30
         $barWidth = [math]::Max(10, [math]::Min(30, [math]::Floor(($consoleW - 60) * 0.5)))
-        $detFill   = [math]::Max([math]::Round(($s.DetectionCoveragePct / 100) * $barWidth), 0)
-        $huntFill  = [math]::Max([math]::Round(($s.HuntingCoveragePct / 100) * $barWidth), 0)
-        $combFill  = [math]::Max([math]::Round(($s.CombinedCoveragePct / 100) * $barWidth), 0)
+        $detFill   = [math]::Max([math]::Round(($detectionSummary.DetectionCoveragePct / 100) * $barWidth), 0)
+        $huntFill  = [math]::Max([math]::Round(($detectionSummary.HuntingCoveragePct / 100) * $barWidth), 0)
+        $combFill  = [math]::Max([math]::Round(($detectionSummary.CombinedCoveragePct / 100) * $barWidth), 0)
 
         $detBar  = "[deepskyblue1]$([string]::new([char]0x2588, $detFill))[/][dim]$([string]::new([char]0x2591, $barWidth - $detFill))[/]"
         $huntBar = "[green]$([string]::new([char]0x2588, $huntFill))[/][dim]$([string]::new([char]0x2591, $barWidth - $huntFill))[/]"
         $combBar = "[yellow]$([string]::new([char]0x2588, $combFill))[/][dim]$([string]::new([char]0x2591, $barWidth - $combFill))[/]"
 
         # GB-weighted coverage bars
-        $detGBFill  = [math]::Max([math]::Round(($s.DetectionCoverageGBPct / 100) * $barWidth), 0)
-        $huntGBFill = [math]::Max([math]::Round(($s.HuntingCoverageGBPct / 100) * $barWidth), 0)
-        $combGBFill = [math]::Max([math]::Round(($s.CombinedCoverageGBPct / 100) * $barWidth), 0)
+        $detGBFill  = [math]::Max([math]::Round(($detectionSummary.DetectionCoverageGBPct / 100) * $barWidth), 0)
+        $huntGBFill = [math]::Max([math]::Round(($detectionSummary.HuntingCoverageGBPct / 100) * $barWidth), 0)
+        $combGBFill = [math]::Max([math]::Round(($detectionSummary.CombinedCoverageGBPct / 100) * $barWidth), 0)
 
         $detGBBar  = "[deepskyblue1]$([string]::new([char]0x2588, $detGBFill))[/][dim]$([string]::new([char]0x2591, $barWidth - $detGBFill))[/]"
         $huntGBBar = "[green]$([string]::new([char]0x2588, $huntGBFill))[/][dim]$([string]::new([char]0x2591, $barWidth - $huntGBFill))[/]"
@@ -1655,36 +1687,36 @@ function Write-DetectionAnalyzer {
         if ($consoleW -ge 120) {
             # Full layout with aligned labels
             $coverageLines = @(
-                "[bold]Ingestion Coverage[/] [dim]($($s.TotalTables) tables, $($s.TotalAllGB) GB/month)[/]"
+                "[bold]Ingestion Coverage[/] [dim]($($detectionSummary.TotalTables) tables, $($detectionSummary.TotalAllGB) GB/month)[/]"
                 ""
-                "  Detection (Analytics/CDR)  $detBar  [deepskyblue1]$($s.DetectionCoveragePct)%[/] [dim]($($s.TablesWithDetection)/$($s.TotalTables) tables)[/]"
-                "  Hunting Queries            $huntBar  [green]$($s.HuntingCoveragePct)%[/] [dim]($($s.TablesWithHunting)/$($s.TotalTables) tables)[/]"
-                "  Combined                   $combBar  [yellow]$($s.CombinedCoveragePct)%[/] [dim]($($s.TablesWithCombined)/$($s.TotalTables) tables)[/]"
+                "  Detection (Analytics/CDR)  $detBar  [deepskyblue1]$($detectionSummary.DetectionCoveragePct)%[/] [dim]($($detectionSummary.TablesWithDetection)/$($detectionSummary.TotalTables) tables)[/]"
+                "  Hunting Queries            $huntBar  [green]$($detectionSummary.HuntingCoveragePct)%[/] [dim]($($detectionSummary.TablesWithHunting)/$($detectionSummary.TotalTables) tables)[/]"
+                "  Combined                   $combBar  [yellow]$($detectionSummary.CombinedCoveragePct)%[/] [dim]($($detectionSummary.TablesWithCombined)/$($detectionSummary.TotalTables) tables)[/]"
                 ""
                 "[bold]Volume Coverage[/] [dim](GB with detections / total GB)[/]"
                 ""
-                "  Detection (Analytics/CDR)  $detGBBar  [deepskyblue1]$($s.DetectionCoverageGBPct)%[/] [dim]($($s.DetectionCoverageGB)/$($s.TotalAllGB) GB)[/]"
-                "  Hunting Queries            $huntGBBar  [green]$($s.HuntingCoverageGBPct)%[/] [dim]($($s.HuntingCoverageGB)/$($s.TotalAllGB) GB)[/]"
-                "  Combined                   $combGBBar  [yellow]$($s.CombinedCoverageGBPct)%[/] [dim]($($s.CombinedCoverageGB)/$($s.TotalAllGB) GB)[/]"
+                "  Detection (Analytics/CDR)  $detGBBar  [deepskyblue1]$($detectionSummary.DetectionCoverageGBPct)%[/] [dim]($($detectionSummary.DetectionCoverageGB)/$($detectionSummary.TotalAllGB) GB)[/]"
+                "  Hunting Queries            $huntGBBar  [green]$($detectionSummary.HuntingCoverageGBPct)%[/] [dim]($($detectionSummary.HuntingCoverageGB)/$($detectionSummary.TotalAllGB) GB)[/]"
+                "  Combined                   $combGBBar  [yellow]$($detectionSummary.CombinedCoverageGBPct)%[/] [dim]($($detectionSummary.CombinedCoverageGB)/$($detectionSummary.TotalAllGB) GB)[/]"
                 ""
-                "  Avg detections per table:  [bold]$($s.AvgDetectionsPerTable)[/] [dim](analytics + CDR rules)[/]"
+                "  Avg detections per table:  [bold]$($detectionSummary.AvgDetectionsPerTable)[/] [dim](analytics + CDR rules)[/]"
             )
         } else {
             # Compact layout with shorter labels
             $coverageLines = @(
-                "[bold]Coverage[/] [dim]($($s.TotalTables) tables, $($s.TotalAllGB) GB/mo)[/]"
+                "[bold]Coverage[/] [dim]($($detectionSummary.TotalTables) tables, $($detectionSummary.TotalAllGB) GB/mo)[/]"
                 ""
-                "  Detection  $detBar  [deepskyblue1]$($s.DetectionCoveragePct)%[/] [dim]($($s.TablesWithDetection)/$($s.TotalTables))[/]"
-                "  Hunting    $huntBar  [green]$($s.HuntingCoveragePct)%[/] [dim]($($s.TablesWithHunting)/$($s.TotalTables))[/]"
-                "  Combined   $combBar  [yellow]$($s.CombinedCoveragePct)%[/] [dim]($($s.TablesWithCombined)/$($s.TotalTables))[/]"
+                "  Detection  $detBar  [deepskyblue1]$($detectionSummary.DetectionCoveragePct)%[/] [dim]($($detectionSummary.TablesWithDetection)/$($detectionSummary.TotalTables))[/]"
+                "  Hunting    $huntBar  [green]$($detectionSummary.HuntingCoveragePct)%[/] [dim]($($detectionSummary.TablesWithHunting)/$($detectionSummary.TotalTables))[/]"
+                "  Combined   $combBar  [yellow]$($detectionSummary.CombinedCoveragePct)%[/] [dim]($($detectionSummary.TablesWithCombined)/$($detectionSummary.TotalTables))[/]"
                 ""
                 "[bold]Volume[/] [dim](GB coverage)[/]"
                 ""
-                "  Detection  $detGBBar  [deepskyblue1]$($s.DetectionCoverageGBPct)%[/] [dim]($($s.DetectionCoverageGB)/$($s.TotalAllGB) GB)[/]"
-                "  Hunting    $huntGBBar  [green]$($s.HuntingCoverageGBPct)%[/] [dim]($($s.HuntingCoverageGB)/$($s.TotalAllGB) GB)[/]"
-                "  Combined   $combGBBar  [yellow]$($s.CombinedCoverageGBPct)%[/] [dim]($($s.CombinedCoverageGB)/$($s.TotalAllGB) GB)[/]"
+                "  Detection  $detGBBar  [deepskyblue1]$($detectionSummary.DetectionCoverageGBPct)%[/] [dim]($($detectionSummary.DetectionCoverageGB)/$($detectionSummary.TotalAllGB) GB)[/]"
+                "  Hunting    $huntGBBar  [green]$($detectionSummary.HuntingCoverageGBPct)%[/] [dim]($($detectionSummary.HuntingCoverageGB)/$($detectionSummary.TotalAllGB) GB)[/]"
+                "  Combined   $combGBBar  [yellow]$($detectionSummary.CombinedCoverageGBPct)%[/] [dim]($($detectionSummary.CombinedCoverageGB)/$($detectionSummary.TotalAllGB) GB)[/]"
                 ""
-                "  Avg detections/table: [bold]$($s.AvgDetectionsPerTable)[/]"
+                "  Avg detections/table: [bold]$($detectionSummary.AvgDetectionsPerTable)[/]"
             )
         }
         ($coverageLines -join "`n") | Format-SpectrePanel -Header "[dodgerblue2] DETECTION COVERAGE [/]" -Border Rounded -Color DodgerBlue2
@@ -1901,55 +1933,6 @@ function Write-DetectionAnalyzerRuleDetail {
     ($detailLines -join "`n") | Format-SpectrePanel -Header "[dodgerblue2] RULE DETAIL [/]" -Border Rounded -Color DodgerBlue2
 }
 
-function Write-XDRChecker {
-    param([PSCustomObject]$Analysis)
-
-    if (-not $Analysis.XdrChecker) {
-        Write-SpectreHost "[dim]XDR Checker data is not available.[/]"
-        return
-    }
-
-    $findings = @($Analysis.XdrChecker.Findings)
-    $streamedTableCount = 0
-    if ($Analysis.XdrChecker.Summary -and $null -ne $Analysis.XdrChecker.Summary.StreamedTableCount) {
-        $streamedTableCount = [int]$Analysis.XdrChecker.Summary.StreamedTableCount
-    }
-
-    if ($streamedTableCount -eq 0) {
-        Write-SpectreHost "[yellow]No Defender XDR tables appear to be streamed into this Sentinel workspace.[/]"
-        Write-SpectreHost "[dim]XDR checker cannot validate forwarding/retention posture until XDR table forwarding is configured.[/]"
-        return
-    }
-
-    if ($findings.Count -eq 0) {
-        Write-SpectreHost "[green]No XDR checker findings for the currently streamed XDR tables.[/]"
-        Write-SpectreHost "[dim]Streamed XDR tables detected: $streamedTableCount[/]"
-        return
-    }
-
-    $table = @()
-    foreach ($f in $findings) {
-        $severity = switch ($f.Severity) {
-            'Medium'      { '[yellow]Medium[/]' }
-            'High'        { '[red]High[/]' }
-            'Information' { '[dim]Info[/]' }
-            default       { '[deepskyblue1]Low[/]' }
-        }
-
-        $table += [PSCustomObject]@{
-            'Table'    = Get-SafeEscapedText $f.TableName
-            'Type'     = Get-SafeEscapedText $f.Type
-            'Severity' = $severity
-            'Detail'   = Get-SafeEscapedText $f.Detail
-        }
-    }
-
-    $table | Format-SpectreTable -Border Rounded -Color DodgerBlue2 -HeaderColor DodgerBlue2 -AllowMarkup
-    $notStreamedCount = if ($Analysis.XdrChecker.Summary.NotStreamedCount) { [int]$Analysis.XdrChecker.Summary.NotStreamedCount } else { 0 }
-    Write-SpectreHost "[dim]  Streamed XDR tables: $streamedTableCount | Not streamed: $notStreamedCount[/]"
-    Write-SpectreHost "[dim]  Advisory retention target: $($Analysis.XdrChecker.Summary.AdvisoryRetentionDays) days in Data Lake for XDR-related logs.[/]"
-}
-
 # Export from menu
 function Invoke-ExportFromMenu {
     param(
@@ -1982,3 +1965,494 @@ function Invoke-ExportFromMenu {
 
     Write-SpectreHost "[green]Report exported to [bold]$(Get-SafeEscapedText $ExportPath)[/][/]"
 }
+
+# Interactive wizard input helpers.
+function Read-LogHorizonTextInput {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$Prompt,
+        [string]$DefaultAnswer
+    )
+
+    $hostPrompt = if ($PSBoundParameters.ContainsKey('DefaultAnswer')) {
+        "$Prompt [$DefaultAnswer]"
+    }
+    else {
+        $Prompt
+    }
+
+    $value = Read-Host $hostPrompt
+    if ([string]::IsNullOrWhiteSpace($value) -and $PSBoundParameters.ContainsKey('DefaultAnswer')) {
+        return $DefaultAnswer
+    }
+
+    return $value
+}
+
+function Clear-LogHorizonScreen {
+    [CmdletBinding()]
+    param()
+
+    try {
+        Clear-Host
+    }
+    catch {
+        Write-Verbose 'Unable to clear console window.'
+    }
+}
+
+function Get-LogHorizonMinimumColdRetentionValue {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][PSCustomObject]$Analysis,
+        [Parameter(Mandatory)][PSCustomObject[]]$Tables,
+        [Nullable[int]]$RetentionInDays
+    )
+
+    $workspaceRetention = $null
+    if ($Analysis.Summary -and $null -ne $Analysis.Summary.WorkspaceRetentionDays -and $Analysis.Summary.WorkspaceRetentionDays -gt 0) {
+        $workspaceRetention = [int]$Analysis.Summary.WorkspaceRetentionDays
+    }
+
+    $effectiveHotValues = foreach ($table in $Tables) {
+        if ($PSBoundParameters.ContainsKey('RetentionInDays')) {
+            if ($null -ne $RetentionInDays) {
+                [int]$RetentionInDays
+                continue
+            }
+
+            if ($null -ne $workspaceRetention) {
+                [int]$workspaceRetention
+                continue
+            }
+        }
+
+        if ($null -ne $table.ActualInteractiveRetentionDays) {
+            [int]$table.ActualInteractiveRetentionDays
+            continue
+        }
+
+        if ($null -ne $table.RetentionInDays) {
+            [int]$table.RetentionInDays
+            continue
+        }
+
+        if ($null -ne $workspaceRetention) {
+            [int]$workspaceRetention
+        }
+    }
+
+    $knownHotValues = @($effectiveHotValues | Where-Object { $null -ne $_ })
+    if ($knownHotValues.Count -eq 0) {
+        return $null
+    }
+
+    return ([int](($knownHotValues | Measure-Object -Maximum).Maximum) + 1)
+}
+
+function Get-LogHorizonColdRetentionHint {
+    [CmdletBinding()]
+    param([Nullable[int]]$MinimumValue)
+
+    $longTermValues = '1095,1460,1826,2191,2556,2922,3288,3653,4018,4383'
+    if ($null -eq $MinimumValue -or $MinimumValue -le 4) {
+        return "4-730 or $longTermValues"
+    }
+
+    if ($MinimumValue -le 730) {
+        return "$MinimumValue-730 or $longTermValues"
+    }
+
+    return $longTermValues
+}
+
+# Interactive wizard selection and apply helpers.
+function Show-LogHorizonManagedTableList {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][PSCustomObject[]]$Tables,
+        [string]$Title = 'Selected table(s)'
+    )
+
+    if ($Tables.Count -eq 0) {
+        Write-SpectreHost "[yellow]No tables selected.[/]"
+        return
+    }
+
+    Write-SpectreHost "[bold]$Title[/]"
+    $rows = foreach ($t in ($Tables | Sort-Object TableName)) {
+        [PSCustomObject]@{
+            'Table' = Get-SafeEscapedText $t.TableName
+            'Plan'  = if ($t.TablePlan) { $t.TablePlan } else { '-' }
+            'Hot'   = if ($null -ne $t.ActualInteractiveRetentionDays) { "$($t.ActualInteractiveRetentionDays) d" } else { 'inherit' }
+            'Cold'  = if ($null -ne $t.ActualRetentionDays) { "$($t.ActualRetentionDays) d" } else { 'inherit' }
+        }
+    }
+
+    $rows | Format-SpectreTable -Border Rounded -Color DodgerBlue2 -HeaderColor DodgerBlue2
+    Write-SpectreHost ""
+}
+
+function Select-LogHorizonTablesFromList {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][PSCustomObject[]]$Tables,
+        [string]$Title = '[deepskyblue1]Select table(s) from list:[/]'
+    )
+
+    if ($Tables.Count -eq 0) {
+        return @()
+    }
+
+    $selectedNames = New-Object System.Collections.Generic.List[string]
+    $selecting = $true
+    while ($selecting) {
+        Clear-LogHorizonScreen
+
+        $menu = [ordered]@{}
+        $remaining = @($Tables | Where-Object { $_.TableName -notin $selectedNames })
+        if ($remaining.Count -gt 0) {
+            $menu['Add a table'] = 'add'
+        }
+        if ($selectedNames.Count -gt 0) {
+            $menu['Remove a table'] = 'remove'
+            $menu['Done'] = 'done'
+        }
+        $menu['Cancel'] = 'cancel'
+
+        Write-SpectreHost "[dim]Current selection: $(if ($selectedNames.Count -gt 0) { $selectedNames -join ', ' } else { '(none)' })[/]"
+        $choice = Read-SpectreSelection -Title $Title -Choices @($menu.Keys) -Color DodgerBlue2
+        switch ($menu[$choice]) {
+            'add' {
+                $addChoices = @($remaining | ForEach-Object { $_.TableName }) + @('Back')
+                $addChoice = Read-SpectreSelection -Title '[deepskyblue1]Add table:[/]' -Choices $addChoices -Color DodgerBlue2 -EnableSearch
+                if ($addChoice -and $addChoice -ne 'Back' -and $addChoice -notin $selectedNames) {
+                    $selectedNames.Add($addChoice) | Out-Null
+                }
+            }
+            'remove' {
+                $removeChoices = @($selectedNames) + @('Back')
+                $removeChoice = Read-SpectreSelection -Title '[deepskyblue1]Remove table:[/]' -Choices $removeChoices -Color DodgerBlue2 -EnableSearch
+                if ($removeChoice -and $removeChoice -ne 'Back') {
+                    $selectedNames.Remove($removeChoice) | Out-Null
+                }
+            }
+            'done' {
+                $selecting = $false
+            }
+            'cancel' {
+                return @()
+            }
+        }
+        Write-SpectreHost ''
+    }
+
+    return @($Tables | Where-Object { $_.TableName -in $selectedNames })
+}
+
+function Get-LogHorizonTypeSwitchableTableSet {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)][PSCustomObject[]]$Tables)
+
+    return @($Tables | Where-Object { Test-TableSupportsBasicPlan -Table $_ } | Sort-Object TableName)
+}
+
+function Invoke-LogHorizonManagedTableUpdate {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][PSCustomObject]$Analysis,
+        [Parameter(Mandatory)][PSCustomObject]$Context,
+        [Parameter(Mandatory)][PSCustomObject[]]$Tables,
+        [string]$TargetPlan,
+        [Nullable[int]]$TotalRetentionInDays,
+        [Nullable[int]]$RetentionInDays
+    )
+
+    $changeSetParams = @{ Tables = $Tables }
+    if ($PSBoundParameters.ContainsKey('TargetPlan')) { $changeSetParams['TargetPlan'] = $TargetPlan }
+    if ($PSBoundParameters.ContainsKey('TotalRetentionInDays')) { $changeSetParams['TotalRetentionInDays'] = $TotalRetentionInDays }
+    if ($PSBoundParameters.ContainsKey('RetentionInDays')) { $changeSetParams['RetentionInDays'] = $RetentionInDays }
+
+    try {
+        $changeSet = @(Get-TableRetentionChangeSet @changeSetParams)
+    }
+    catch {
+        Write-SpectreHost "[red]Validation failed: $($_.Exception.Message)[/]"
+        return
+    }
+
+    Write-SpectreHost ""
+    Format-TableRetentionPreview -ChangeSet $changeSet | Format-SpectreTable -Border Rounded -Color DodgerBlue2 -HeaderColor DodgerBlue2 -AllowMarkup
+    Write-SpectreHost ""
+
+    $pending = @($changeSet | Where-Object Status -eq 'Pending').Count
+    if ($pending -eq 0) {
+        Write-SpectreHost "[yellow]No pending changes after validation.[/]"
+        return
+    }
+
+    $confirm = Read-SpectreSelection -Title "Apply $pending change(s)?" -Choices @('No, cancel', "Yes, apply $pending change(s)") -Color DodgerBlue2
+    if ($confirm -notlike 'Yes*') {
+        Write-SpectreHost "[dim]Cancelled.[/]"
+        return
+    }
+
+    Write-SpectreHost ""
+    Write-SpectreHost "[deepskyblue1]Applying...[/]"
+    $results = @(Invoke-TableRetentionApply -Context $Context -ChangeSet $changeSet)
+
+    $resultRows = foreach ($r in $results) {
+        [PSCustomObject]@{
+            'Table'    = $r.TableName
+            'Action'   = if ($r.Success) { '[green]' + $r.Action + '[/]' } else { '[red]' + $r.Action + '[/]' }
+            'Fallback' = if ($r.Fallback) { 'yes' } else { '' }
+            'Detail'   = if ($r.Error) { $r.Error } else { '' }
+        }
+    }
+    $resultRows | Format-SpectreTable -Border Rounded -Color DodgerBlue2 -HeaderColor DodgerBlue2 -AllowMarkup
+    Write-SpectreHost ""
+
+    $applied  = @($results | Where-Object { $_.Action -eq 'Applied' }).Count
+    $failed   = @($results | Where-Object { $_.Action -eq 'Failed' }).Count
+    $fallback = @($results | Where-Object { $_.Fallback }).Count
+    Write-SpectreHost "[bold]$applied applied, $failed failed, $fallback used fallback.[/]"
+
+    $affected = @($results | Where-Object { $_.Success } | ForEach-Object { $_.TableName })
+    if ($affected.Count -gt 0) {
+        try {
+            $refresh = Get-TableRetention -Context $Context
+            foreach ($name in $affected) {
+                $live = $refresh.Tables | Where-Object TableName -eq $name | Select-Object -First 1
+                if (-not $live) { continue }
+                $row = $Analysis.TableAnalysis | Where-Object TableName -eq $name | Select-Object -First 1
+                if ($row) {
+                    $row.TablePlan = $live.Plan
+                    $row.PSObject.Properties['ActualInteractiveRetentionDays'] | ForEach-Object { if ($_) { $_.Value = $live.RetentionInDays } }
+                    $row.PSObject.Properties['ArchiveRetentionInDays']         | ForEach-Object { if ($_) { $_.Value = $live.ArchiveRetentionInDays } }
+                    $row.PSObject.Properties['ActualRetentionDays']            | ForEach-Object { if ($_) { $_.Value = $live.TotalRetentionInDays } }
+                    $row.PSObject.Properties['TableSubType']                   | ForEach-Object { if ($_) { $_.Value = $live.TableSubType } }
+                    $row.PSObject.Properties['RetentionCompliant']             | ForEach-Object { if ($_) { $_.Value = if ($live.Plan -eq 'Analytics') { $live.TotalRetentionInDays -ge 90 } else { $null } } }
+                    $row.PSObject.Properties['RetentionCanImprove']            | ForEach-Object { if ($_) { $_.Value = if ($row.RetentionCompliant -and $row.RecommendedRetentionDays -gt 90) { $live.TotalRetentionInDays -lt $row.RecommendedRetentionDays } else { $false } } }
+                }
+            }
+            Write-SpectreHost "[dim]In-memory analysis refreshed for $($affected.Count) table(s).[/]"
+        }
+        catch {
+            Write-SpectreHost "[yellow]Could not refresh post-apply state: $($_.Exception.Message)[/]"
+        }
+    }
+
+    $script:LogHorizonSkipNextHomeRedraw = $true
+    Write-SpectreHost ""
+}
+
+function Invoke-ManageTableRetentionFlow {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][PSCustomObject]$Analysis,
+        [Parameter(Mandatory)][PSCustomObject]$Context,
+        [Parameter(Mandatory)][PSCustomObject[]]$AllTables,
+        [PSCustomObject[]]$PreselectedTables
+    )
+
+    Clear-LogHorizonScreen
+
+    $selectedTables = @()
+    if ($PreselectedTables -and $PreselectedTables.Count -gt 0) {
+        $selectedTables = @($PreselectedTables)
+    }
+    else {
+        $retentionMenu = [ordered]@{
+            'Select all Analytics tables with retention under 90 days' = 'under90'
+            'Select all Analytics tables' = 'analytics'
+            'Select table(s) from list' = 'list'
+            'Back' = 'back'
+        }
+        $choice = Read-SpectreSelection -Title '[deepskyblue1]Change retention for table(s):[/]' -Choices @($retentionMenu.Keys) -Color DodgerBlue2
+        switch ($retentionMenu[$choice]) {
+            'under90' {
+                $selectedTables = @($AllTables | Where-Object { $_.TablePlan -eq 'Analytics' -and $null -ne $_.ActualRetentionDays -and $_.ActualRetentionDays -lt 90 })
+            }
+            'analytics' {
+                $selectedTables = @($AllTables | Where-Object { $_.TablePlan -eq 'Analytics' })
+            }
+            'list' {
+                $selectedTables = @(Select-LogHorizonTablesFromList -Tables $AllTables)
+            }
+            'back' {
+                return
+            }
+        }
+    }
+
+    if ($selectedTables.Count -eq 0) {
+        Write-SpectreHost '[yellow]No tables matched the selection.[/]'
+        return
+    }
+
+    Clear-LogHorizonScreen
+    Show-LogHorizonManagedTableList -Tables $selectedTables -Title "$($selectedTables.Count) table(s) selected"
+
+    $changeArgs = @{}
+    $hotEligible = (@($selectedTables | Where-Object { $_.TablePlan -eq 'Analytics' }).Count -eq $selectedTables.Count)
+    if ($hotEligible) {
+        $changeHot = Read-SpectreSelection -Title 'Change hot retention?' -Choices @('No change', 'Set value', 'Inherit workspace default') -Color DodgerBlue2
+        if ($changeHot -eq 'Set value') {
+            $rawHot = Read-LogHorizonTextInput -Prompt 'Enter hot retention (4-730 days):'
+            $hotDays = 0
+            if (-not [int]::TryParse($rawHot, [ref]$hotDays)) {
+                Write-SpectreHost '[red]Invalid hot retention value.[/]'
+                return
+            }
+            $changeArgs['RetentionInDays'] = $hotDays
+        }
+        elseif ($changeHot -eq 'Inherit workspace default') {
+            $changeArgs['RetentionInDays'] = $null
+        }
+    }
+    else {
+        Write-SpectreHost '[dim]Hot retention can only be changed when all selected tables are Analytics.[/]'
+    }
+
+    $changeCold = Read-SpectreSelection -Title 'Change cold retention?' -Choices @('No change', 'Set value', 'Remove long-term retention') -Color DodgerBlue2
+    if ($changeCold -eq 'Set value') {
+        $minimumColdParams = @{ Analysis = $Analysis; Tables = $selectedTables }
+        if ($changeArgs.ContainsKey('RetentionInDays')) {
+            $minimumColdParams['RetentionInDays'] = $changeArgs['RetentionInDays']
+        }
+        $minimumColdRetention = Get-LogHorizonMinimumColdRetentionValue @minimumColdParams
+        $coldRetentionHint = Get-LogHorizonColdRetentionHint -MinimumValue $minimumColdRetention
+        $coldPrompt = if ($null -ne $minimumColdRetention) {
+            "Enter cold retention / totalRetentionInDays (must be greater than hot retention; current minimum is $minimumColdRetention d. Valid values: $coldRetentionHint)"
+        }
+        else {
+            "Enter cold retention / totalRetentionInDays ($coldRetentionHint)"
+        }
+
+        $rawCold = Read-LogHorizonTextInput -Prompt $coldPrompt
+        $coldDays = 0
+        if (-not [int]::TryParse($rawCold, [ref]$coldDays)) {
+            Write-SpectreHost '[red]Invalid cold retention value.[/]'
+            return
+        }
+
+        if (-not (Test-TotalRetentionValue -Value $coldDays)) {
+            Write-SpectreHost "[red]Invalid cold retention value. Valid values for this selection are $coldRetentionHint.[/]"
+            return
+        }
+
+        if ($null -ne $minimumColdRetention -and $coldDays -lt $minimumColdRetention) {
+            $effectiveHotRetention = $minimumColdRetention - 1
+            Write-SpectreHost "[red]Cold retention must be greater than hot retention. The highest effective hot retention in this selection is $effectiveHotRetention d, so valid values start at $minimumColdRetention d.[/]"
+            return
+        }
+
+        $changeArgs['TotalRetentionInDays'] = $coldDays
+    }
+    elseif ($changeCold -eq 'Remove long-term retention') {
+        $changeArgs['TotalRetentionInDays'] = $null
+    }
+
+    if ($changeArgs.Count -eq 0) {
+        Write-SpectreHost '[yellow]Nothing to change.[/]'
+        return
+    }
+
+    Invoke-LogHorizonManagedTableUpdate -Analysis $Analysis -Context $Context -Tables $selectedTables @changeArgs
+}
+
+function Invoke-ManageTableTypeFlow {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][PSCustomObject]$Analysis,
+        [Parameter(Mandatory)][PSCustomObject]$Context,
+        [Parameter(Mandatory)][PSCustomObject[]]$AllTables,
+        [PSCustomObject[]]$PreselectedTables
+    )
+
+    Clear-LogHorizonScreen
+
+    $eligibleTables = @(Get-LogHorizonTypeSwitchableTableSet -Tables $(if ($PreselectedTables -and $PreselectedTables.Count -gt 0) { $PreselectedTables } else { $AllTables }))
+    if ($eligibleTables.Count -eq 0) {
+        Write-SpectreHost '[yellow]No selected tables support Analytics <-> Basic switching.[/]'
+        return
+    }
+
+    $selectedTables = if ($PreselectedTables -and $PreselectedTables.Count -gt 0) {
+        $eligibleTables
+    }
+    else {
+        @(Select-LogHorizonTablesFromList -Tables $eligibleTables -Title '[deepskyblue1]Select table(s) to change type:[/]')
+    }
+
+    if ($selectedTables.Count -eq 0) {
+        Write-SpectreHost '[yellow]No tables selected.[/]'
+        return
+    }
+
+    Clear-LogHorizonScreen
+    Show-LogHorizonManagedTableList -Tables $selectedTables -Title "$($selectedTables.Count) switchable table(s) selected"
+
+    $targetPlan = Read-SpectreSelection -Title 'Change table type to:' -Choices @('Analytics', 'Basic', 'Back') -Color DodgerBlue2
+    if ($targetPlan -eq 'Back') {
+        return
+    }
+
+    Invoke-LogHorizonManagedTableUpdate -Analysis $Analysis -Context $Context -Tables $selectedTables -TargetPlan $targetPlan
+}
+
+# Interactive wizard for updating table retention and type.
+function Invoke-ManageRetentionWizard {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][PSCustomObject]$Analysis,
+        [Parameter(Mandatory)][PSCustomObject]$Context,
+        # Optional: pre-select tables (e.g. when launched from a single-table view).
+        [string[]]$TableNames
+    )
+
+    $allTables = @($Analysis.TableAnalysis | Where-Object { $_.TablePlan } | Sort-Object TableName)
+    if ($allTables.Count -eq 0) {
+        Write-SpectreHost "[yellow]No tables with known plan/retention metadata are available to update.[/]"
+        return
+    }
+
+        $preselectedTables = @()
+    if ($TableNames -and $TableNames.Count -gt 0) {
+            $preselectedTables = @($allTables | Where-Object { $_.TableName -in $TableNames })
+            if ($preselectedTables.Count -eq 0) {
+            Write-SpectreHost "[red]None of the supplied table names matched the analysis set.[/]"
+            return
+        }
+    }
+        $menu = [ordered]@{
+            'Change retention for table(s)' = 'retention'
+            'Change table type' = 'type'
+            'Back' = 'back'
+        }
+
+        $showMenu = $true
+        while ($showMenu) {
+            Clear-LogHorizonScreen
+            $choice = Read-SpectreSelection -Title '[deepskyblue1]Manage table retention and type:[/]' -Choices @($menu.Keys) -Color DodgerBlue2
+            switch ($menu[$choice]) {
+                'retention' {
+                    Invoke-ManageTableRetentionFlow -Analysis $Analysis -Context $Context -AllTables $allTables -PreselectedTables $preselectedTables
+                    if ($script:LogHorizonSkipNextHomeRedraw) {
+                        return
+                    }
+                }
+                'type' {
+                    Invoke-ManageTableTypeFlow -Analysis $Analysis -Context $Context -AllTables $allTables -PreselectedTables $preselectedTables
+                    if ($script:LogHorizonSkipNextHomeRedraw) {
+                        return
+                    }
+                }
+                'back' {
+                    $showMenu = $false
+                }
+            }
+        }
+}
+
+

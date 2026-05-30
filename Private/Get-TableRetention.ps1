@@ -38,9 +38,10 @@ function Get-TableRetention {
         [PSCustomObject]@{
             TableName              = $table.name
             Plan                   = $props.plan                        # Analytics | Basic | Auxiliary
-            RetentionInDays        = [int]$props.retentionInDays        # interactive/hot
-            TotalRetentionInDays   = [int]$props.totalRetentionInDays   # hot + archive
-            ArchiveRetentionInDays = [int]$props.archiveRetentionInDays # total - retention
+            RetentionInDays        = if ($null -ne $props.retentionInDays) { [int]$props.retentionInDays } else { $null }        # interactive/hot
+            TotalRetentionInDays   = if ($null -ne $props.totalRetentionInDays) { [int]$props.totalRetentionInDays } else { $null }   # hot + archive
+            ArchiveRetentionInDays = if ($null -ne $props.archiveRetentionInDays) { [int]$props.archiveRetentionInDays } else { $null } # total - retention
+            ProvisioningState      = $props.provisioningState           # Succeeded | Updating | ...
             TableSubType           = $props.tableSubType                # Any | Classic | DataCollectionRuleBased
             Columns                = $allCols                           # string[] of visible column names
         }

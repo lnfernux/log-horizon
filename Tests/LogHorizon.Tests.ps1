@@ -10,7 +10,11 @@ BeforeAll {
     . "$privatePath\Get-DataTransforms.ps1"
     . "$privatePath\Get-Incidents.ps1"
     . "$privatePath\Get-AutomationRules.ps1"
+    . "$privatePath\Get-TableRetention.ps1"
+    . "$privatePath\Connect-Sentinel.ps1"
+    . "$privatePath\Set-TableRetention.ps1"
     . "$privatePath\Invoke-AzRestWithRetry.ps1"
+    . (Join-Path $PSScriptRoot '..\Public\Set-LogHorizonTableRetention.ps1')
 
     function New-MockAnalysis {
         [PSCustomObject]@{
@@ -148,6 +152,412 @@ BeforeAll {
                 WorkspaceRetentionDays = 90
             }
         }
+    }
+}
+
+Describe 'Get-TableRetentionChangeSet' {
+    It 'supports analysis table rows as engine input' {
+        $table = [PSCustomObject]@{
+            TableName                   = 'SigninLogs'
+            TablePlan                   = 'Analytics'
+            ActualInteractiveRetentionDays = 90
+            ActualRetentionDays         = 365
+            TableSubType                = 'Any'
+            ProvisioningState           = 'Succeeded'
+        }
+
+        $change = @(Get-TableRetentionChangeSet -Tables @($table) -TargetPlan Basic -TotalRetentionInDays 730)
+
+        $change[0].CurrentPlan | Should -Be 'Analytics'
+        $change[0].CurrentInteractive | Should -Be 90
+        $change[0].CurrentTotal | Should -Be 365
+        $change[0].ProvisioningState | Should -Be 'Succeeded'
+    }
+
+    It 'rejects invalid total retention values that are not in the discrete long-term enum' {
+        $table = [PSCustomObject]@{ TableName = 'SigninLogs'; Plan = 'Analytics'; RetentionInDays = 90; TotalRetentionInDays = 365 }
+
+        { Get-TableRetentionChangeSet -Tables @($table) -TotalRetentionInDays 800 } | Should -Throw '*TotalRetentionInDays*'
+    }
+
+    It 'rejects interactive retention changes on Basic targets' {
+        $table = [PSCustomObject]@{ TableName = 'AzureDiagnostics'; Plan = 'Basic'; RetentionInDays = 30; TotalRetentionInDays = 30 }
+
+        $change = @(Get-TableRetentionChangeSet -Tables @($table) -RetentionInDays 90)
+
+        $change[0].Status | Should -Be 'Invalid'
+        $change[0].Reason | Should -Match 'read-only on Basic'
+    }
+
+    It 'rejects plan switching to or from Auxiliary' {
+        $table = [PSCustomObject]@{ TableName = 'CustomAux'; Plan = 'Auxiliary'; RetentionInDays = 30; TotalRetentionInDays = 30 }
+
+        $change = @(Get-TableRetentionChangeSet -Tables @($table) -TargetPlan Basic)
+
+        $change[0].Status | Should -Be 'Invalid'
+        $change[0].Reason | Should -Match 'Auxiliary'
+    }
+
+    It 'recognizes supported built-in tables from the Basic-plan allow-list' {
+        $table = [PSCustomObject]@{ TableName = 'SigninLogs'; Plan = 'Analytics'; TableSubType = 'Any' }
+
+        (Test-TableSupportsBasicPlan -Table $table) | Should -Be $true
+    }
+
+    It 'recognizes DCR-based custom tables as Basic-plan capable' {
+        $table = [PSCustomObject]@{ TableName = 'MyCustom_CL'; Plan = 'Analytics'; TableSubType = 'DataCollectionRuleBased' }
+
+        (Test-TableSupportsBasicPlan -Table $table) | Should -Be $true
+    }
+
+    It 'rejects plan switches for tables that do not support Basic' {
+        $table = [PSCustomObject]@{ TableName = 'LegacyCustom_CL'; Plan = 'Analytics'; RetentionInDays = 90; TotalRetentionInDays = 365; TableSubType = 'Classic' }
+
+        $change = @(Get-TableRetentionChangeSet -Tables @($table) -TargetPlan Basic)
+
+        $change[0].Status | Should -Be 'Invalid'
+        $change[0].Reason | Should -Match 'does not support Analytics <-> Basic'
+    }
+
+    It 'adds cost-floor and grace warnings for shrinking Analytics retention' {
+        $table = [PSCustomObject]@{ TableName = 'SigninLogs'; Plan = 'Analytics'; RetentionInDays = 90; TotalRetentionInDays = 365 }
+
+        $change = @(Get-TableRetentionChangeSet -Tables @($table) -RetentionInDays 30 -TotalRetentionInDays 180)
+
+        ($change[0].Warnings -join ' ') | Should -Match '31 days'
+        ($change[0].Warnings -join ' ') | Should -Match '30-day grace'
+    }
+
+    It 'marks unchanged target values as skipped' {
+        $table = [PSCustomObject]@{ TableName = 'SigninLogs'; Plan = 'Analytics'; RetentionInDays = 90; TotalRetentionInDays = 365 }
+
+        $change = @(Get-TableRetentionChangeSet -Tables @($table) -TargetPlan Analytics -RetentionInDays 90 -TotalRetentionInDays 365)
+
+        $change[0].Status | Should -Be 'Skipped'
+        $change[0].Reason | Should -Match 'match current configuration'
+    }
+}
+
+Describe 'Invoke-TableRetentionApply' {
+    BeforeEach {
+        $script:retentionContext = [PSCustomObject]@{
+            ArmToken      = 'token'
+            ResourceId    = '/subscriptions/sub/resourceGroups/rg/providers/Microsoft.OperationalInsights/workspaces/ws'
+            WorkspaceName = 'ws'
+        }
+    }
+
+    It 'sends Analytics payload with retention and total fields' {
+        $script:capturedBodies = @()
+        Mock Invoke-AzRestWithRetry {
+            param($Uri, $Headers, $Method, $Body, $FollowAsync, $AsyncTimeoutSeconds)
+            $script:capturedBodies += $Body
+            [PSCustomObject]@{ status = 'Succeeded' }
+        }
+
+        $changeSet = @([
+            PSCustomObject]@{
+                TableName         = 'SigninLogs'
+                Status            = 'Pending'
+                ProvisioningState = 'Succeeded'
+                PlanChanged       = $false
+                RetentionChanged  = $true
+                TotalChanged      = $true
+                TargetPlan        = 'Analytics'
+                TargetInteractive = 30
+                TargetTotal       = 365
+            }
+        )
+
+        $result = @(Invoke-TableRetentionApply -Context $script:retentionContext -ChangeSet $changeSet)
+        $payload = $script:capturedBodies[0] | ConvertFrom-Json
+
+        $result[0].Success | Should -Be $true
+        $payload.properties.retentionInDays | Should -Be 30
+        $payload.properties.totalRetentionInDays | Should -Be 365
+        $payload.properties.plan | Should -BeNullOrEmpty
+    }
+
+    It 'sends Basic payload without retentionInDays' {
+        $script:capturedBodies = @()
+        Mock Invoke-AzRestWithRetry {
+            param($Uri, $Headers, $Method, $Body, $FollowAsync, $AsyncTimeoutSeconds)
+            $script:capturedBodies += $Body
+            [PSCustomObject]@{ status = 'Succeeded' }
+        }
+
+        $changeSet = @([
+            PSCustomObject]@{
+                TableName         = 'AzureDiagnostics'
+                Status            = 'Pending'
+                ProvisioningState = 'Succeeded'
+                PlanChanged       = $true
+                RetentionChanged  = $false
+                TotalChanged      = $true
+                TargetPlan        = 'Basic'
+                TargetInteractive = $null
+                TargetTotal       = 730
+            }
+        )
+
+        $null = Invoke-TableRetentionApply -Context $script:retentionContext -ChangeSet $changeSet
+        $payload = $script:capturedBodies[0] | ConvertFrom-Json
+
+        $payload.properties.plan | Should -Be 'Basic'
+        $payload.properties.totalRetentionInDays | Should -Be 730
+        $payload.properties.retentionInDays | Should -BeNullOrEmpty
+    }
+
+    It 'maps internal null defaults to -1 in the REST payload' {
+        $script:capturedBodies = @()
+        Mock Invoke-AzRestWithRetry {
+            param($Uri, $Headers, $Method, $Body, $FollowAsync, $AsyncTimeoutSeconds)
+            $script:capturedBodies += $Body
+            [PSCustomObject]@{ status = 'Succeeded' }
+        }
+
+        $changeSet = @([
+            PSCustomObject]@{
+                TableName         = 'SigninLogs'
+                Status            = 'Pending'
+                ProvisioningState = 'Succeeded'
+                PlanChanged       = $false
+                RetentionChanged  = $true
+                TotalChanged      = $true
+                TargetPlan        = 'Analytics'
+                TargetInteractive = $null
+                TargetTotal       = $null
+            }
+        )
+
+        $null = Invoke-TableRetentionApply -Context $script:retentionContext -ChangeSet $changeSet
+        $payload = $script:capturedBodies[0] | ConvertFrom-Json
+
+        $payload.properties.retentionInDays | Should -Be -1
+        $payload.properties.totalRetentionInDays | Should -Be -1
+    }
+
+    It 'retries as plan then retention when the combined PATCH fails recoverably' {
+        $script:capturedBodies = @()
+        $script:callCount = 0
+        Mock Invoke-AzRestWithRetry {
+            param($Uri, $Headers, $Method, $Body, $FollowAsync, $AsyncTimeoutSeconds)
+            $script:capturedBodies += $Body
+            $script:callCount++
+            if ($script:callCount -eq 1) {
+                throw ([PSCustomObject]@{ StatusCode = 400; Message = 'Combined update rejected' })
+            }
+            [PSCustomObject]@{ status = 'Succeeded' }
+        }
+
+        $changeSet = @([
+            PSCustomObject]@{
+                TableName         = 'SigninLogs'
+                Status            = 'Pending'
+                ProvisioningState = 'Succeeded'
+                PlanChanged       = $true
+                RetentionChanged  = $true
+                TotalChanged      = $true
+                TargetPlan        = 'Analytics'
+                TargetInteractive = 90
+                TargetTotal       = 365
+            }
+        )
+
+        $result = @(Invoke-TableRetentionApply -Context $script:retentionContext -ChangeSet $changeSet)
+        $planPayload = $script:capturedBodies[1] | ConvertFrom-Json
+        $retentionPayload = $script:capturedBodies[2] | ConvertFrom-Json
+
+        $result[0].Success | Should -Be $true
+        $result[0].Fallback | Should -Be $true
+        $script:callCount | Should -Be 3
+        $planPayload.properties.plan | Should -Be 'Analytics'
+        $retentionPayload.properties.retentionInDays | Should -Be 90
+        $retentionPayload.properties.totalRetentionInDays | Should -Be 365
+    }
+
+    It 'surfaces a clear permission error on 403' {
+        Mock Invoke-AzRestWithRetry {
+            throw ([PSCustomObject]@{ StatusCode = 403; Message = 'Forbidden' })
+        }
+
+        $changeSet = @([
+            PSCustomObject]@{
+                TableName         = 'SigninLogs'
+                Status            = 'Pending'
+                ProvisioningState = 'Succeeded'
+                PlanChanged       = $false
+                RetentionChanged  = $false
+                TotalChanged      = $true
+                TargetPlan        = 'Analytics'
+                TargetInteractive = $null
+                TargetTotal       = 365
+            }
+        )
+
+        $result = @(Invoke-TableRetentionApply -Context $script:retentionContext -ChangeSet $changeSet)
+
+        $result[0].Success | Should -Be $false
+        $result[0].Error | Should -Match 'tables/write'
+    }
+
+    It 'surfaces the once-per-week plan switch limit on 409' {
+        Mock Invoke-AzRestWithRetry {
+            throw ([PSCustomObject]@{ StatusCode = 409; Message = 'Conflict' })
+        }
+
+        $changeSet = @([
+            PSCustomObject]@{
+                TableName         = 'SigninLogs'
+                Status            = 'Pending'
+                ProvisioningState = 'Succeeded'
+                PlanChanged       = $true
+                RetentionChanged  = $false
+                TotalChanged      = $true
+                TargetPlan        = 'Basic'
+                TargetInteractive = $null
+                TargetTotal       = 365
+            }
+        )
+
+        $result = @(Invoke-TableRetentionApply -Context $script:retentionContext -ChangeSet $changeSet)
+
+        $result[0].Success | Should -Be $false
+        $result[0].Error | Should -Match 'once per week'
+    }
+
+    It 'skips non-succeeded tables before invoking REST' {
+        Mock Invoke-AzRestWithRetry {
+            [PSCustomObject]@{ status = 'Succeeded' }
+        }
+
+        $changeSet = @([
+            PSCustomObject]@{
+                TableName         = 'SigninLogs'
+                Status            = 'Pending'
+                ProvisioningState = 'Updating'
+                PlanChanged       = $false
+                RetentionChanged  = $false
+                TotalChanged      = $true
+                TargetPlan        = 'Analytics'
+                TargetInteractive = $null
+                TargetTotal       = 365
+            }
+        )
+
+        $result = @(Invoke-TableRetentionApply -Context $script:retentionContext -ChangeSet $changeSet)
+
+        $result[0].Action | Should -Be 'Skipped'
+        Assert-MockCalled Invoke-AzRestWithRetry -Times 0 -Exactly
+    }
+
+    It 'returns mixed results without aborting the whole run' {
+        $script:callCount = 0
+        Mock Invoke-AzRestWithRetry {
+            $script:callCount++
+            if ($script:callCount -eq 2) {
+                throw ([PSCustomObject]@{ StatusCode = 403; Message = 'Forbidden' })
+            }
+            [PSCustomObject]@{ status = 'Succeeded' }
+        }
+
+        $changeSet = @(
+            [PSCustomObject]@{
+                TableName         = 'T1'
+                Status            = 'Pending'
+                ProvisioningState = 'Succeeded'
+                PlanChanged       = $false
+                RetentionChanged  = $false
+                TotalChanged      = $true
+                TargetPlan        = 'Analytics'
+                TargetInteractive = $null
+                TargetTotal       = 365
+            }
+            [PSCustomObject]@{
+                TableName         = 'T2'
+                Status            = 'Pending'
+                ProvisioningState = 'Succeeded'
+                PlanChanged       = $false
+                RetentionChanged  = $false
+                TotalChanged      = $true
+                TargetPlan        = 'Analytics'
+                TargetInteractive = $null
+                TargetTotal       = 365
+            }
+            [PSCustomObject]@{
+                TableName         = 'T3'
+                Status            = 'Invalid'
+                ProvisioningState = 'Succeeded'
+                PlanChanged       = $false
+                RetentionChanged  = $false
+                TotalChanged      = $false
+                TargetPlan        = 'Analytics'
+                TargetInteractive = $null
+                TargetTotal       = $null
+                Reason            = 'Rejected by validation'
+            }
+        )
+
+        $results = @(Invoke-TableRetentionApply -Context $script:retentionContext -ChangeSet $changeSet)
+
+        (@($results | Where-Object Success).Count) | Should -Be 1
+        (@($results | Where-Object Action -eq 'Failed').Count) | Should -Be 1
+        (@($results | Where-Object Action -eq 'Invalid').Count) | Should -Be 1
+    }
+}
+
+Describe 'Set-LogHorizonTableRetention' {
+    BeforeEach {
+        Mock Connect-Sentinel {
+            [PSCustomObject]@{
+                SubscriptionId = 'sub'
+                ResourceGroup  = 'rg'
+                WorkspaceName  = 'ws'
+                ResourceId     = '/subscriptions/sub/resourceGroups/rg/providers/Microsoft.OperationalInsights/workspaces/ws'
+                ArmToken       = 'arm'
+                LaToken        = 'la'
+            }
+        }
+
+        Mock Get-TableRetention {
+            [PSCustomObject]@{
+                WorkspaceRetentionDays = 90
+                Tables = @(
+                    [PSCustomObject]@{
+                        TableName            = 'SigninLogs'
+                        Plan                 = 'Analytics'
+                        RetentionInDays      = 90
+                        TotalRetentionInDays = 365
+                        TableSubType         = 'Any'
+                        ProvisioningState    = 'Succeeded'
+                    }
+                )
+            }
+        }
+    }
+
+    It 'maps -1 sentinel values to null and passes PreviewOnly under -WhatIf' {
+        Mock Set-TableRetention {
+            param($Context, $Tables, $TargetPlan, $TotalRetentionInDays, $RetentionInDays, $PreviewOnly, $AsyncTimeoutSeconds)
+            $script:publicRetentionCall = [PSCustomObject]@{
+                TableName            = $Tables[0].TableName
+                TotalRetentionInDays = $TotalRetentionInDays
+                RetentionInDays      = $RetentionInDays
+                PreviewOnly          = $PreviewOnly
+            }
+            [PSCustomObject]@{
+                ChangeSet = @()
+                Results   = @()
+                Summary   = [PSCustomObject]@{}
+            }
+        }
+
+        $null = Set-LogHorizonTableRetention -SubscriptionId 'sub' -ResourceGroupName 'rg' -WorkspaceName 'ws' -TableName 'SigninLogs' -TotalRetentionInDays -1 -RetentionInDays -1 -WhatIf
+
+        $script:publicRetentionCall.TableName | Should -Be 'SigninLogs'
+        $script:publicRetentionCall.TotalRetentionInDays | Should -Be $null
+        $script:publicRetentionCall.RetentionInDays | Should -Be $null
+        $script:publicRetentionCall.PreviewOnly | Should -Be $true
     }
 }
 
@@ -591,6 +1001,81 @@ Describe 'Invoke-Analysis observed plan usage' {
         $planRecs.TableName | Should -Contain 'DeviceEvents'
         $script:observedPlanResult.Summary.MultiPlanUsageTables | Should -Be 1
         $script:observedPlanResult.Summary.ObservedPlanMismatches | Should -Be 1
+    }
+}
+
+Describe 'Invoke-Analysis DataLake recommendation edge cases' {
+    BeforeAll {
+        $tableUsage = @(
+            [PSCustomObject]@{
+                TableName = 'SecondaryArchive_CL'
+                DataGB = 120
+                MonthlyGB = 40
+                RecordCount = 400000
+                EstMonthlyCostUSD = 223.60
+                IsFree = $false
+                ObservedPlans = @('Analytics', 'Auxiliary')
+                ObservedPlanCount = 2
+                ObservedPlanBreakdown = @(
+                    [PSCustomObject]@{ Plan = 'Analytics'; DataGB = 90; MonthlyGB = 30; RecordCount = 300000 },
+                    [PSCustomObject]@{ Plan = 'Auxiliary'; DataGB = 30; MonthlyGB = 10; RecordCount = 100000 }
+                )
+            }
+        )
+
+        $classifications = [PSCustomObject]@{
+            Classifications = @{
+                'SecondaryArchive_CL' = [PSCustomObject]@{ Classification = 'secondary'; Category = 'Custom Secondary'; RecommendedTier = 'datalake'; IsFree = $false; RecommendedRetentionDays = 90 }
+            }
+            KeywordGaps = @()
+            DatabaseEntries = 1
+        }
+
+        $rulesData = [PSCustomObject]@{
+            Rules = @()
+            TableCoverage = @{}
+            TotalRules = 0
+            EnabledRules = 0
+            DontCorrCount = 0
+            IncCorrCount = 0
+        }
+
+        $huntingData = [PSCustomObject]@{
+            Queries = @()
+            TableCoverage = @{}
+            TotalQueries = 0
+        }
+
+        $tableRetention = @(
+            [PSCustomObject]@{ TableName = 'SecondaryArchive_CL'; RetentionInDays = 30; TotalRetentionInDays = 365; ArchiveRetentionInDays = 0; Plan = 'Auxiliary' }
+        )
+
+        $script:auxDataLakeEdgeResult = Invoke-Analysis -TableUsage $tableUsage `
+            -Classifications $classifications `
+            -RulesData $rulesData `
+            -HuntingData $huntingData `
+            -TableRetention $tableRetention `
+            -SocRecommendations @()
+    }
+
+    It 'does not recommend moving a table already configured as Auxiliary to Data Lake' {
+        $dataLakeRecs = @($script:auxDataLakeEdgeResult.Recommendations | Where-Object { $_.TableName -eq 'SecondaryArchive_CL' -and $_.Type -eq 'DataLake' })
+
+        $dataLakeRecs | Should -BeNullOrEmpty
+    }
+
+    It 'still surfaces mixed historical plan usage for review' {
+        $planUsageRecs = @($script:auxDataLakeEdgeResult.Recommendations | Where-Object { $_.TableName -eq 'SecondaryArchive_CL' -and $_.Type -eq 'PlanUsage' })
+
+        $planUsageRecs | Should -Not -BeNullOrEmpty
+    }
+
+    It 'uses plan-aware wording for generic low-value recommendations on Auxiliary tables' {
+        $lowValueRec = @($script:auxDataLakeEdgeResult.Recommendations | Where-Object { $_.TableName -eq 'SecondaryArchive_CL' -and $_.Type -eq 'LowValue' }) | Select-Object -First 1
+
+        $lowValueRec | Should -Not -BeNullOrEmpty
+        $lowValueRec.Detail | Should -Not -Match 'move to data lake'
+        $lowValueRec.Detail | Should -Match 'current Data Lake placement'
     }
 }
 
@@ -2365,6 +2850,130 @@ Describe 'Write-Report helper functions' {
 
         $result = Get-TablePlanDisplay -Table $table
         $result | Should -Be '[dim]Observed:[/] Auxiliary'
+    }
+
+    It 'Get-LogHorizonMinimumColdRetentionValue starts above the highest effective hot retention' {
+        $analysis = New-MockAnalysis
+        $tables = @(
+            [PSCustomObject]@{ TableName = 'TableA'; ActualInteractiveRetentionDays = 30 },
+            [PSCustomObject]@{ TableName = 'TableB'; ActualInteractiveRetentionDays = 90 }
+        )
+
+        $result = Get-LogHorizonMinimumColdRetentionValue -Analysis $analysis -Tables $tables
+
+        $result | Should -Be 91
+    }
+
+    It 'Get-LogHorizonMinimumColdRetentionValue uses the workspace default when hot retention inherits' {
+        $analysis = New-MockAnalysis
+        $tables = @(
+            [PSCustomObject]@{ TableName = 'TableA'; ActualInteractiveRetentionDays = $null; RetentionInDays = $null }
+        )
+
+        $result = Get-LogHorizonMinimumColdRetentionValue -Analysis $analysis -Tables $tables -RetentionInDays $null
+
+        $result | Should -Be 91
+    }
+
+    It 'Get-LogHorizonColdRetentionHint starts at the computed minimum value' {
+        $result = Get-LogHorizonColdRetentionHint -MinimumValue 91
+
+        $result | Should -Be '91-730 or 1095,1460,1826,2191,2556,2922,3288,3653,4018,4383'
+    }
+
+    It 'Get-LogHorizonColdRetentionHint only offers long-term values above 730 days' {
+        $result = Get-LogHorizonColdRetentionHint -MinimumValue 731
+
+        $result | Should -Be '1095,1460,1826,2191,2556,2922,3288,3653,4018,4383'
+    }
+
+    It 'Select-LogHorizonTablesFromList lets the user back out of the add-table picker' {
+        $tables = @(
+            [PSCustomObject]@{ TableName = 'A' },
+            [PSCustomObject]@{ TableName = 'B' }
+        )
+
+        $script:selectionResponses = [System.Collections.Generic.Queue[string]]::new()
+        @('Add a table', 'Back', 'Cancel') | ForEach-Object { $script:selectionResponses.Enqueue($_) }
+
+        $originalReadSpectreSelection = if (Test-Path Function:\Read-SpectreSelection) { (Get-Item Function:\Read-SpectreSelection).ScriptBlock } else { $null }
+        $originalWriteSpectreHost = if (Test-Path Function:\Write-SpectreHost) { (Get-Item Function:\Write-SpectreHost).ScriptBlock } else { $null }
+
+        try {
+            Set-Item -Path Function:\Read-SpectreSelection -Value {
+                param([string]$Title, [object[]]$Choices, $Color, [switch]$EnableSearch)
+
+                $next = $script:selectionResponses.Dequeue()
+                $next | Should -BeIn @($Choices)
+                return $next
+            }
+            Set-Item -Path Function:\Write-SpectreHost -Value { param([string]$Text) }
+            Mock Clear-LogHorizonScreen {}
+
+            $result = @(Select-LogHorizonTablesFromList -Tables $tables)
+
+            $result | Should -HaveCount 0
+        }
+        finally {
+            if ($null -ne $originalReadSpectreSelection) {
+                Set-Item -Path Function:\Read-SpectreSelection -Value $originalReadSpectreSelection
+            }
+            else {
+                Remove-Item -Path Function:\Read-SpectreSelection -ErrorAction SilentlyContinue
+            }
+
+            if ($null -ne $originalWriteSpectreHost) {
+                Set-Item -Path Function:\Write-SpectreHost -Value $originalWriteSpectreHost
+            }
+            else {
+                Remove-Item -Path Function:\Write-SpectreHost -ErrorAction SilentlyContinue
+            }
+        }
+    }
+
+    It 'Select-LogHorizonTablesFromList lets the user back out of the remove-table picker without losing the selection' {
+        $tables = @(
+            [PSCustomObject]@{ TableName = 'A' },
+            [PSCustomObject]@{ TableName = 'B' }
+        )
+
+        $script:selectionResponses = [System.Collections.Generic.Queue[string]]::new()
+        @('Add a table', 'A', 'Remove a table', 'Back', 'Done') | ForEach-Object { $script:selectionResponses.Enqueue($_) }
+
+        $originalReadSpectreSelection = if (Test-Path Function:\Read-SpectreSelection) { (Get-Item Function:\Read-SpectreSelection).ScriptBlock } else { $null }
+        $originalWriteSpectreHost = if (Test-Path Function:\Write-SpectreHost) { (Get-Item Function:\Write-SpectreHost).ScriptBlock } else { $null }
+
+        try {
+            Set-Item -Path Function:\Read-SpectreSelection -Value {
+                param([string]$Title, [object[]]$Choices, $Color, [switch]$EnableSearch)
+
+                $next = $script:selectionResponses.Dequeue()
+                $next | Should -BeIn @($Choices)
+                return $next
+            }
+            Set-Item -Path Function:\Write-SpectreHost -Value { param([string]$Text) }
+            Mock Clear-LogHorizonScreen {}
+
+            $result = @(Select-LogHorizonTablesFromList -Tables $tables)
+
+            $result | Should -HaveCount 1
+            $result[0].TableName | Should -Be 'A'
+        }
+        finally {
+            if ($null -ne $originalReadSpectreSelection) {
+                Set-Item -Path Function:\Read-SpectreSelection -Value $originalReadSpectreSelection
+            }
+            else {
+                Remove-Item -Path Function:\Read-SpectreSelection -ErrorAction SilentlyContinue
+            }
+
+            if ($null -ne $originalWriteSpectreHost) {
+                Set-Item -Path Function:\Write-SpectreHost -Value $originalWriteSpectreHost
+            }
+            else {
+                Remove-Item -Path Function:\Write-SpectreHost -ErrorAction SilentlyContinue
+            }
+        }
     }
 }
 
