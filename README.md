@@ -58,7 +58,7 @@ I've had to answer *"what are we actually getting out of these logs?"* or *"what
 |---|---|
 | PowerShell | 7.0+ |
 | Az modules | `Az.Accounts`, `Az.Resources` |
-| PwshSpectreConsole | 2.6.3+ |
+| Other modules | `PwshSpectreConsole` 2.6.3+ |
 
 If you're not already logged into Azure, the module will fire up `Connect-AzAccount` for you. If you are, it'll just carry on.
 
