@@ -5,7 +5,7 @@
 ### Microsoft Sentinel SIEM Log Source Analyzer
 
 ![PowerShell 7+](https://img.shields.io/badge/PowerShell-7%2B-blue)
-![Module Version](https://img.shields.io/badge/version-0.8.0-green)
+![Module Version](https://img.shields.io/badge/version-0.7.1-green)
 
 ---
 I've had to answer *"what are we actually getting out of these logs?"* or *"what is the recommended logs for Microsoft Sentinel"* more times than I can count. The answer always depend on so many things, but we can be generic. So I built this thingy right here.
@@ -41,6 +41,16 @@ I've had to answer *"what are we actually getting out of these logs?"* or *"what
 | **Custom Classifications** | Provide your own JSON to add or override the built-in classification database |
 | **Interactive TUI** | Spectre.Console dashboard with menus, colour-coded tables, drill-downs, and ASCII art |
 | **Export** | JSON, Markdown, or static HTML report for sharing with the team |
+
+## Disclaimer
+
+> [!CAUTION]
+> **Disclaimer**
+>
+> **This tool is developed and maintained with the help of AI.** Please exercise caution when using this solution and always understand what are you running before you run it in production. The developer assumes no liability for any vulnerabilities or issues.
+> 
+> By downloading, installing, or using this tool, you acknowledge that you have read, understood, and agree to these terms.
+>
 
 ## Prerequisites
 
@@ -283,8 +293,6 @@ Rules with a score ≥ 70 and at least 5 incidents are automatically surfaced as
 
 ### 5. Interactive dashboard
 
-You land in a Spectre.Console TUI with a menu:
-
 - **Dashboard**: overview stats, top 10 costliest tables, coverage bar, retention compliance summary, correlation exclusion callout
 - **Recommendations**: prioritised actions with estimated monthly savings — expandable to show the full list when there are more than 10
 - **Detection Assessment**: per-table rule and hunting query coverage breakdown, correlation-excluded rule listing
@@ -322,7 +330,7 @@ Sitting at `Data/log-classifications.json`. **345 entries**, **190 connectors**,
 
 **Primary** (211 entries): the tables you're actually building detections on. Sign-in logs, security alerts, threat intel, audit trails, vulnerability findings, firewall hits, EDR telemetry.
 
-**Secondary** (133 entries): supporting stuff. Perf metrics, infrastructure diagnostics, network flow volumes, inventory snapshots, config baselines, health checks. Still useful, just not where your detections live.
+**Secondary** (133 entries): supporting stuff. Perf metrics, infrastructure diagnostics, network flow volumes, inventory snapshots, config baselines, health checks.
 
 ### Categories at a glance
 
@@ -393,7 +401,7 @@ See `Data/custom-classifications-example.json` for a ready-to-use template.
 
 ### How the classifications were built
 
-The primary/secondary grading was done by feeding Microsoft's data connector and table definitions into AI, using Microsoft best practices and industry standards as the classification criteria. On manual review it's a solid baseline and starting point, but AI can still make mistakes. If something looks off for your environment, trust your own context over the tool.
+The primary/secondary grading was done partially by the author and then by feeding Microsoft's data connector and table definitions into AI with a human grading baseline, using Microsoft best practices and industry standards as the classification criteria.If something looks off for your environment, trust your own context over the tool - AI can make mistakes, and context is king.
 
 The classification criteria were drawn from the following sources:
 
@@ -428,6 +436,8 @@ The classification criteria were drawn from the following sources:
 - [Google Cloud Audit Logs overview](https://docs.cloud.google.com/logging/docs/audit)
 - [Google Cloud Audit Logs best practices](https://docs.cloud.google.com/logging/docs/audit/best-practices)
 
+
+Other sources were also used, along with the authors "expertise" if you can categorize it as such.
 ---
 
 ## Project layout
@@ -522,15 +532,9 @@ $OutputEncoding = [console]::InputEncoding = [console]::OutputEncoding = [System
 
 The module sets this automatically on import, but depending on your session the warning may still appear. It's cosmetic and doesn't affect functionality.
 
-## Disclaimer
+## Contributing
 
-> [!CAUTION]
-> **Disclaimer**
->
-> **This tool is developed and maintained with the help of AI.** Please exercise caution when using this solution and always understand what are you running before you run it in production. The developer assumes no liability for any vulnerabilities or issues.
-> 
-> By downloading, installing, or using this tool, you acknowledge that you have read, understood, and agree to these terms.
->
+If you have issues or want to contribute, create a PR.
 
 ## Like the tool? 
 
