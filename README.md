@@ -123,6 +123,31 @@ Invoke-LogHorizon -SubscriptionId '...' -ResourceGroup 'rg' -WorkspaceName 'ws' 
 Invoke-LogHorizon -SubscriptionId '...' -ResourceGroup 'rg' -WorkspaceName 'ws' -Output html -OutputPath ./reports/
 ```
 
+### Manage table retention and type
+
+You can now update table retention and table type directly from the interactive TUI:
+
+- Open `Invoke-LogHorizon` normally, then choose **Manage table retention and type** from the main menu for bulk retention or type updates.
+- Open **Log Tuning / Transforms** > **Evaluate specific table** and choose **Manage retention/type for this table** for a single-table change.
+
+For scripting or automation, use the dedicated public command:
+
+```powershell
+# Preview a single-table change
+Set-LogHorizonTableRetention -SubscriptionId '...' -ResourceGroupName 'rg' -WorkspaceName 'ws' `
+  -TableName 'SigninLogs' -TotalRetentionInDays 365 -WhatIf
+
+# Switch tables to Basic and set total retention
+Set-LogHorizonTableRetention -SubscriptionId '...' -ResourceGroupName 'rg' -WorkspaceName 'ws' `
+  -TableName 'AzureDiagnostics','VMConnection' -TargetPlan Basic -TotalRetentionInDays 730
+
+# Use -1 for inherit/default semantics
+# RetentionInDays = inherit workspace default
+# TotalRetentionInDays = remove long-term retention
+Set-LogHorizonTableRetention -SubscriptionId '...' -ResourceGroupName 'rg' -WorkspaceName 'ws' `
+  -TableName 'SigninLogs' -RetentionInDays -1 -TotalRetentionInDays -1
+```
+
 ### Non-interactive / CI mode
 
 Skip the interactive TUI and export straight to a file — useful for pipelines or scheduled runs:
@@ -469,6 +494,7 @@ MIT
 
 | Version | Date | Changes |
 |---|---|---|
+| 0.8.0 | 2026-05-26 | Added interactive table retention management with a new bulk TUI flow and single-table update entry point, plus the public `Set-LogHorizonTableRetention` command. Added Tables API PATCH apply engine with validation, Azure async-operation polling, and two-step fallback (combined PATCH, then plan-only plus retention-only) for resilient retention updates. Added focused Pester coverage for validation, payload shape, fallback, and public command mapping. Also fixes an edge-case/bug where users would get recommendations to change data lake tables to data lake tier if they had analytics data still in Sentinel |
 | 0.7.1 | 2026-05-15 | Added plan-awareness from `Usage.Plan` without replacing the configured table plan: analysis now tracks observed plan history, flags multi-plan usage and configured-vs-observed mismatches, and surfaces plan data in the dashboard, table drill-down, View All Tables, retention assessment, and exports. Fixed Detection Analyzer auto-close attribution so the timing heuristic only applies when no enabled automation rules exist. 203 tests passing |
 | 0.7.0 | 2026-04-16 | Detection Assessment updated with cost-value matrix summary table (Primary/Secondary x7 assessment categories with color coding), drill-down submenu for primary/secondary tables with cost/detection tier columns. Detection Analyzer updated with GB-weighted volume coverage bars (detection/hunting/combined GB as percentage of total ingestion alongside existing table-count bars). Adaptive display improvements for Detection Analyzer (dynamic bar width, rule name truncation, conditional column hiding based on console width). 193 tests passing|
 | 0.6.3 | 2026-04-11 | Minor update for PSGallery|
@@ -501,7 +527,7 @@ The module sets this automatically on import, but depending on your session the 
 > [!CAUTION]
 > **Disclaimer**
 >
-> **This tool is created with the help of AI.** Please exercise caution when using this solution and always understand what are you running before you run it in production. The developer assumes no liability for any vulnerabilities or issues.
+> **This tool is developed and maintained with the help of AI.** Please exercise caution when using this solution and always understand what are you running before you run it in production. The developer assumes no liability for any vulnerabilities or issues.
 > 
 > By downloading, installing, or using this tool, you acknowledge that you have read, understood, and agree to these terms.
 >

@@ -95,8 +95,8 @@ function Invoke-Analysis {
         $isXDRStreaming = $isKnownXDR -and ($null -ne $ret)
 
         $recommendedRetention = if ($cls -and $null -ne $cls.RecommendedRetentionDays -and $cls.RecommendedRetentionDays -gt 0) { [int]$cls.RecommendedRetentionDays } else { 90 }
-        $actualTotal = if ($ret) { [int]$ret.TotalRetentionInDays } else { $null }
-        $actualInteractive = if ($ret) { [int]$ret.RetentionInDays } else { $null }
+        $actualTotal = if ($ret -and $null -ne $ret.TotalRetentionInDays) { [int]$ret.TotalRetentionInDays } else { $null }
+        $actualInteractive = if ($ret -and $null -ne $ret.RetentionInDays) { [int]$ret.RetentionInDays } else { $null }
         $tablePlan = if ($ret) { $ret.Plan } else { $null }
         $tableSubType = if ($ret) { $ret.TableSubType } else { $null }
         $observedPlanBreakdown = if ($table.ObservedPlanBreakdown) { @($table.ObservedPlanBreakdown) } else { @() }
@@ -158,7 +158,7 @@ function Invoke-Analysis {
             RecommendedTier              = if ($cls) { $cls.RecommendedTier } else { 'analytics' }
             ActualRetentionDays          = $actualTotal
             ActualInteractiveRetentionDays = $actualInteractive
-            ArchiveRetentionInDays       = if ($ret) { [int]$ret.ArchiveRetentionInDays } else { $null }
+            ArchiveRetentionInDays       = if ($ret -and $null -ne $ret.ArchiveRetentionInDays) { [int]$ret.ArchiveRetentionInDays } else { $null }
             RecommendedRetentionDays     = $recommendedRetention
             TablePlan                    = $tablePlan
             TableSubType                 = $tableSubType
@@ -201,6 +201,7 @@ function Invoke-Analysis {
     foreach ($t in $tableAnalysis) {
         # 1. Data lake candidates: secondary + high cost + low rules
         if ($t.Classification -eq 'secondary' -and
+            $t.TablePlan -ne 'Auxiliary' -and
             $t.CostTier -in @('High', 'Very High') -and
             $t.DetectionTier -in @('None', 'Low')) {
 
@@ -222,13 +223,20 @@ function Invoke-Analysis {
             $t.CostTier -in @('High', 'Very High') -and
             $t.DetectionTier -eq 'None') {
 
+            $lowValueNextStep = if ($t.TablePlan -eq 'Auxiliary') {
+                'Consider: add analytics rules, apply ingest-time filtering, or review whether the current Data Lake placement is still appropriate.'
+            }
+            else {
+                'Consider: add analytics rules, apply ingest-time filtering, or move to data lake.'
+            }
+
             $recommendations.Add([PSCustomObject]@{
                 Priority     = 'High'
                 Type         = 'LowValue'
                 TableName    = $t.TableName
                 Title        = "$($t.TableName) has zero detections"
                 Detail       = "Ingesting $($t.MonthlyGB) GB/mo (~`$$($t.EstMonthlyCostUSD)/mo) with no analytics rules or hunting queries. " +
-                               "Consider: add analytics rules, apply ingest-time filtering, or move to data lake."
+                               $lowValueNextStep
                 EstSavingsUSD = $t.EstMonthlyCostUSD
                 CurrentCost   = $t.EstMonthlyCostUSD
             })

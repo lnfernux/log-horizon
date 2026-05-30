@@ -149,7 +149,7 @@ function ConvertTo-ReportSections {
     }
 
     $sections = [System.Collections.Generic.List[PSCustomObject]]::new()
-    $s = $Analysis.Summary
+    $summary = $Analysis.Summary
 
     # - 1. Summary -
     $mdSb = [System.Text.StringBuilder]::new()
@@ -157,39 +157,39 @@ function ConvertTo-ReportSections {
     [void]$mdSb.AppendLine('')
     [void]$mdSb.AppendLine('| Metric | Value |')
     [void]$mdSb.AppendLine('| --- | --- |')
-    [void]$mdSb.AppendLine("| Total Tables | $($s.TotalTables) |")
-    [void]$mdSb.AppendLine("| Primary Sources | $($s.PrimaryCount) |")
-    [void]$mdSb.AppendLine("| Secondary Sources | $($s.SecondaryCount) |")
-    [void]$mdSb.AppendLine("| Total Ingestion | $($s.TotalMonthlyGB) GB/mo |")
-    [void]$mdSb.AppendLine("| Est. Monthly Cost | `$$($s.TotalMonthlyCost) |")
-    [void]$mdSb.AppendLine("| Active Rules | $($s.EnabledRules) |")
-    [void]$mdSb.AppendLine("| Hunting Queries | $($s.HuntingQueries) |")
-    [void]$mdSb.AppendLine("| Coverage | $($s.CoveragePercent)% |")
-    [void]$mdSb.AppendLine("| Potential Savings | `$$($s.EstTotalSavings) |")
-    if ($s.RetentionChecked -gt 0) {
-        [void]$mdSb.AppendLine("| Retention Compliant | $($s.RetentionCompliant) of $($s.RetentionChecked) |")
+    [void]$mdSb.AppendLine("| Total Tables | $($summary.TotalTables) |")
+    [void]$mdSb.AppendLine("| Primary Sources | $($summary.PrimaryCount) |")
+    [void]$mdSb.AppendLine("| Secondary Sources | $($summary.SecondaryCount) |")
+    [void]$mdSb.AppendLine("| Total Ingestion | $($summary.TotalMonthlyGB) GB/mo |")
+    [void]$mdSb.AppendLine("| Est. Monthly Cost | `$$($summary.TotalMonthlyCost) |")
+    [void]$mdSb.AppendLine("| Active Rules | $($summary.EnabledRules) |")
+    [void]$mdSb.AppendLine("| Hunting Queries | $($summary.HuntingQueries) |")
+    [void]$mdSb.AppendLine("| Coverage | $($summary.CoveragePercent)% |")
+    [void]$mdSb.AppendLine("| Potential Savings | `$$($summary.EstTotalSavings) |")
+    if ($summary.RetentionChecked -gt 0) {
+        [void]$mdSb.AppendLine("| Retention Compliant | $($summary.RetentionCompliant) of $($summary.RetentionChecked) |")
     }
-    if ($s.TablesWithTransforms -gt 0) {
-        [void]$mdSb.AppendLine("| Tables with Transforms | $($s.TablesWithTransforms) |")
+    if ($summary.TablesWithTransforms -gt 0) {
+        [void]$mdSb.AppendLine("| Tables with Transforms | $($summary.TablesWithTransforms) |")
     }
-    if ($s.SplitTables -gt 0) {
-        [void]$mdSb.AppendLine("| Split Tables | $($s.SplitTables) |")
+    if ($summary.SplitTables -gt 0) {
+        [void]$mdSb.AppendLine("| Split Tables | $($summary.SplitTables) |")
     }
     [void]$mdSb.AppendLine('')
 
     $htmlSb = [System.Text.StringBuilder]::new()
     [void]$htmlSb.AppendLine('            <div class="summary-grid">')
     $metrics = @(
-        @{ Value = $s.TotalTables; Label = 'Total Tables' }
-        @{ Value = "$($s.TotalMonthlyGB) GB/mo"; Label = 'Ingestion' }
-        @{ Value = "`$$($s.TotalMonthlyCost)/mo"; Label = 'Est. Cost' }
-        @{ Value = $s.EnabledRules; Label = 'Active Rules' }
-        @{ Value = "$($s.CoveragePercent)%"; Label = 'Rule Coverage' }
-        @{ Value = "`$$($s.EstTotalSavings)/mo"; Label = 'Potential Savings'; Class = 'savings' }
+        @{ Value = $summary.TotalTables; Label = 'Total Tables' }
+        @{ Value = "$($summary.TotalMonthlyGB) GB/mo"; Label = 'Ingestion' }
+        @{ Value = "`$$($summary.TotalMonthlyCost)/mo"; Label = 'Est. Cost' }
+        @{ Value = $summary.EnabledRules; Label = 'Active Rules' }
+        @{ Value = "$($summary.CoveragePercent)%"; Label = 'Rule Coverage' }
+        @{ Value = "`$$($summary.EstTotalSavings)/mo"; Label = 'Potential Savings'; Class = 'savings' }
     )
-    foreach ($m in $metrics) {
-        $cls = if ($m.Class) { " class=`"metric-value $($m.Class)`"" } else { ' class="metric-value"' }
-        [void]$htmlSb.AppendLine("                <div class=`"metric-card`"><div$cls>$(hEnc "$($m.Value)")</div><div class=`"metric-label`">$(hEnc $m.Label)</div></div>")
+    foreach ($metric in $metrics) {
+        $metricClass = if ($metric.Class) { " class=`"metric-value $($metric.Class)`"" } else { ' class="metric-value"' }
+        [void]$htmlSb.AppendLine("                <div class=`"metric-card`"><div$metricClass>$(hEnc "$($metric.Value)")</div><div class=`"metric-label`">$(hEnc $metric.Label)</div></div>")
     }
     [void]$htmlSb.AppendLine('            </div>')
 
@@ -244,11 +244,11 @@ function ConvertTo-ReportSections {
     [void]$mdSb.AppendLine('')
     [void]$mdSb.AppendLine('| Table | Class | Plan | Observed Plans | GB/mo | Cost/mo | Rules | Hunting | Assessment |')
     [void]$mdSb.AppendLine('| --- | --- | --- | --- | ---: | ---: | ---: | ---: | --- |')
-    foreach ($t in $sorted) {
-        $costStr = if ($t.IsFree) { 'FREE' } else { "`$$($t.EstMonthlyCostUSD)" }
-        $configuredPlan = if ($t.TablePlan) { $t.TablePlan } else { '-' }
-        $observedPlans = if ($t.ObservedPlanSummary) { $t.ObservedPlanSummary } else { '-' }
-        [void]$mdSb.AppendLine("| $($t.TableName) | $($t.Classification) | $configuredPlan | $observedPlans | $($t.MonthlyGB) | $costStr | $($t.AnalyticsRules) | $($t.HuntingQueries) | $($t.Assessment) |")
+    foreach ($tableEntry in $sorted) {
+        $costStr = if ($tableEntry.IsFree) { 'FREE' } else { "`$$($tableEntry.EstMonthlyCostUSD)" }
+        $configuredPlan = if ($tableEntry.TablePlan) { $tableEntry.TablePlan } else { '-' }
+        $observedPlans = if ($tableEntry.ObservedPlanSummary) { $tableEntry.ObservedPlanSummary } else { '-' }
+        [void]$mdSb.AppendLine("| $($tableEntry.TableName) | $($tableEntry.Classification) | $configuredPlan | $observedPlans | $($tableEntry.MonthlyGB) | $costStr | $($tableEntry.AnalyticsRules) | $($tableEntry.HuntingQueries) | $($tableEntry.Assessment) |")
     }
     [void]$mdSb.AppendLine('')
 
@@ -256,12 +256,12 @@ function ConvertTo-ReportSections {
     [void]$htmlSb.AppendLine('            <div class="table-wrap"><table>')
     [void]$htmlSb.AppendLine('                <thead><tr><th>Table</th><th>Class</th><th>Plan</th><th>Observed Plans</th><th>GB/mo</th><th>Cost/mo</th><th>Rules</th><th>Hunting</th><th>Assessment</th></tr></thead>')
     [void]$htmlSb.AppendLine('                <tbody>')
-    foreach ($t in $sorted) {
-        $clsClass = switch ($t.Classification) { 'primary' { 'cls-primary' } 'secondary' { 'cls-secondary' } default { 'cls-unknown' } }
-        $costStr = if ($t.IsFree) { '<span class="badge badge-savings">FREE</span>' } else { "`$$($t.EstMonthlyCostUSD)" }
-        $configuredPlan = if ($t.TablePlan) { hEnc $t.TablePlan } else { '-' }
-        $observedPlans = if ($t.ObservedPlanSummary) { hEnc $t.ObservedPlanSummary } else { '-' }
-        [void]$htmlSb.AppendLine("                <tr><td>$(hEnc $t.TableName)</td><td class=`"$clsClass`">$($t.Classification.ToUpper())</td><td>$configuredPlan</td><td>$observedPlans</td><td class=`"num`">$($t.MonthlyGB)</td><td class=`"num`">$costStr</td><td class=`"num`">$($t.TotalCoverage)</td><td class=`"num`">$($t.HuntingQueries)</td><td>$(hEnc $t.Assessment)</td></tr>")
+    foreach ($tableEntry in $sorted) {
+        $classificationClass = switch ($tableEntry.Classification) { 'primary' { 'cls-primary' } 'secondary' { 'cls-secondary' } default { 'cls-unknown' } }
+        $costStr = if ($tableEntry.IsFree) { '<span class="badge badge-savings">FREE</span>' } else { "`$$($tableEntry.EstMonthlyCostUSD)" }
+        $configuredPlan = if ($tableEntry.TablePlan) { hEnc $tableEntry.TablePlan } else { '-' }
+        $observedPlans = if ($tableEntry.ObservedPlanSummary) { hEnc $tableEntry.ObservedPlanSummary } else { '-' }
+        [void]$htmlSb.AppendLine("                <tr><td>$(hEnc $tableEntry.TableName)</td><td class=`"$classificationClass`">$($tableEntry.Classification.ToUpper())</td><td>$configuredPlan</td><td>$observedPlans</td><td class=`"num`">$($tableEntry.MonthlyGB)</td><td class=`"num`">$costStr</td><td class=`"num`">$($tableEntry.TotalCoverage)</td><td class=`"num`">$($tableEntry.HuntingQueries)</td><td>$(hEnc $tableEntry.Assessment)</td></tr>")
     }
     [void]$htmlSb.AppendLine('                </tbody>')
     [void]$htmlSb.AppendLine('            </table></div>')
@@ -303,8 +303,8 @@ function ConvertTo-ReportSections {
         [void]$mdSb.AppendLine('## Retention Assessment')
         [void]$mdSb.AppendLine('')
 
-        if ($s.WorkspaceRetentionDays -gt 0 -and $s.WorkspaceRetentionDays -lt 90) {
-            [void]$mdSb.AppendLine("> **Warning:** Workspace default retention is $($s.WorkspaceRetentionDays)d — increase to at least 90d.  ")
+        if ($summary.WorkspaceRetentionDays -gt 0 -and $summary.WorkspaceRetentionDays -lt 90) {
+            [void]$mdSb.AppendLine("> **Warning:** Workspace default retention is $($summary.WorkspaceRetentionDays)d — increase to at least 90d.  ")
             [void]$mdSb.AppendLine('')
         }
 
@@ -313,10 +313,10 @@ function ConvertTo-ReportSections {
             [void]$mdSb.AppendLine('')
             [void]$mdSb.AppendLine('| Table | Plan | Current | Baseline | Shortfall |')
             [void]$mdSb.AppendLine('| --- | --- | ---: | ---: | ---: |')
-            foreach ($t in $nonCompliant) {
-                $shortfall = 90 - $t.ActualRetentionDays
-                $plan = if ($t.TablePlan) { $t.TablePlan } else { '-' }
-                [void]$mdSb.AppendLine("| $($t.TableName) | $plan | $($t.ActualRetentionDays)d | 90d | +${shortfall}d |")
+            foreach ($tableEntry in $nonCompliant) {
+                $shortfall = 90 - $tableEntry.ActualRetentionDays
+                $plan = if ($tableEntry.TablePlan) { $tableEntry.TablePlan } else { '-' }
+                [void]$mdSb.AppendLine("| $($tableEntry.TableName) | $plan | $($tableEntry.ActualRetentionDays)d | 90d | +${shortfall}d |")
             }
             [void]$mdSb.AppendLine('')
         }
@@ -326,16 +326,16 @@ function ConvertTo-ReportSections {
             [void]$mdSb.AppendLine('')
             [void]$mdSb.AppendLine('| Table | Category | Current | Recommended |')
             [void]$mdSb.AppendLine('| --- | --- | ---: | ---: |')
-            foreach ($t in $improvable) {
-                $currentStr = if ($null -ne $t.ActualRetentionDays) { "$($t.ActualRetentionDays)d" } else { '-' }
-                [void]$mdSb.AppendLine("| $($t.TableName) | $($t.Category) | $currentStr | $($t.RecommendedRetentionDays)d |")
+            foreach ($tableEntry in $improvable) {
+                $currentStr = if ($null -ne $tableEntry.ActualRetentionDays) { "$($tableEntry.ActualRetentionDays)d" } else { '-' }
+                [void]$mdSb.AppendLine("| $($tableEntry.TableName) | $($tableEntry.Category) | $currentStr | $($tableEntry.RecommendedRetentionDays)d |")
             }
             [void]$mdSb.AppendLine('')
         }
 
         $htmlSb = [System.Text.StringBuilder]::new()
-        if ($s.WorkspaceRetentionDays -gt 0 -and $s.WorkspaceRetentionDays -lt 90) {
-            [void]$htmlSb.AppendLine("            <p class=`"warning`">⚠ Workspace default retention is $($s.WorkspaceRetentionDays)d — increase to at least 90d.</p>")
+        if ($summary.WorkspaceRetentionDays -gt 0 -and $summary.WorkspaceRetentionDays -lt 90) {
+            [void]$htmlSb.AppendLine("            <p class=`"warning`">⚠ Workspace default retention is $($summary.WorkspaceRetentionDays)d — increase to at least 90d.</p>")
         }
 
         if ($nonCompliant.Count -gt 0) {
@@ -343,10 +343,10 @@ function ConvertTo-ReportSections {
             [void]$htmlSb.AppendLine('            <div class="table-wrap"><table>')
             [void]$htmlSb.AppendLine('                <thead><tr><th>Table</th><th>Plan</th><th>Current</th><th>Baseline</th><th>Shortfall</th></tr></thead>')
             [void]$htmlSb.AppendLine('                <tbody>')
-            foreach ($t in $nonCompliant) {
-                $shortfall = 90 - $t.ActualRetentionDays
-                $plan = if ($t.TablePlan) { hEnc $t.TablePlan } else { '-' }
-                [void]$htmlSb.AppendLine("                <tr><td>$(hEnc $t.TableName)</td><td>$plan</td><td class=`"num bad`">$($t.ActualRetentionDays)d</td><td class=`"num`">90d</td><td class=`"num bad`">+${shortfall}d</td></tr>")
+            foreach ($tableEntry in $nonCompliant) {
+                $shortfall = 90 - $tableEntry.ActualRetentionDays
+                $plan = if ($tableEntry.TablePlan) { hEnc $tableEntry.TablePlan } else { '-' }
+                [void]$htmlSb.AppendLine("                <tr><td>$(hEnc $tableEntry.TableName)</td><td>$plan</td><td class=`"num bad`">$($tableEntry.ActualRetentionDays)d</td><td class=`"num`">90d</td><td class=`"num bad`">+${shortfall}d</td></tr>")
             }
             [void]$htmlSb.AppendLine('                </tbody></table></div>')
         }
@@ -356,9 +356,9 @@ function ConvertTo-ReportSections {
             [void]$htmlSb.AppendLine('            <div class="table-wrap"><table>')
             [void]$htmlSb.AppendLine('                <thead><tr><th>Table</th><th>Category</th><th>Current</th><th>Recommended</th></tr></thead>')
             [void]$htmlSb.AppendLine('                <tbody>')
-            foreach ($t in $improvable) {
-                $currentStr = if ($null -ne $t.ActualRetentionDays) { "$($t.ActualRetentionDays)d" } else { '-' }
-                [void]$htmlSb.AppendLine("                <tr><td>$(hEnc $t.TableName)</td><td>$(hEnc $t.Category)</td><td class=`"num`">$currentStr</td><td class=`"num`">$($t.RecommendedRetentionDays)d</td></tr>")
+            foreach ($tableEntry in $improvable) {
+                $currentStr = if ($null -ne $tableEntry.ActualRetentionDays) { "$($tableEntry.ActualRetentionDays)d" } else { '-' }
+                [void]$htmlSb.AppendLine("                <tr><td>$(hEnc $tableEntry.TableName)</td><td>$(hEnc $tableEntry.Category)</td><td class=`"num`">$currentStr</td><td class=`"num`">$($tableEntry.RecommendedRetentionDays)d</td></tr>")
             }
             [void]$htmlSb.AppendLine('                </tbody></table></div>')
         }
