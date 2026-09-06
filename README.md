@@ -174,10 +174,10 @@ The interactive TUI includes a **Split KQL Suggestions** menu that generates por
 
 ### Custom pricing
 
-Default price is 5.59 $/GB (West Europe Simplified PAYG). If your commitment tier is different:
+Default prices are West Europe Simplified PAYG in USD: 5.59 $/GB Analytics, 1.15 $/GB Basic, 0.20 $/GB Data Lake (0.07 ingestion + 0.13 processing). Each table is priced by the plan observed in the `Usage` table, and free status comes from `Usage.IsBillable`. Volumes use billing GB (1000 MB). If your commitment tier is different:
 
 ```powershell
-Invoke-LogHorizon -SubscriptionId '...' -ResourceGroup 'rg' -WorkspaceName 'ws' -PricePerGB 4.61
+Invoke-LogHorizon -SubscriptionId '...' -ResourceGroup 'rg' -WorkspaceName 'ws' -PricePerGB 4.61 -BasicPricePerGB 1.15 -LakePricePerGB 0.20
 ```
 
 ### All parameters
@@ -195,7 +195,9 @@ Invoke-LogHorizon -SubscriptionId '...' -ResourceGroup 'rg' -WorkspaceName 'ws' 
 | `-IncludeDetectionAnalyzer` | switch | No | - | Include per-rule noisy detection analysis using incidents and automation rules |
 | `-DetectionLookbackDays` | int | No | 90 | Query window for incident/automation-based detection analysis (1-365 days) |
 | `-DaysBack` | int | No | 90 | Query window for usage data (1-365 days) |
-| `-PricePerGB` | decimal | No | 5.59 | Sentinel ingestion price per GB |
+| `-PricePerGB` | decimal | No | 5.59 | Sentinel Analytics tier ingestion price per GB |
+| `-BasicPricePerGB` | decimal | No | 1.15 | Basic Logs price per GB |
+| `-LakePricePerGB` | decimal | No | 0.20 | Auxiliary / Data Lake tier price per GB (ingestion + processing) |
 | `-NonInteractive` | switch | No | - | Skip the TUI dashboard and export directly (or return data to pipeline if `-Output` is omitted) |
 | `-CustomClassificationPath` | string | No | - | Path to a custom JSON file to add or override classifications |
 

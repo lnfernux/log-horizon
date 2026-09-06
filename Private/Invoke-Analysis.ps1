@@ -17,6 +17,8 @@ function Invoke-Analysis {
         [array]$TableRetention,
         [int]$WorkspaceRetentionDays = 0,
         [decimal]$PricePerGB = 5.59,
+        [decimal]$BasicPricePerGB = 1.15,
+        [decimal]$LakePricePerGB = 0.20,
         [PSCustomObject]$DataTransforms,
         [hashtable]$HighValueFields,
         [hashtable]$FieldFrequencyStats = @{},
@@ -59,9 +61,17 @@ function Invoke-Analysis {
         $totalCoverage = $ruleCount + $huntCount
         $effectiveCoverage = $ruleCount + $huntCount + $xdrRuleCount
 
+        # Usage.IsBillable wins; the classification DB only decides when Usage had no flag
+        $isFree = [bool]$table.IsFree
+        $monthlyCost = $table.EstMonthlyCostUSD
+        if ($table.IsFreeSource -eq 'database' -and $cls -and $null -ne $cls.IsFree) {
+            $isFree = [bool]$cls.IsFree
+            if ($isFree) { $monthlyCost = 0 }
+        }
+
         # Cost tier
         $costTier = switch ($true) {
-            ($table.IsFree)              { 'Free'; break }
+            ($isFree)                    { 'Free'; break }
             ($table.MonthlyGB -ge 50)    { 'Very High'; break }
             ($table.MonthlyGB -ge 10)    { 'High'; break }
             ($table.MonthlyGB -ge 1)     { 'Medium'; break }
@@ -82,7 +92,7 @@ function Invoke-Analysis {
         $assessment = Get-Assessment -Classification $classification `
                                       -CostTier $costTier `
                                       -DetectionTier $detectionTier `
-                                      -IsFree $table.IsFree
+                                      -IsFree $isFree
 
         # Retention data
         $ret = $retentionMap[$name]
@@ -143,8 +153,9 @@ function Invoke-Analysis {
             Classification               = $classification
             Category                     = if ($cls) { $cls.Category } else { 'Unknown' }
             MonthlyGB                    = $table.MonthlyGB
-            EstMonthlyCostUSD            = $table.EstMonthlyCostUSD
-            IsFree                       = $table.IsFree
+            EstMonthlyCostUSD            = $monthlyCost
+            IsFree                       = $isFree
+            IsFreeSource                 = $(if ($table.IsFreeSource) { $table.IsFreeSource } else { 'database' })
             AnalyticsRules               = $ruleCount
             HuntingQueries               = $huntCount
             XDRRules                     = $xdrRuleCount
@@ -205,7 +216,8 @@ function Invoke-Analysis {
             $t.CostTier -in @('High', 'Very High') -and
             $t.DetectionTier -in @('None', 'Low')) {
 
-            $savings = [math]::Round($t.EstMonthlyCostUSD * 0.95, 2)  # ~95% savings at data lake pricing
+            # Savings = current cost minus what the same volume costs at the lake rate
+            $savings = [math]::Max(0, [math]::Round($t.EstMonthlyCostUSD - ($t.MonthlyGB * $LakePricePerGB), 2))
             $recommendations.Add([PSCustomObject]@{
                 Priority     = 'High'
                 Type         = 'DataLake'
@@ -529,6 +541,9 @@ function Invoke-Analysis {
             CoveragePercent        = $coveragePercent
             EstTotalSavings        = [math]::Round($totalSavings, 2)
             PricePerGB             = $PricePerGB
+            BasicPricePerGB        = $BasicPricePerGB
+            LakePricePerGB         = $LakePricePerGB
+            UsageObservedDays      = $(if ($TableUsage.Count -gt 0 -and $null -ne $TableUsage[0].ObservedDays) { [int]$TableUsage[0].ObservedDays } else { $null })
             WorkspaceRetentionDays = $WorkspaceRetentionDays
             RetentionCompliant     = $retentionCompliantCount
             RetentionNonCompliant  = $retentionNonCompliant

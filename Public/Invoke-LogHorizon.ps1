@@ -57,6 +57,12 @@ function Invoke-LogHorizon {
         [ValidateRange(0.01, 100)]
         [decimal]$PricePerGB = 5.59,
 
+        [ValidateRange(0.01, 100)]
+        [decimal]$BasicPricePerGB = 1.15,
+
+        [ValidateRange(0.01, 100)]
+        [decimal]$LakePricePerGB = 0.20,
+
         [ValidateScript({ Test-Path $_ -PathType Leaf })]
         [Alias('clf')]
         [string]$CustomClassificationPath
@@ -77,7 +83,8 @@ function Invoke-LogHorizon {
         $result.Context = $ctx
 
         # Table usage
-        $result.TableUsage = Get-TableUsage -Context $ctx -DaysBack $DaysBack -PricePerGB $PricePerGB
+        $result.TableUsage = Get-TableUsage -Context $ctx -DaysBack $DaysBack -PricePerGB $PricePerGB `
+                                            -BasicPricePerGB $BasicPricePerGB -LakePricePerGB $LakePricePerGB
 
         # Analytics rules
         $result.RulesData = Get-AnalyticsRules -Context $ctx
@@ -184,6 +191,8 @@ function Invoke-LogHorizon {
                         -TableRetention $tableRetention `
                         -WorkspaceRetentionDays $workspaceRetentionDays `
                         -PricePerGB $PricePerGB `
+                        -BasicPricePerGB $BasicPricePerGB `
+                        -LakePricePerGB $LakePricePerGB `
                         -DataTransforms $dataTransforms `
                         -HighValueFields $highValueFields `
                         -FieldFrequencyStats $fieldFrequencyStats `

@@ -683,32 +683,36 @@ Describe 'Get-Assessment' {
 
 Describe 'Get-TableUsage' {
     BeforeEach {
+        # Row shape: DataType, ObservedPlan, IsBillable, DataMB, UsageRows, FirstSeen, LastSeen
         Mock Invoke-AzRestWithRetry {
             [PSCustomObject]@{
                 tables = @(
                     [PSCustomObject]@{
                         rows = @(
-                            @('SigninLogs', 'Analytics', 10.0, 100),
-                            @('SigninLogs', 'Basic', 2.0, 20),
-                            @('AzureActivity', $null, 5.0, 50)
+                            @('SigninLogs', 'Analytics', $true, 10000.0, 100, '2026-08-01T00:00:00Z', '2026-08-31T00:00:00Z'),
+                            @('SigninLogs', 'Basic', $true, 2000.0, 20, '2026-08-01T00:00:00Z', '2026-08-31T00:00:00Z'),
+                            @('AzureActivity', $null, $false, 5000.0, 50, '2026-08-01T00:00:00Z', '2026-08-31T00:00:00Z'),
+                            @('GraphLogs', 'Auxiliary', $true, 1000.0, 10, '2026-08-01T00:00:00Z', '2026-08-31T00:00:00Z'),
+                            @('MixedTable', 'Analytics', $true, 3000.0, 30, '2026-08-01T00:00:00Z', '2026-08-31T00:00:00Z'),
+                            @('MixedTable', 'Analytics', $false, 1000.0, 10, '2026-08-01T00:00:00Z', '2026-08-31T00:00:00Z')
                         )
                     }
                 )
             }
         }
+        $script:ctx = [PSCustomObject]@{ LaToken = 'token'; WorkspaceId = 'workspace-id' }
     }
 
     It 'aggregates table-plan rows back to one table object while preserving observed plan breakdown' {
-        $context = [PSCustomObject]@{ LaToken = 'token'; WorkspaceId = 'workspace-id' }
+        $result = Get-TableUsage -Context $ctx -DaysBack 30 -PricePerGB 5.59
 
-        $result = Get-TableUsage -Context $context -DaysBack 30 -PricePerGB 5.59
-
-        $result.Count | Should -Be 2
+        $result.Count | Should -Be 4
 
         $signin = $result | Where-Object TableName -eq 'SigninLogs'
         $signin | Should -Not -BeNullOrEmpty
         $signin.DataGB | Should -Be 12
         $signin.MonthlyGB | Should -Be 12
+        $signin.UsageRowCount | Should -Be 120
         $signin.RecordCount | Should -Be 120
         $signin.ObservedPlanCount | Should -Be 2
         $signin.ObservedPlans | Should -Contain 'Analytics'
@@ -717,16 +721,141 @@ Describe 'Get-TableUsage' {
         (@($signin.ObservedPlanBreakdown | Where-Object Plan -eq 'Basic')[0]).MonthlyGB | Should -Be 2
     }
 
-    It 'marks free tables and normalizes missing plan values to Unknown' {
-        $context = [PSCustomObject]@{ LaToken = 'token'; WorkspaceId = 'workspace-id' }
+    It 'converts MB to GB using 1000 (billing GB) not 1024' {
+        $result = Get-TableUsage -Context $ctx -DaysBack 30
+        ($result | Where-Object TableName -eq 'GraphLogs').DataGB | Should -Be 1
+    }
 
-        $result = Get-TableUsage -Context $context -DaysBack 30 -PricePerGB 5.59
+    It 'prices each observed plan with its own rate' {
+        $result = Get-TableUsage -Context $ctx -DaysBack 30 -PricePerGB 5.59 -BasicPricePerGB 1.15 -LakePricePerGB 0.20
+
+        $signin = $result | Where-Object TableName -eq 'SigninLogs'
+        # 10 GB Analytics x 5.59 + 2 GB Basic x 1.15
+        $signin.EstMonthlyCostUSD | Should -Be 58.2
+        (@($signin.ObservedPlanBreakdown | Where-Object Plan -eq 'Basic')[0]).MonthlyCostUSD | Should -Be 2.3
+
+        $graph = $result | Where-Object TableName -eq 'GraphLogs'
+        $graph.EstMonthlyCostUSD | Should -Be 0.2
+    }
+
+    It 'derives IsFree from Usage.IsBillable and normalizes missing plan values to Unknown' {
+        $result = Get-TableUsage -Context $ctx -DaysBack 30 -PricePerGB 5.59
 
         $activity = $result | Where-Object TableName -eq 'AzureActivity'
         $activity | Should -Not -BeNullOrEmpty
         $activity.IsFree | Should -Be $true
+        $activity.IsFreeSource | Should -Be 'usage'
         $activity.EstMonthlyCostUSD | Should -Be 0
         $activity.ObservedPlans | Should -Contain 'Unknown'
+    }
+
+    It 'only charges the billable share when a table has billable and non-billable rows' {
+        $result = Get-TableUsage -Context $ctx -DaysBack 30 -PricePerGB 5.59
+
+        $mixed = $result | Where-Object TableName -eq 'MixedTable'
+        $mixed.DataGB | Should -Be 4
+        $mixed.BillableGB | Should -Be 3
+        $mixed.IsFree | Should -Be $false
+        $mixed.EstMonthlyCostUSD | Should -Be ([math]::Round(3 * 5.59, 2))
+    }
+
+    It 'extrapolates from the observed span, not DaysBack, when the data covers fewer days' {
+        # Rows span 30 days; asking for 365 must not divide by 365
+        $result = Get-TableUsage -Context $ctx -DaysBack 365 -PricePerGB 5.59
+        $signin = $result | Where-Object TableName -eq 'SigninLogs'
+        $signin.ObservedDays | Should -Be 30
+        $signin.MonthlyGB | Should -Be 12
+    }
+
+    It 'falls back to the classification database when Usage rows have no IsBillable flag' {
+        Mock Invoke-AzRestWithRetry {
+            [PSCustomObject]@{
+                tables = @(
+                    [PSCustomObject]@{
+                        rows = @(
+                            @('AzureActivity', 'Analytics', $null, 1000.0, 10),
+                            @('SigninLogs', 'Analytics', '', 1000.0, 10)
+                        )
+                    }
+                )
+            }
+        }
+        $result = Get-TableUsage -Context $ctx -DaysBack 30 -PricePerGB 5.59
+
+        $activity = $result | Where-Object TableName -eq 'AzureActivity'
+        $activity.IsFree | Should -Be $true
+        $activity.IsFreeSource | Should -Be 'database'
+        $activity.EstMonthlyCostUSD | Should -Be 0
+
+        $signin = $result | Where-Object TableName -eq 'SigninLogs'
+        $signin.IsFree | Should -Be $false
+        $signin.IsFreeSource | Should -Be 'database'
+        $signin.ObservedDays | Should -Be 30
+    }
+
+    It 'returns nothing for an empty Usage result' {
+        Mock Invoke-AzRestWithRetry { [PSCustomObject]@{ tables = @([PSCustomObject]@{ rows = @() }) } }
+        $result = @(Get-TableUsage -Context $ctx -DaysBack 30)
+        $result.Count | Should -Be 0
+    }
+
+    It 'prices an unrecognised plan name at the Analytics rate' {
+        Mock Invoke-AzRestWithRetry {
+            [PSCustomObject]@{ tables = @([PSCustomObject]@{ rows = @(, @('T', 'FuturePlan', $true, 1000.0, 1, '2026-08-01T00:00:00Z', '2026-08-31T00:00:00Z')) }) }
+        }
+        $result = Get-TableUsage -Context $ctx -DaysBack 30 -PricePerGB 4
+        $result.EstMonthlyCostUSD | Should -Be 4
+    }
+}
+
+Describe 'Get-UsageObservedDays' {
+    It 'returns DaysBack when rows carry no timestamps' {
+        $short = , @('T', 'Analytics', $true, 1, 1)
+        Get-UsageObservedDays -Rows $short -DaysBack 45 | Should -Be 45
+        Get-UsageObservedDays -Rows @() -DaysBack 45 | Should -Be 45
+    }
+
+    It 'uses the widest span across all rows, rounded up' {
+        $rows = @(
+            @('A', 'Analytics', $true, 1, 1, '2026-08-10T00:00:00Z', '2026-08-20T12:00:00Z'),
+            @('B', 'Analytics', $true, 1, 1, '2026-08-01T00:00:00Z', '2026-08-15T00:00:00Z')
+        )
+        Get-UsageObservedDays -Rows $rows -DaysBack 90 | Should -Be 20
+    }
+
+    It 'never returns less than 1 and never more than DaysBack' {
+        $same = , @('A', 'Analytics', $true, 1, 1, '2026-08-10T00:00:00Z', '2026-08-10T00:00:00Z')
+        Get-UsageObservedDays -Rows $same -DaysBack 90 | Should -Be 1
+
+        $wide = , @('A', 'Analytics', $true, 1, 1, '2026-01-01T00:00:00Z', '2026-08-10T00:00:00Z')
+        Get-UsageObservedDays -Rows $wide -DaysBack 90 | Should -Be 90
+    }
+
+    It 'skips rows whose timestamps do not parse' {
+        $rows = @(
+            @('A', 'Analytics', $true, 1, 1, 'not-a-date', '2026-08-20T00:00:00Z'),
+            @('B', 'Analytics', $true, 1, 1, '2026-08-01T00:00:00Z', 'garbage'),
+            @('C', 'Analytics', $true, 1, 1, '2026-08-05T00:00:00Z', '2026-08-07T00:00:00Z')
+        )
+        Get-UsageObservedDays -Rows $rows -DaysBack 90 | Should -Be 2
+    }
+}
+
+Describe 'ConvertTo-UsageBoolean' {
+    It 'passes booleans through' {
+        ConvertTo-UsageBoolean -Value $true | Should -Be $true
+        ConvertTo-UsageBoolean -Value $false | Should -Be $false
+    }
+
+    It 'parses string booleans case-insensitively' {
+        ConvertTo-UsageBoolean -Value 'True' | Should -Be $true
+        ConvertTo-UsageBoolean -Value ' false ' | Should -Be $false
+    }
+
+    It 'returns null for null, empty or unparseable input' {
+        ConvertTo-UsageBoolean -Value $null | Should -BeNullOrEmpty
+        ConvertTo-UsageBoolean -Value '' | Should -BeNullOrEmpty
+        ConvertTo-UsageBoolean -Value 'maybe' | Should -BeNullOrEmpty
     }
 }
 
@@ -1076,6 +1205,80 @@ Describe 'Invoke-Analysis DataLake recommendation edge cases' {
         $lowValueRec | Should -Not -BeNullOrEmpty
         $lowValueRec.Detail | Should -Not -Match 'move to data lake'
         $lowValueRec.Detail | Should -Match 'current Data Lake placement'
+    }
+}
+
+Describe 'Invoke-Analysis plan-aware pricing' {
+    BeforeAll {
+        $script:pricingRules = [PSCustomObject]@{ Rules = @(); TableCoverage = @{}; TotalRules = 0; EnabledRules = 0; DontCorrCount = 0; IncCorrCount = 0 }
+        $script:pricingHunting = [PSCustomObject]@{ Queries = @(); TableCoverage = @{}; TotalQueries = 0 }
+    }
+
+    It 'computes DataLake savings as current cost minus the lake rate for the same volume' {
+        $tableUsage = @(
+            [PSCustomObject]@{ TableName = 'BigSecondary'; DataGB = 300; MonthlyGB = 100; UsageRowCount = 1; EstMonthlyCostUSD = 559.00; IsFree = $false; IsFreeSource = 'usage'; ObservedPlans = @('Analytics'); ObservedPlanCount = 1; ObservedPlanBreakdown = @() }
+        )
+        $classifications = [PSCustomObject]@{
+            Classifications = @{ 'BigSecondary' = [PSCustomObject]@{ Classification = 'secondary'; Category = 'Infra'; RecommendedTier = 'datalake'; IsFree = $false; RecommendedRetentionDays = 90 } }
+            KeywordGaps = @(); DatabaseEntries = 1
+        }
+        $result = Invoke-Analysis -TableUsage $tableUsage -Classifications $classifications -RulesData $script:pricingRules -HuntingData $script:pricingHunting -PricePerGB 5.59 -LakePricePerGB 0.20
+
+        $rec = @($result.Recommendations | Where-Object Type -eq 'DataLake')[0]
+        $rec | Should -Not -BeNullOrEmpty
+        # 559.00 - 100 GB x 0.20
+        $rec.EstSavingsUSD | Should -Be 539
+        $result.Summary.LakePricePerGB | Should -Be 0.20
+        $result.Summary.BasicPricePerGB | Should -Be 1.15
+    }
+
+    It 'never reports negative DataLake savings' {
+        $tableUsage = @(
+            [PSCustomObject]@{ TableName = 'CheapSecondary'; DataGB = 300; MonthlyGB = 100; UsageRowCount = 1; EstMonthlyCostUSD = 5; IsFree = $false; IsFreeSource = 'usage'; ObservedPlans = @('Analytics'); ObservedPlanCount = 1; ObservedPlanBreakdown = @() }
+        )
+        $classifications = [PSCustomObject]@{
+            Classifications = @{ 'CheapSecondary' = [PSCustomObject]@{ Classification = 'secondary'; Category = 'Infra'; RecommendedTier = 'datalake'; IsFree = $false; RecommendedRetentionDays = 90 } }
+            KeywordGaps = @(); DatabaseEntries = 1
+        }
+        $result = Invoke-Analysis -TableUsage $tableUsage -Classifications $classifications -RulesData $script:pricingRules -HuntingData $script:pricingHunting -LakePricePerGB 0.20
+
+        # CostTier is High by volume (100 GB) so the DataLake rule fires; savings clamp at 0
+        @($result.Recommendations | Where-Object Type -eq 'DataLake')[0].EstSavingsUSD | Should -Be 0
+    }
+
+    It 'lets the classification database decide IsFree only when Usage had no billable flag' {
+        $tableUsage = @(
+            [PSCustomObject]@{ TableName = 'DbFree'; DataGB = 3; MonthlyGB = 1; UsageRowCount = 1; EstMonthlyCostUSD = 5.59; IsFree = $false; IsFreeSource = 'database'; ObservedPlans = @('Analytics'); ObservedPlanCount = 1; ObservedPlanBreakdown = @() },
+            [PSCustomObject]@{ TableName = 'UsagePaid'; DataGB = 3; MonthlyGB = 1; UsageRowCount = 1; EstMonthlyCostUSD = 5.59; IsFree = $false; IsFreeSource = 'usage'; ObservedPlans = @('Analytics'); ObservedPlanCount = 1; ObservedPlanBreakdown = @() }
+        )
+        $classifications = [PSCustomObject]@{
+            Classifications = @{
+                'DbFree'    = [PSCustomObject]@{ Classification = 'primary'; Category = 'Security Alerts'; RecommendedTier = 'analytics'; IsFree = $true; RecommendedRetentionDays = 90 }
+                'UsagePaid' = [PSCustomObject]@{ Classification = 'primary'; Category = 'Security Alerts'; RecommendedTier = 'analytics'; IsFree = $true; RecommendedRetentionDays = 90 }
+            }
+            KeywordGaps = @(); DatabaseEntries = 2
+        }
+        $result = Invoke-Analysis -TableUsage $tableUsage -Classifications $classifications -RulesData $script:pricingRules -HuntingData $script:pricingHunting
+
+        $dbFree = $result.TableAnalysis | Where-Object TableName -eq 'DbFree'
+        $dbFree.IsFree | Should -Be $true
+        $dbFree.EstMonthlyCostUSD | Should -Be 0
+        $dbFree.CostTier | Should -Be 'Free'
+        $dbFree.IsFreeSource | Should -Be 'database'
+
+        $usagePaid = $result.TableAnalysis | Where-Object TableName -eq 'UsagePaid'
+        $usagePaid.IsFree | Should -Be $false
+        $usagePaid.EstMonthlyCostUSD | Should -Be 5.59
+        $usagePaid.IsFreeSource | Should -Be 'usage'
+    }
+
+    It 'surfaces the observed Usage span in the summary' {
+        $tableUsage = @(
+            [PSCustomObject]@{ TableName = 'T'; DataGB = 1; MonthlyGB = 1; UsageRowCount = 1; EstMonthlyCostUSD = 5.59; IsFree = $false; IsFreeSource = 'usage'; ObservedDays = 42; ObservedPlans = @('Analytics'); ObservedPlanCount = 1; ObservedPlanBreakdown = @() }
+        )
+        $classifications = [PSCustomObject]@{ Classifications = @{}; KeywordGaps = @(); DatabaseEntries = 0 }
+        $result = Invoke-Analysis -TableUsage $tableUsage -Classifications $classifications -RulesData $script:pricingRules -HuntingData $script:pricingHunting
+        $result.Summary.UsageObservedDays | Should -Be 42
     }
 }
 
