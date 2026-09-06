@@ -212,7 +212,7 @@ function Get-TablesFromKql {
         $letNames = @()
     }
 
-    # Pattern 5: table in datatable() or externaldata() — skip, not real tables
+    # Pattern 5: table in datatable() or externaldata() - skip, not real tables
     $tables | Where-Object {
         $_ -notin $script:kqlKeywords -and
         $_ -notin $letNames -and
@@ -237,30 +237,41 @@ function Get-FieldsFromKql {
     # Operator pattern fragment (reused across patterns)
     $ops = '==|!=|<>|<=|>=|<|>|=~|!~|\bcontains\b|\b!contains\b|\bcontains_cs\b|\bhas\b|\b!has\b|\bhas_cs\b|\bstartswith\b|\b!startswith\b|\bendswith\b|\b!endswith\b|\bmatches\s+regex\b|\bin\s*\(|\b!in\s*\(|\bbetween\b|\bhas_any\b|\bhas_all\b'
 
+    # Rule KQL is user-controlled; every match runs with a timeout so a pathological query cannot hang the run
+    $timeout = [timespan]::FromSeconds(2)
+    $rxMatch = {
+        param([string]$Pattern)
+        try { [regex]::new($Pattern, [System.Text.RegularExpressions.RegexOptions]::IgnoreCase, $timeout).Matches($Kql) }
+        catch [System.Text.RegularExpressions.RegexMatchTimeoutException] {
+            Write-Warning 'Regex execution timed out while extracting fields from KQL. Some fields might not be mapped.'
+            @()
+        }
+    }
+
     # 1. where <field> <operator>
-    $whereMatches = [regex]::Matches($Kql, "(?i)\bwhere\s+(?:not\s+)?(\w+)\s*(?:$ops)")
+    $whereMatches = & $rxMatch "\bwhere\s+(?:not\s+)?(\w+)\s*(?:$ops)"
     foreach ($match in $whereMatches) { [void]$fields.Add($match.Groups[1].Value) }
 
     # 2. and/or <field> <operator>
-    $logicalMatches = [regex]::Matches($Kql, "(?i)\b(?:and|or)\s+(?:not\s+)?(\w+)\s*(?:$ops)")
+    $logicalMatches = & $rxMatch "\b(?:and|or)\s+(?:not\s+)?(\w+)\s*(?:$ops)"
     foreach ($match in $logicalMatches) { [void]$fields.Add($match.Groups[1].Value) }
 
     # 3. project / project-keep fields
-    $projectMatches = [regex]::Matches($Kql, '(?i)\|\s*project(?:-keep)?\s+([\w\s,]+?)(?:\||$)')
+    $projectMatches = & $rxMatch '\|\s*project(?:-keep)?\s+([\w\s,]+?)(?:\||$)'
     foreach ($match in $projectMatches) {
         $fieldTokens = $match.Groups[1].Value -split ',' | ForEach-Object { ($_.Trim() -split '\s')[0] }
         foreach ($fieldName in $fieldTokens) { if ($fieldName -match '^\w+$' -and $fieldName.Length -gt 1) { [void]$fields.Add($fieldName) } }
     }
 
     # 4. project-away fields (these are also referenced)
-    $projectAwayMatches = [regex]::Matches($Kql, '(?i)\|\s*project-away\s+([\w\s,]+?)(?:\||$)')
+    $projectAwayMatches = & $rxMatch '\|\s*project-away\s+([\w\s,]+?)(?:\||$)'
     foreach ($match in $projectAwayMatches) {
         $fieldTokens = $match.Groups[1].Value -split ',' | ForEach-Object { ($_.Trim() -split '\s')[0] }
         foreach ($fieldName in $fieldTokens) { if ($fieldName -match '^\w+$' -and $fieldName.Length -gt 1) { [void]$fields.Add($fieldName) } }
     }
 
     # 5. summarize ... by <field1>, <field2>
-    $groupByMatches = [regex]::Matches($Kql, '(?i)\bby\s+([\w\s,()]+?)(?:\||$)')
+    $groupByMatches = & $rxMatch '\bby\s+([\w\s,()]+?)(?:\||$)'
     foreach ($match in $groupByMatches) {
         $fieldTokens = $match.Groups[1].Value -split ',' | ForEach-Object {
             $token = ($_.Trim() -split '\s')[0] -replace '[()]', ''
@@ -270,19 +281,19 @@ function Get-FieldsFromKql {
     }
 
     # 6. on <field> (join condition)
-    $joinMatches = [regex]::Matches($Kql, '(?i)\bon\s+(\w+)')
+    $joinMatches = & $rxMatch '\bon\s+(\w+)'
     foreach ($match in $joinMatches) { [void]$fields.Add($match.Groups[1].Value) }
 
     # 7. extend <field> = (new computed columns)
-    $extendMatches = [regex]::Matches($Kql, '(?i)\bextend\s+(\w+)\s*=')
+    $extendMatches = & $rxMatch '\bextend\s+(\w+)\s*='
     foreach ($match in $extendMatches) { [void]$fields.Add($match.Groups[1].Value) }
 
     # 8. isnotempty(<field>) / isnotnull(<field>) / isempty(<field>) / isnull(<field>)
-    $nullCheckMatches = [regex]::Matches($Kql, '(?i)\b(?:isnotempty|isnotnull|isempty|isnull)\s*\(\s*(\w+)\s*\)')
+    $nullCheckMatches = & $rxMatch '\b(?:isnotempty|isnotnull|isempty|isnull)\s*\(\s*(\w+)\s*\)'
     foreach ($match in $nullCheckMatches) { [void]$fields.Add($match.Groups[1].Value) }
 
     # 9. mv-expand <field>
-    $mvExpandMatches = [regex]::Matches($Kql, '(?i)\bmv-expand\s+(\w+)')
+    $mvExpandMatches = & $rxMatch '\bmv-expand\s+(\w+)'
     foreach ($match in $mvExpandMatches) { [void]$fields.Add($match.Groups[1].Value) }
 
     # Filter out KQL keywords, functions, and operators (shared file-scope list)

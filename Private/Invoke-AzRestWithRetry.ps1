@@ -42,7 +42,7 @@ function Invoke-AzRestWithRetry {
             if ($null -ne $Body) { $splat['Body'] = $Body }
 
             if ($FollowAsync) {
-                $resp = Invoke-WebRequest @splat -UseBasicParsing
+                $resp = Invoke-WebRequest @splat
                 $statusCode = [int]$resp.StatusCode
 
                 if ($statusCode -eq 202) {
@@ -56,7 +56,8 @@ function Invoke-AzRestWithRetry {
                         }
                     }
                     if (-not $asyncUrl) {
-                        return [PSCustomObject]@{ status = 'Succeeded'; properties = $null }
+                        Write-Warning "Request to $Uri returned 202 without an Azure-AsyncOperation or Location header; the outcome could not be confirmed."
+                        return [PSCustomObject]@{ status = 'Succeeded'; properties = $null; unconfirmed = $true }
                     }
                     return Wait-AzAsyncOperation -Uri $asyncUrl -Headers $Headers -TimeoutSeconds $AsyncTimeoutSeconds
                 }
@@ -75,9 +76,16 @@ function Invoke-AzRestWithRetry {
                 $statusCode = [int]$_.Exception.Response.StatusCode
             }
 
-            $retryable = $statusCode -eq 429 -or ($statusCode -ge 500 -and $statusCode -le 599)
+            # Transport-level failures (DNS, reset, timeout) carry no response and are worth a retry
+            $transportError = ($null -eq $statusCode) -and (
+                $_.Exception -is [System.Net.Http.HttpRequestException] -or
+                $_.Exception -is [System.Net.WebException] -or
+                $_.Exception -is [System.Threading.Tasks.TaskCanceledException] -or
+                $_.Exception.InnerException -is [System.Net.Http.HttpRequestException])
+            $retryable = $statusCode -eq 429 -or ($statusCode -ge 500 -and $statusCode -le 599) -or $transportError
 
-            if (-not $retryable -or $attempt -gt $MaxRetries) {
+            # MaxRetries is the number of additional attempts after the first
+            if (-not $retryable -or $attempt -ge ($MaxRetries + 1)) {
                 throw
             }
 
@@ -95,7 +103,8 @@ function Invoke-AzRestWithRetry {
                 }
             }
 
-            Write-Warning "Request to $Uri failed (HTTP $statusCode). Retry $attempt of $MaxRetries in ${waitSeconds}s."
+            $codeLabel = if ($statusCode) { "HTTP $statusCode" } else { $_.Exception.GetType().Name }
+            Write-Warning "Request to $Uri failed ($codeLabel). Retry $attempt of $MaxRetries in ${waitSeconds}s."
             Start-Sleep -Seconds $waitSeconds
         }
     }
@@ -127,7 +136,7 @@ function Wait-AzAsyncOperation {
         Start-Sleep -Seconds $waitSeconds
 
         try {
-            $resp = Invoke-WebRequest -Uri $Uri -Headers $Headers -Method Get -UseBasicParsing -ErrorAction Stop
+            $resp = Invoke-WebRequest -Uri $Uri -Headers $Headers -Method Get -ErrorAction Stop
         }
         catch {
             $sc = if ($_.Exception.Response) { [int]$_.Exception.Response.StatusCode } else { 0 }
@@ -144,6 +153,21 @@ function Wait-AzAsyncOperation {
         }
 
         $status = if ($body -and $body.status) { [string]$body.status } else { $null }
+
+        # Location-header pattern: completion is a 200/201/204 carrying the resource itself,
+        # with provisioningState instead of an operation status.
+        $httpStatus = [int]$resp.StatusCode
+        if ($null -eq $status -and $httpStatus -in 200, 201, 204) {
+            $provisioning = if ($body -and $body.properties -and $body.properties.provisioningState) { [string]$body.properties.provisioningState } else { $null }
+            if ($provisioning -in 'Failed', 'Canceled') {
+                $errMsg = if ($body.error -and $body.error.message) { $body.error.message } else { "Async operation $provisioning" }
+                throw $errMsg
+            }
+            if ($null -eq $provisioning -or $provisioning -eq 'Succeeded') {
+                if ($body) { return $body }
+                return [PSCustomObject]@{ status = 'Succeeded'; properties = $null }
+            }
+        }
 
         if ($status -in 'Succeeded', 'Failed', 'Canceled') {
             if ($status -ne 'Succeeded') {

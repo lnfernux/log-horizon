@@ -17,26 +17,12 @@ function Connect-Sentinel {
     # Authenticate only if not already connected to the right subscription
     $ctx = Get-AzContext -ErrorAction SilentlyContinue
     if (-not $ctx -or $ctx.Subscription.Id -ne $SubscriptionId) {
-        Write-Verbose "Authenticating to subscription $SubscriptionId …"
-        $prevWarning = $WarningPreference
-        $WarningPreference = 'SilentlyContinue'
-        Connect-AzAccount -SubscriptionId $SubscriptionId -ErrorAction Stop | Out-Null
-        $WarningPreference = $prevWarning
+        Write-Verbose "Authenticating to subscription $SubscriptionId ..."
+        Connect-AzAccount -SubscriptionId $SubscriptionId -ErrorAction Stop -WarningAction SilentlyContinue | Out-Null
         $ctx = Get-AzContext
     }
     else {
         Write-Verbose "Already connected to subscription $SubscriptionId."
-    }
-
-    # Resolve workspace
-    $resourceId = "/subscriptions/$SubscriptionId/resourceGroups/$ResourceGroup" +
-                  "/providers/Microsoft.OperationalInsights/workspaces/$WorkspaceName"
-
-    $ws = Get-AzResource -ResourceId $resourceId -ErrorAction Stop
-    $resolvedWsId = $ws.Properties.customerId   # Log Analytics workspace GUID
-
-    if ($WorkspaceId -and $resolvedWsId -ne $WorkspaceId) {
-        Write-Warning "Supplied WorkspaceId ($WorkspaceId) differs from resolved ID ($resolvedWsId). Using resolved."
     }
 
     # Acquire ARM token
@@ -45,36 +31,33 @@ function Connect-Sentinel {
     # Acquire Log Analytics token
     $laToken = Resolve-AzToken -ResourceUrl 'https://api.loganalytics.io'
 
-    # Check if Defender XDR unified experience is enabled
-    $sentinelResourceId = "/subscriptions/$SubscriptionId/resourceGroups/$ResourceGroup" +
-                          "/providers/Microsoft.OperationalInsights/workspaces/$WorkspaceName" +
-                          "/providers/Microsoft.SecurityInsights/onboardingStates/default"
+    # Resolve workspace via REST (no Az.Resources dependency)
+    $resourceId = "/subscriptions/$SubscriptionId/resourceGroups/$ResourceGroup" +
+                  "/providers/Microsoft.OperationalInsights/workspaces/$WorkspaceName"
 
-    $defenderUnified = $false
-    try {
-        $headers = @{ Authorization = "Bearer $token" }
-        $onboardUri = "https://management.azure.com${sentinelResourceId}?api-version=2024-03-01"
-        $onboard = Invoke-RestMethod -Uri $onboardUri -Headers $headers -ErrorAction Stop
-        if ($onboard.properties) {
-            # If the onboarding state exists, workspace is onboarded to Sentinel
-            $defenderUnified = $true
-        }
+    $wsUri = "https://management.azure.com${resourceId}?api-version=2023-09-01"
+    $ws = Invoke-AzRestWithRetry -Uri $wsUri -Headers @{ Authorization = "Bearer $token" }
+    $resolvedWsId = $ws.properties.customerId   # Log Analytics workspace GUID
+    if ([string]::IsNullOrWhiteSpace("$resolvedWsId")) {
+        throw "Workspace '$WorkspaceName' in resource group '$ResourceGroup' returned no customerId; check the name and your permissions."
     }
-    catch {
-        Write-Verbose 'Could not determine Defender XDR  and Microsoft Sentinel unified experience status.'
+
+    if ($WorkspaceId -and $resolvedWsId -ne $WorkspaceId) {
+        Write-Warning "Supplied WorkspaceId ($WorkspaceId) differs from resolved ID ($resolvedWsId). Using resolved."
     }
 
     [PSCustomObject]@{
-        SubscriptionId  = $SubscriptionId
-        TenantId        = $ctx.Tenant.Id
-        ResourceGroup   = $ResourceGroup
-        WorkspaceName   = $WorkspaceName
-        WorkspaceId     = $resolvedWsId
-        ResourceId      = $resourceId
-        ArmToken        = $token
-        LaToken         = $laToken
-        DefenderUnified = $defenderUnified
-        Region          = $ws.Location
+        SubscriptionId                      = $SubscriptionId
+        TenantId                            = $ctx.Tenant.Id
+        ResourceGroup                       = $ResourceGroup
+        WorkspaceName                       = $WorkspaceName
+        WorkspaceId                         = $resolvedWsId
+        ResourceId                          = $resourceId
+        ArmToken                            = $token
+        LaToken                             = $laToken
+        Region                              = $ws.location
+        WorkspaceRetentionDays              = if ($null -ne $ws.properties.retentionInDays) { [int]$ws.properties.retentionInDays } else { $null }
+        DefaultDataCollectionRuleResourceId = $ws.properties.defaultDataCollectionRuleResourceId
     }
 }
 

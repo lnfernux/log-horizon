@@ -5,7 +5,10 @@
     Author            = 'infernux.no'
     Description       = 'Sentinel SIEM log source analyzer - classifies, scores, and optimizes log ingestion.'
     PowerShellVersion = '7.0'
-    RequiredModules   = @('PwshSpectreConsole', 'Az.Accounts', 'Az.Resources')
+    RequiredModules   = @(
+        @{ ModuleName = 'PwshSpectreConsole'; ModuleVersion = '2.6.3' },
+        'Az.Accounts'
+    )
     FunctionsToExport = @('Invoke-LogHorizon', 'Set-LogHorizonTableRetention')
     CmdletsToExport   = @()
     VariablesToExport  = @()
@@ -13,7 +16,8 @@
     PrivateData       = @{
         PSData = @{
             Tags       = @('Sentinel', 'SIEM', 'Security', 'Azure', 'LogAnalytics')
-            ProjectUri = 'https://github.com/log-horizon'
+            ProjectUri = 'https://github.com/lnfernux/log-horizon'
+            LicenseUri = 'https://www.gnu.org/licenses/gpl-3.0.html'
         }
     }
 }

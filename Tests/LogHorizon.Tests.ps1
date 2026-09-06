@@ -15,6 +15,7 @@ BeforeAll {
     . "$privatePath\Set-TableRetention.ps1"
     . "$privatePath\Invoke-AzRestWithRetry.ps1"
     . "$privatePath\Get-DefenderXDR.ps1"
+    . "$privatePath\Get-CollectionCache.ps1"
     . (Join-Path $PSScriptRoot '..\Public\Set-LogHorizonTableRetention.ps1')
 
     function New-MockAnalysis {
@@ -3174,7 +3175,7 @@ Describe 'Get-DefenderXDR delegated Graph path' {
 
 Describe 'Get-SortedRecommendation' {
     It 'orders by priority then savings and pushes unknown priorities last' {
-        $input = @(
+        $unsorted = @(
             [PSCustomObject]@{ Priority = 'Low'; EstSavingsUSD = 500 },
             [PSCustomObject]@{ Priority = 'High'; EstSavingsUSD = 0 },
             [PSCustomObject]@{ Priority = 'Weird'; EstSavingsUSD = 999 },
@@ -3182,7 +3183,7 @@ Describe 'Get-SortedRecommendation' {
             [PSCustomObject]@{ Priority = 'High'; EstSavingsUSD = 50 },
             [PSCustomObject]@{ Priority = 'Medium'; EstSavingsUSD = $null }
         )
-        $sorted = Get-SortedRecommendation -Recommendations $input
+        $sorted = Get-SortedRecommendation -Recommendations $unsorted
         ($sorted | ForEach-Object { "$($_.Priority):$($_.EstSavingsUSD)" }) | Should -Be @('High:50', 'High:0', 'Medium:10', 'Medium:', 'Low:500', 'Weird:999')
     }
 
@@ -4064,6 +4065,501 @@ Describe 'Invoke-AzRestWithRetry' {
         }
         { Invoke-AzRestWithRetry -Uri 'https://example.com/api' -Headers @{ Authorization = 'Bearer test' } -MaxRetries 1 -BaseDelaySeconds 0 } | Should -Throw
         Should -Invoke Invoke-RestMethod -Times 2 -Exactly
+    }
+
+    It 'makes exactly MaxRetries additional attempts' {
+        Mock Invoke-RestMethod {
+            $resp = [System.Net.Http.HttpResponseMessage]::new([System.Net.HttpStatusCode]::ServiceUnavailable)
+            throw ([Microsoft.PowerShell.Commands.HttpResponseException]::new('Down', $resp))
+        }
+        { Invoke-AzRestWithRetry -Uri 'https://example.com/api' -Headers @{} -MaxRetries 3 -BaseDelaySeconds 0 -WarningAction SilentlyContinue } | Should -Throw
+        Should -Invoke Invoke-RestMethod -Times 4 -Exactly
+    }
+
+    It 'retries transport-level failures that carry no HTTP response' {
+        $script:transportCalls = 0
+        Mock Invoke-RestMethod {
+            $script:transportCalls++
+            if ($script:transportCalls -eq 1) { throw ([System.Net.Http.HttpRequestException]::new('connection reset')) }
+            [PSCustomObject]@{ value = @('recovered') }
+        }
+        $result = Invoke-AzRestWithRetry -Uri 'https://example.com/api' -Headers @{} -BaseDelaySeconds 0 -WarningVariable w -WarningAction SilentlyContinue
+        $result.value | Should -Contain 'recovered'
+        "$w" | Should -Match 'HttpRequestException'
+    }
+
+    It 'does not retry plain script errors' {
+        Mock Invoke-RestMethod { throw 'not a transport problem' }
+        { Invoke-AzRestWithRetry -Uri 'https://example.com/api' -Headers @{} -BaseDelaySeconds 0 } | Should -Throw
+        Should -Invoke Invoke-RestMethod -Times 1 -Exactly
+    }
+}
+
+Describe 'Invoke-AzRestWithRetry async paths' {
+    It 'warns and reports unconfirmed success on a 202 without async headers' {
+        Mock Invoke-WebRequest { [PSCustomObject]@{ StatusCode = 202; Headers = @{}; Content = '' } }
+        $result = Invoke-AzRestWithRetry -Uri 'https://example.com/api' -Headers @{} -Method Patch -Body '{}' -FollowAsync -WarningVariable w -WarningAction SilentlyContinue
+        $result.status | Should -Be 'Succeeded'
+        $result.unconfirmed | Should -Be $true
+        "$w" | Should -Match 'could not be confirmed'
+    }
+
+    It 'returns the parsed body for a synchronous 200' {
+        Mock Invoke-WebRequest { [PSCustomObject]@{ StatusCode = 200; Headers = @{}; Content = '{"properties":{"plan":"Basic"}}' } }
+        $result = Invoke-AzRestWithRetry -Uri 'https://example.com/api' -Headers @{} -Method Patch -Body '{}' -FollowAsync
+        $result.properties.plan | Should -Be 'Basic'
+    }
+
+    It 'returns raw content when the body is not JSON and null when there is no body' {
+        Mock Invoke-WebRequest { [PSCustomObject]@{ StatusCode = 200; Headers = @{}; Content = 'plain text' } }
+        Invoke-AzRestWithRetry -Uri 'https://example.com/api' -Headers @{} -FollowAsync | Should -Be 'plain text'
+        Mock Invoke-WebRequest { [PSCustomObject]@{ StatusCode = 204; Headers = @{}; Content = $null } }
+        Invoke-AzRestWithRetry -Uri 'https://example.com/api' -Headers @{} -FollowAsync | Should -BeNullOrEmpty
+    }
+
+    It 'follows the Azure-AsyncOperation header to a terminal status' {
+        Mock Start-Sleep {}
+        Mock Invoke-WebRequest {
+            if ($Method -eq 'Get') { return [PSCustomObject]@{ StatusCode = 200; Headers = @{}; Content = '{"status":"Succeeded"}' } }
+            [PSCustomObject]@{ StatusCode = 202; Headers = @{ 'Azure-AsyncOperation' = @('https://example.com/op/1') }; Content = '' }
+        }
+        $result = Invoke-AzRestWithRetry -Uri 'https://example.com/api' -Headers @{} -Method Patch -Body '{}' -FollowAsync
+        $result.status | Should -Be 'Succeeded'
+    }
+
+    It 'treats a Location-header completion (200 with provisioningState) as terminal' {
+        Mock Start-Sleep {}
+        Mock Invoke-WebRequest {
+            if ($Method -eq 'Get') { return [PSCustomObject]@{ StatusCode = 200; Headers = @{}; Content = '{"properties":{"provisioningState":"Succeeded","plan":"Analytics"}}' } }
+            [PSCustomObject]@{ StatusCode = 202; Headers = @{ 'Location' = 'https://example.com/op/2' }; Content = '' }
+        }
+        $result = Invoke-AzRestWithRetry -Uri 'https://example.com/api' -Headers @{} -Method Patch -Body '{}' -FollowAsync
+        $result.properties.plan | Should -Be 'Analytics'
+    }
+
+    It 'throws when the Location-style resource reports a failed provisioning state' {
+        Mock Start-Sleep {}
+        Mock Invoke-WebRequest { [PSCustomObject]@{ StatusCode = 200; Headers = @{}; Content = '{"properties":{"provisioningState":"Failed"},"error":{"message":"quota"}}' } }
+        { Wait-AzAsyncOperation -Uri 'https://example.com/op' -Headers @{} -TimeoutSeconds 30 } | Should -Throw '*quota*'
+    }
+
+    It 'keeps polling while the resource is still Updating and honours Retry-After' {
+        Mock Start-Sleep {}
+        $script:pollCalls = 0
+        Mock Invoke-WebRequest {
+            $script:pollCalls++
+            if ($script:pollCalls -lt 3) { return [PSCustomObject]@{ StatusCode = 200; Headers = @{ 'Retry-After' = @('1') }; Content = '{"properties":{"provisioningState":"Updating"}}' } }
+            [PSCustomObject]@{ StatusCode = 200; Headers = @{}; Content = '{"status":"Succeeded"}' }
+        }
+        (Wait-AzAsyncOperation -Uri 'https://example.com/op' -Headers @{} -TimeoutSeconds 60).status | Should -Be 'Succeeded'
+        $script:pollCalls | Should -Be 3
+    }
+
+    It 'throws when the async operation reports Failed' {
+        Mock Start-Sleep {}
+        Mock Invoke-WebRequest { [PSCustomObject]@{ StatusCode = 200; Headers = @{}; Content = '{"status":"Failed","error":{"message":"bad plan"}}' } }
+        { Wait-AzAsyncOperation -Uri 'https://example.com/op' -Headers @{} -TimeoutSeconds 30 } | Should -Throw '*bad plan*'
+    }
+
+    It 'returns a synthetic success for a 204 poll with no body' {
+        Mock Start-Sleep {}
+        Mock Invoke-WebRequest { [PSCustomObject]@{ StatusCode = 204; Headers = @{}; Content = $null } }
+        (Wait-AzAsyncOperation -Uri 'https://example.com/op' -Headers @{} -TimeoutSeconds 30).status | Should -Be 'Succeeded'
+    }
+
+    It 'backs off on 429/5xx while polling and rethrows other errors' {
+        Mock Start-Sleep {}
+        $script:pollCalls = 0
+        Mock Invoke-WebRequest {
+            $script:pollCalls++
+            if ($script:pollCalls -eq 1) {
+                $resp = [System.Net.Http.HttpResponseMessage]::new([System.Net.HttpStatusCode]::TooManyRequests)
+                throw ([Microsoft.PowerShell.Commands.HttpResponseException]::new('slow down', $resp))
+            }
+            [PSCustomObject]@{ StatusCode = 200; Headers = @{}; Content = '{"status":"Succeeded"}' }
+        }
+        (Wait-AzAsyncOperation -Uri 'https://example.com/op' -Headers @{} -TimeoutSeconds 60).status | Should -Be 'Succeeded'
+
+        Mock Invoke-WebRequest {
+            $resp = [System.Net.Http.HttpResponseMessage]::new([System.Net.HttpStatusCode]::Forbidden)
+            throw ([Microsoft.PowerShell.Commands.HttpResponseException]::new('nope', $resp))
+        }
+        { Wait-AzAsyncOperation -Uri 'https://example.com/op' -Headers @{} -TimeoutSeconds 60 } | Should -Throw '*nope*'
+    }
+
+    It 'times out when the operation never completes' {
+        Mock Start-Sleep {}
+        Mock Invoke-WebRequest { [PSCustomObject]@{ StatusCode = 200; Headers = @{}; Content = '{"status":"InProgress"}' } }
+        { Wait-AzAsyncOperation -Uri 'https://example.com/op' -Headers @{} -TimeoutSeconds 0 } | Should -Throw '*terminal status*'
+    }
+
+    It 'treats a 200 poll with a non-JSON body as completed and rethrows non-HTTP poll errors' {
+        Mock Start-Sleep {}
+        Mock Invoke-WebRequest { [PSCustomObject]@{ StatusCode = 200; Headers = @{}; Content = 'garbage' } }
+        (Wait-AzAsyncOperation -Uri 'https://example.com/op' -Headers @{} -TimeoutSeconds 30).status | Should -Be 'Succeeded'
+
+        Mock Invoke-WebRequest { throw 'socket closed' }
+        { Wait-AzAsyncOperation -Uri 'https://example.com/op' -Headers @{} -TimeoutSeconds 30 } | Should -Throw '*socket closed*'
+    }
+
+    It 'honours Retry-After on a throttled request' {
+        $script:raCalls = 0
+        Mock Start-Sleep {}
+        Mock Invoke-RestMethod {
+            $script:raCalls++
+            if ($script:raCalls -eq 1) {
+                $resp = [System.Net.Http.HttpResponseMessage]::new([System.Net.HttpStatusCode]::TooManyRequests)
+                $resp.Headers.Add('Retry-After', '7')
+                throw ([Microsoft.PowerShell.Commands.HttpResponseException]::new('Throttled', $resp))
+            }
+            [PSCustomObject]@{ ok = $true }
+        }
+        $result = Invoke-AzRestWithRetry -Uri 'https://example.com/api' -Headers @{} -BaseDelaySeconds 0 -WarningVariable w -WarningAction SilentlyContinue
+        $result.ok | Should -Be $true
+        "$w" | Should -Match 'in 7s'
+        Should -Invoke Start-Sleep -Times 1 -ParameterFilter { $Seconds -eq 7 }
+    }
+}
+
+Describe 'Collection cache' {
+    BeforeAll {
+        $script:cacheDir = Join-Path $TestDrive 'cache'
+        $script:sample = [PSCustomObject]@{
+            Context    = [PSCustomObject]@{ ArmToken = 'SECRET-ARM'; LaToken = 'SECRET-LA'; WorkspaceName = 'ws' }
+            GraphToken = 'SECRET-GRAPH'
+            TableUsage = @([PSCustomObject]@{ TableName = 'SigninLogs'; MonthlyGB = 1.5 })
+            RulesData  = [PSCustomObject]@{ TableCoverage = @{ 'SigninLogs' = 2 }; Rules = @() }
+        }
+    }
+
+    It 'produces a stable key that changes with any collection-shaping input' {
+        $k1 = Get-CollectionCacheKey -SubscriptionId 'SUB' -ResourceGroup 'rg' -WorkspaceName 'ws'
+        $k2 = Get-CollectionCacheKey -SubscriptionId 'sub' -ResourceGroup 'RG' -WorkspaceName 'WS'
+        $k1 | Should -Be $k2
+        $k1 | Should -Match '^[0-9a-f]{64}$'
+        (Get-CollectionCacheKey -SubscriptionId 'sub' -ResourceGroup 'rg' -WorkspaceName 'ws' -DaysBack 30) | Should -Not -Be $k1
+        (Get-CollectionCacheKey -SubscriptionId 'sub' -ResourceGroup 'rg' -WorkspaceName 'ws' -DetectionLookbackDays 7) | Should -Not -Be $k1
+        (Get-CollectionCacheKey -SubscriptionId 'sub' -ResourceGroup 'rg' -WorkspaceName 'ws' -IncludeDefenderXDR $true) | Should -Not -Be $k1
+        (Get-CollectionCacheKey -SubscriptionId 'sub' -ResourceGroup 'rg' -WorkspaceName 'ws' -IncludeDetectionAnalyzer $true) | Should -Not -Be $k1
+        (Get-CollectionCacheKey -SubscriptionId 'sub' -ResourceGroup 'rg' -WorkspaceName 'other') | Should -Not -Be $k1
+    }
+
+    It 'resolves the default cache path under the local app data folder' {
+        $p = Get-CollectionCachePath -Key 'abc'
+        $p | Should -Match 'LogHorizon'
+        $p | Should -Match 'collection-abc\.clixml$'
+        (Get-CollectionCachePath -Key 'abc' -CachePath 'C:\x') | Should -Be 'C:\x\collection-abc.clixml'
+    }
+
+    It 'round-trips a collection without persisting the context or any token' {
+        $file = Save-CollectionCache -Key 'k1' -Data $script:sample -CachePath $script:cacheDir -Version '0.9.0'
+        Test-Path $file | Should -Be $true
+        $raw = Get-Content $file -Raw
+        $raw | Should -Not -Match 'SECRET-ARM'
+        $raw | Should -Not -Match 'SECRET-LA'
+        $raw | Should -Not -Match 'SECRET-GRAPH'
+
+        $hit = Get-CollectionCache -Key 'k1' -CachePath $script:cacheDir -MaxAgeMinutes 60
+        $hit | Should -Not -BeNullOrEmpty
+        $hit.Data.PSObject.Properties.Name | Should -Not -Contain 'Context'
+        $hit.Data.PSObject.Properties.Name | Should -Not -Contain 'GraphToken'
+        $hit.Data.TableUsage[0].TableName | Should -Be 'SigninLogs'
+        $hit.Data.RulesData.TableCoverage | Should -BeOfType [hashtable]
+        $hit.Data.RulesData.TableCoverage['SigninLogs'] | Should -Be 2
+        $hit.Version | Should -Be '0.9.0'
+        $hit.AgeMinutes | Should -BeLessThan 5
+        $hit.Path | Should -Be $file
+    }
+
+    It 'misses when the file is absent, expired, corrupt or has the wrong shape' {
+        Get-CollectionCache -Key 'missing' -CachePath $script:cacheDir | Should -BeNullOrEmpty
+
+        Save-CollectionCache -Key 'old' -Data $script:sample -CachePath $script:cacheDir | Out-Null
+        $oldFile = Get-CollectionCachePath -Key 'old' -CachePath $script:cacheDir
+        $env = Import-Clixml $oldFile
+        $env.SavedAt = (Get-Date).ToUniversalTime().AddHours(-3).ToString('o')
+        $env | Export-Clixml $oldFile -Force
+        Get-CollectionCache -Key 'old' -CachePath $script:cacheDir -MaxAgeMinutes 60 | Should -BeNullOrEmpty
+        (Get-CollectionCache -Key 'old' -CachePath $script:cacheDir -MaxAgeMinutes 600).AgeMinutes | Should -BeGreaterThan 170
+
+        Set-Content -Path (Get-CollectionCachePath -Key 'corrupt' -CachePath $script:cacheDir) -Value 'not xml'
+        Get-CollectionCache -Key 'corrupt' -CachePath $script:cacheDir -WarningAction SilentlyContinue | Should -BeNullOrEmpty
+
+        [PSCustomObject]@{ Something = 1 } | Export-Clixml (Get-CollectionCachePath -Key 'shape' -CachePath $script:cacheDir)
+        Get-CollectionCache -Key 'shape' -CachePath $script:cacheDir | Should -BeNullOrEmpty
+
+        # Key mismatch inside the envelope (file renamed by hand)
+        Copy-Item (Get-CollectionCachePath -Key 'k1' -CachePath $script:cacheDir) (Get-CollectionCachePath -Key 'k2' -CachePath $script:cacheDir)
+        Get-CollectionCache -Key 'k2' -CachePath $script:cacheDir | Should -BeNullOrEmpty
+    }
+}
+
+Describe 'Resolve-ReportOutputPath' {
+    It 'creates a missing directory and returns a timestamped file inside it' {
+        $dir = Join-Path $TestDrive 'reports-new'
+        $p = Resolve-ReportOutputPath -OutputPath $dir -Format 'json' -Timestamp '2026-09-06_1200'
+        Test-Path $dir -PathType Container | Should -Be $true
+        $p | Should -Be (Join-Path $dir 'LogHorizon_Report_2026-09-06_1200.json')
+    }
+
+    It 'treats a trailing separator as a directory and maps md aliases' {
+        $p = Resolve-ReportOutputPath -OutputPath ((Join-Path $TestDrive 'slash') + '\') -Format 'markdown' -Timestamp 'T'
+        $p | Should -Match 'LogHorizon_Report_T\.md$'
+        (Resolve-ReportOutputPath -OutputPath (Join-Path $TestDrive 'x/') -Format 'md' -Timestamp 'T') | Should -Match '\.md$'
+    }
+
+    It 'creates the parent of an explicit file path and returns it unchanged' {
+        $file = Join-Path $TestDrive 'deep\nested\report.html'
+        $p = Resolve-ReportOutputPath -OutputPath $file -Format 'html'
+        $p | Should -Be $file
+        Test-Path (Split-Path $file) -PathType Container | Should -Be $true
+        Test-Path $file | Should -Be $false
+    }
+
+    It 'rejects a syntactically invalid path' {
+        { Resolve-ReportOutputPath -OutputPath 'C:\bad|dir\report.json' -Format 'json' } | Should -Throw
+    }
+}
+
+Describe 'ConvertTo-SafeMarkdownText' {
+    It 'escapes table separators, markdown syntax, angle brackets and newlines' {
+        ConvertTo-SafeMarkdownText -Text 'a|b *c* <d>' | Should -Be 'a\|b \*c\* &lt;d&gt;'
+        ConvertTo-SafeMarkdownText -Text "line1`r`nline2" | Should -Be 'line1 line2'
+        ConvertTo-SafeMarkdownText -Text '' | Should -Be ''
+        ConvertTo-SafeMarkdownText -Text $null | Should -Be ''
+    }
+}
+
+Describe 'Export-Report hardening' {
+    BeforeAll {
+        $script:hardDir = Join-Path $TestDrive 'export-hard'
+        New-Item -ItemType Directory -Path $script:hardDir -Force | Out-Null
+    }
+
+    It 'returns the written path and includes liveTuningAnalysis in JSON' {
+        $a = New-MockAnalysis
+        $a | Add-Member -NotePropertyName LiveTuningAnalysis -NotePropertyValue @([PSCustomObject]@{ TableName = 'SecurityEvent'; FilterKql = 'x' })
+        $written = Export-Report -Analysis $a -Format 'json' -OutputPath $script:hardDir -WorkspaceName 'W'
+        $written | Should -Match '\.json$'
+        Test-Path $written | Should -Be $true
+        $json = Get-Content $written -Raw | ConvertFrom-Json
+        $json.liveTuningAnalysis[0].TableName | Should -Be 'SecurityEvent'
+    }
+
+    It 'escapes hostile recommendation titles, details and rule names in Markdown' {
+        $a = New-MockAnalysis
+        $a.Recommendations = @([PSCustomObject]@{
+            Title = 'Bad | title ![img](https://evil/x.png)'; TableName = 'T'; Priority = 'High'; Type = 'DetectionAnalyzer'
+            CurrentCost = 0; EstSavingsUSD = 0; Detail = "line one`n`n<img src=x>"
+        })
+        $a | Add-Member -NotePropertyName DetectionAnalyzer -NotePropertyValue ([PSCustomObject]@{
+            RuleMetrics = @([PSCustomObject]@{ RuleName = 'Rule | with pipe'; RuleKind = 'Scheduled'; IncidentsTotal = 3; AutoCloseRatio = 0.5; FalsePositiveRatio = 0; NoisinessScore = 80 })
+            Summary = [PSCustomObject]@{ RulesAnalyzed = 1; NoisyRules = 1; IncidentsAnalyzed = 3; ScorableRules = 1; MinScorablePopulation = 3 }
+        })
+        $sections = ConvertTo-ReportSections -Analysis $a
+        $recs = ($sections | Where-Object TabId -eq 'recs').Markdown
+        $recs | Should -Match '### 1\. .* Bad \\\| title \\!\\\[img\\\]'
+        $recs | Should -Not -Match '<img src=x>'
+        $recs | Should -Match '&lt;img src=x&gt;'
+        $da = ($sections | Where-Object TabId -eq 'detanalyzer').Markdown
+        $da | Should -Match '\| Rule \\\| with pipe \|'
+        $da | Should -Match 'scores are N/A'
+    }
+
+    It 'uses TotalCoverage in the Markdown Rules column, matching HTML' {
+        $a = New-MockAnalysis
+        $a.TableAnalysis[0].AnalyticsRules = 1
+        $a.TableAnalysis[0].TotalCoverage = 7
+        $tables = ($sections = ConvertTo-ReportSections -Analysis $a | Where-Object TabId -eq 'tables')
+        ($tables.Markdown -split "`n" | Where-Object { $_ -match '\| SecurityEvent \|' }) | Should -Match '\| 7 \| 3 \|'
+    }
+
+    It 'HTML-encodes markup inside the Markdown KQL preview' {
+        $a = New-MockAnalysis
+        $a.DataTransforms = [PSCustomObject]@{ Transforms = @([PSCustomObject]@{ DCRName = 'd'; OutputTable = 'T'; TransformKql = 'source | where a < 1 </code><b>x</b>'; TransformType = 'Filter' }) }
+        $a.TableAnalysis[0].HasTransform = $true
+        $tx = (ConvertTo-ReportSections -Analysis $a | Where-Object TabId -eq 'transforms').Markdown
+        $line = ($tx -split "`n" | Where-Object { $_ -match '^\| T \|' })
+        $line | Should -Match '&lt;/code&gt;&lt;b&gt;'
+        $line | Should -Not -Match '</code><b>'
+    }
+}
+
+Describe 'Custom classification validation' {
+    It 'normalises a minimal entry with defaults' {
+        $e = ConvertTo-ValidClassificationEntry -Entry ([PSCustomObject]@{ tableName = ' MyApp_CL '; classification = 'Primary' })
+        $e.tableName | Should -Be 'MyApp_CL'
+        $e.classification | Should -Be 'primary'
+        $e.connector | Should -Be 'Custom'
+        $e.category | Should -Be 'Custom'
+        $e.description | Should -Be ''
+        $e.keywords | Should -Be @()
+        $e.recommendedTier | Should -Be 'analytics'
+        $e.isFree | Should -Be $false
+        $e.recommendedRetentionDays | Should -Be 90
+    }
+
+    It 'keeps supplied values and coerces types' {
+        $e = ConvertTo-ValidClassificationEntry -Entry ([PSCustomObject]@{ tableName = 'T'; classification = 'secondary'; connector = 'C'; category = 'Cat'; description = 'D'; keywords = @('a', '', 'b'); mitreSources = @('DS0001'); recommendedTier = 'DataLake'; isFree = 'true'; recommendedRetentionDays = '365' })
+        $e.keywords | Should -Be @('a', 'b')
+        $e.recommendedTier | Should -Be 'datalake'
+        $e.isFree | Should -Be $true
+        $e.recommendedRetentionDays | Should -Be 365
+        $e.mitreSources | Should -Be @('DS0001')
+    }
+
+    It 'rejects entries without a name or with an invalid classification' {
+        ConvertTo-ValidClassificationEntry -Entry ([PSCustomObject]@{ classification = 'primary' }) -WarningVariable w1 -WarningAction SilentlyContinue | Should -BeNullOrEmpty
+        "$w1" | Should -Match 'without tableName'
+        ConvertTo-ValidClassificationEntry -Entry ([PSCustomObject]@{ tableName = 'T'; classification = 'tertiary' }) -WarningVariable w2 -WarningAction SilentlyContinue | Should -BeNullOrEmpty
+        "$w2" | Should -Match 'primary or secondary'
+        ConvertTo-ValidClassificationEntry -Entry $null | Should -BeNullOrEmpty
+    }
+
+    It 'skips malformed custom entries during Invoke-Classification and keeps the rest' {
+        $custom = Join-Path $TestDrive 'custom.json'
+        @(
+            @{ tableName = 'GoodTable_CL'; classification = 'primary'; category = 'Application Logs' },
+            @{ tableName = ''; classification = 'primary' },
+            @{ tableName = 'BadClass_CL'; classification = 'maybe' },
+            @{ tableName = 'AzureMetrics'; classification = 'primary' }
+        ) | ConvertTo-Json | Set-Content $custom
+
+        $usage = @(
+            [PSCustomObject]@{ TableName = 'GoodTable_CL'; MonthlyGB = 1; IsFree = $false },
+            [PSCustomObject]@{ TableName = 'BadClass_CL'; MonthlyGB = 1; IsFree = $false },
+            [PSCustomObject]@{ TableName = 'AzureMetrics'; MonthlyGB = 1; IsFree = $false }
+        )
+        $result = Invoke-Classification -TableUsage $usage -RuleTableCoverage @{} -CustomClassificationPath $custom -Keywords @('GoodTable') -WarningAction SilentlyContinue
+        $result.CustomEntries | Should -Be 2
+        $result.Classifications['GoodTable_CL'].Source | Should -Be 'database'
+        $result.Classifications['GoodTable_CL'].Connector | Should -Be 'Custom'
+        $result.Classifications['BadClass_CL'].Source | Should -Be 'heuristic'
+        $result.Classifications['AzureMetrics'].Classification | Should -Be 'primary'
+    }
+
+    It 'matches keywords null-safely across name, connector, description and keywords' {
+        $entry = [PSCustomObject]@{ tableName = 'Okta_CL'; connector = $null; description = $null; keywords = @('sso', $null) }
+        Test-ClassificationKeywordMatch -Entry $entry -Keyword 'okta' | Should -Be $true
+        Test-ClassificationKeywordMatch -Entry $entry -Keyword 'SSO' | Should -Be $true
+        Test-ClassificationKeywordMatch -Entry $entry -Keyword 'aws' | Should -Be $false
+        Test-ClassificationKeywordMatch -Entry $entry -Keyword '' | Should -Be $false
+        Test-ClassificationKeywordMatch -Entry ([PSCustomObject]@{ tableName = 'X'; connector = 'Amazon Web Services'; description = 'CloudTrail events'; keywords = @() }) -Keyword 'cloudtrail' | Should -Be $true
+    }
+
+    It 'reports every matched keyword for a gap' {
+        $usage = @([PSCustomObject]@{ TableName = 'SecurityEvent'; MonthlyGB = 1; IsFree = $false })
+        $result = Invoke-Classification -TableUsage $usage -RuleTableCoverage @{} -Keywords @('AWS', 'CloudTrail')
+        $gap = $result.KeywordGaps | Where-Object TableName -eq 'AWSCloudTrail'
+        $gap.MatchedKeyword | Should -Match 'AWS'
+        $gap.MatchedKeyword | Should -Match 'CloudTrail'
+    }
+
+    It 'split tables inherit the parent recommended retention' {
+        $usage = @(
+            [PSCustomObject]@{ TableName = 'SigninLogs'; MonthlyGB = 5; IsFree = $false },
+            [PSCustomObject]@{ TableName = 'SigninLogs_SPLT_CL'; MonthlyGB = 3; IsFree = $false },
+            [PSCustomObject]@{ TableName = 'Orphan_SPLT_CL'; MonthlyGB = 3; IsFree = $false }
+        )
+        $result = Invoke-Classification -TableUsage $usage -RuleTableCoverage @{}
+        $result.Classifications['SigninLogs_SPLT_CL'].RecommendedRetentionDays | Should -Be 365
+        $result.Classifications['Orphan_SPLT_CL'].RecommendedRetentionDays | Should -Be 90
+    }
+}
+
+Describe 'Resolve-DynamicClassification heuristics' {
+    It 'requires tokens to start a PascalCase word' {
+        (Resolve-DynamicClassification -TableName 'MicrosoftServicePrincipalSignInLogs' -RuleCount 0 -MonthlyGB 0).Classification | Should -Be 'primary'
+        (Resolve-DynamicClassification -TableName 'Realerting_CL' -RuleCount 0 -MonthlyGB 0).Classification | Should -Not -Be 'primary'
+    }
+
+    It 'treats Microsoft first-party names as primary when nothing else matches' {
+        $r = Resolve-DynamicClassification -TableName 'AADGraphActivityLogs' -RuleCount 0 -MonthlyGB 0
+        $r.Classification | Should -Be 'primary'
+        $r.Category | Should -Match 'Microsoft first-party'
+        (Resolve-DynamicClassification -TableName 'GraphNotificationsActivityLogs' -RuleCount 0 -MonthlyGB 0).Classification | Should -Be 'primary'
+    }
+
+    It 'treats generic *Logs custom tables as secondary' {
+        $r = Resolve-DynamicClassification -TableName 'ContainerAppSystemLogs_CL' -RuleCount 0 -MonthlyGB 0.1
+        $r.Classification | Should -Be 'secondary'
+        $r.Category | Should -Match 'Generic log table'
+        $r.RecommendedTier | Should -Be 'datalake'
+    }
+
+    It 'prefers rule coverage over the Microsoft prefix and telemetry tokens over rules' {
+        (Resolve-DynamicClassification -TableName 'AzureSomething' -RuleCount 2 -MonthlyGB 0).Category | Should -Match 'active analytics rules'
+        (Resolve-DynamicClassification -TableName 'AzureSomethingMetrics' -RuleCount 2 -MonthlyGB 0).Classification | Should -Be 'secondary'
+    }
+
+    It 'still returns unknown for names with no signal' {
+        $r = Resolve-DynamicClassification -TableName 'Zebra_CL' -RuleCount 0 -MonthlyGB 1
+        $r.Classification | Should -Be 'unknown'
+        $r.Category | Should -Be 'Custom Log: Unknown / Custom'
+    }
+}
+
+Describe 'Connect-Sentinel' {
+    BeforeAll {
+        function Connect-AzAccount { param($SubscriptionId) }
+    }
+
+    It 'resolves the workspace over REST and returns tokens plus workspace facts' {
+        Mock Get-AzContext { [PSCustomObject]@{ Subscription = [PSCustomObject]@{ Id = 'sub' }; Tenant = [PSCustomObject]@{ Id = 'tid' } } }
+        Mock Connect-AzAccount { throw 'should not reconnect' }
+        Mock Resolve-AzToken { if ($ResourceUrl -like '*loganalytics*') { 'LA-TOKEN' } else { 'ARM-TOKEN' } }
+        Mock Invoke-AzRestWithRetry { [PSCustomObject]@{ location = 'westeurope'; properties = [PSCustomObject]@{ customerId = 'ws-guid'; retentionInDays = 90; defaultDataCollectionRuleResourceId = '/dcr' } } }
+
+        $ctx = Connect-Sentinel -SubscriptionId 'sub' -ResourceGroup 'rg' -WorkspaceName 'ws' -WarningVariable w -WarningAction SilentlyContinue
+
+        $ctx.WorkspaceId | Should -Be 'ws-guid'
+        $ctx.TenantId | Should -Be 'tid'
+        $ctx.ArmToken | Should -Be 'ARM-TOKEN'
+        $ctx.LaToken | Should -Be 'LA-TOKEN'
+        $ctx.Region | Should -Be 'westeurope'
+        $ctx.WorkspaceRetentionDays | Should -Be 90
+        $ctx.DefaultDataCollectionRuleResourceId | Should -Be '/dcr'
+        $ctx.ResourceId | Should -Be '/subscriptions/sub/resourceGroups/rg/providers/Microsoft.OperationalInsights/workspaces/ws'
+        $ctx.PSObject.Properties.Name | Should -Not -Contain 'DefenderUnified'
+        Should -Invoke Invoke-AzRestWithRetry -Times 1 -ParameterFilter { $Uri -match 'api-version=2023-09-01$' }
+        Should -Invoke Connect-AzAccount -Times 0
+    }
+
+    It 'signs in when the current context is for another subscription and warns on a WorkspaceId mismatch' {
+        $script:signedIn = $false
+        Mock Get-AzContext { if ($script:signedIn) { [PSCustomObject]@{ Subscription = [PSCustomObject]@{ Id = 'sub' }; Tenant = [PSCustomObject]@{ Id = 'tid' } } } else { [PSCustomObject]@{ Subscription = [PSCustomObject]@{ Id = 'other' }; Tenant = [PSCustomObject]@{ Id = 'tid' } } } }
+        Mock Connect-AzAccount { $script:signedIn = $true }
+        Mock Resolve-AzToken { 'tok' }
+        Mock Invoke-AzRestWithRetry { [PSCustomObject]@{ location = 'x'; properties = [PSCustomObject]@{ customerId = 'real-guid' } } }
+
+        $ctx = Connect-Sentinel -SubscriptionId 'sub' -ResourceGroup 'rg' -WorkspaceName 'ws' -WorkspaceId 'user-guid' -WarningVariable w -WarningAction SilentlyContinue
+        $ctx.WorkspaceId | Should -Be 'real-guid'
+        $ctx.WorkspaceRetentionDays | Should -BeNullOrEmpty
+        "$w" | Should -Match 'differs from resolved'
+        Should -Invoke Connect-AzAccount -Times 1 -ParameterFilter { $SubscriptionId -eq 'sub' }
+    }
+
+    It 'throws a clear error when the workspace has no customerId' {
+        Mock Get-AzContext { [PSCustomObject]@{ Subscription = [PSCustomObject]@{ Id = 'sub' }; Tenant = [PSCustomObject]@{ Id = 'tid' } } }
+        Mock Resolve-AzToken { 'tok' }
+        Mock Invoke-AzRestWithRetry { [PSCustomObject]@{ properties = [PSCustomObject]@{} } }
+        { Connect-Sentinel -SubscriptionId 'sub' -ResourceGroup 'rg' -WorkspaceName 'ws' } | Should -Throw '*customerId*'
+    }
+}
+
+Describe 'Resolve-AzToken' {
+    BeforeAll {
+        function Get-AzAccessToken { param($ResourceUrl, $TenantId, $ErrorAction) }
+    }
+
+    It 'handles SecureString and plain tokens and forwards TenantId' {
+        Mock Get-AzAccessToken { [PSCustomObject]@{ Token = (ConvertTo-SecureString 'secure-token' -AsPlainText -Force) } }
+        Resolve-AzToken -ResourceUrl 'https://x' -TenantId 't1' | Should -Be 'secure-token'
+        Should -Invoke Get-AzAccessToken -Times 1 -ParameterFilter { $TenantId -eq 't1' }
+
+        Mock Get-AzAccessToken { [PSCustomObject]@{ Token = 'plain-token' } }
+        Resolve-AzToken -ResourceUrl 'https://x' | Should -Be 'plain-token'
+        Should -Invoke Get-AzAccessToken -Times 1 -ParameterFilter { -not $PSBoundParameters.ContainsKey('TenantId') }
     }
 }
 

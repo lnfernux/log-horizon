@@ -57,8 +57,9 @@ I've had to answer *"what are we actually getting out of these logs?"* or *"what
 | What you need | Version |
 |---|---|
 | PowerShell | 7.0+ |
-| Az modules | `Az.Accounts`, `Az.Resources` |
+| Az modules | `Az.Accounts` |
 | Other modules | `PwshSpectreConsole` 2.6.3+ |
+| Optional | `Microsoft.Graph.Authentication` (for `-IncludeDefenderXDR` as a signed-in user) |
 
 If you're not already logged into Azure, the module will fire up `Connect-AzAccount` for you. If you are, it'll just carry on.
 
@@ -70,7 +71,7 @@ Pretty straight forward:
 
 ```powershell
 # Grab the dependencies
-Install-Module -Name Az.Accounts, Az.Resources -Scope CurrentUser
+Install-Module -Name Az.Accounts -Scope CurrentUser
 Install-Module -Name PwshSpectreConsole -Scope CurrentUser
 
 # Clone and import
@@ -170,6 +171,21 @@ Invoke-LogHorizon -SubscriptionId '...' -ResourceGroup 'rg' -WorkspaceName 'ws' 
 
 If you omit `-Output`, the analysis object is returned to the pipeline so you can pipe it into your own logic.
 
+### Collection cache
+
+The data collection phase (usage, rules, incidents, tables, DCRs) is cached by default so re-running against the same workspace, for example to export a second format or to reopen the TUI, takes seconds instead of minutes. The cache lives under `$env:LOCALAPPDATA\LogHorizon\cache` (override with `-CachePath`), one file per combination of subscription, resource group, workspace, `-DaysBack`, `-DetectionLookbackDays`, `-IncludeDefenderXDR` and `-IncludeDetectionAnalyzer`. Entries older than `-CacheMaxAgeMinutes` (default 60) are ignored. Tokens are never written to the cache; authentication runs on every invocation so the retention wizard always has live credentials.
+
+```powershell
+# Force a fresh collection and refresh the cache
+Invoke-LogHorizon -SubscriptionId '...' -ResourceGroup 'rg' -WorkspaceName 'ws' -RefreshCache
+
+# Never read or write the cache
+Invoke-LogHorizon -SubscriptionId '...' -ResourceGroup 'rg' -WorkspaceName 'ws' -NoCache
+
+# Accept cached data for up to a day
+Invoke-LogHorizon -SubscriptionId '...' -ResourceGroup 'rg' -WorkspaceName 'ws' -CacheMaxAgeMinutes 1440
+```
+
 ### Split KQL Suggestions
 
 The interactive TUI includes a **Split KQL Suggestions** menu that generates portal-ready split KQL for tables that are good candidates for splitting. It shows per-table KQL you can paste straight into the Sentinel split rule editor, with source attribution (knowledge base, rule analysis, or combined).
@@ -202,6 +218,10 @@ Invoke-LogHorizon -SubscriptionId '...' -ResourceGroup 'rg' -WorkspaceName 'ws' 
 | `-LakePricePerGB` | decimal | No | 0.20 | Auxiliary / Data Lake tier price per GB (ingestion + processing) |
 | `-NonInteractive` | switch | No | - | Skip the TUI dashboard and export directly (or return data to pipeline if `-Output` is omitted) |
 | `-CustomClassificationPath` | string | No | - | Path to a custom JSON file to add or override classifications |
+| `-NoCache` | switch | No | - | Do not read or write the collection cache |
+| `-RefreshCache` | switch | No | - | Collect fresh data and overwrite the cache entry |
+| `-CacheMaxAgeMinutes` | int | No | 60 | Maximum age of a cache entry to reuse (1-10080) |
+| `-CachePath` | string | No | `$env:LOCALAPPDATA\LogHorizon\cache` | Directory for cache files |
 
 ---
 
@@ -510,7 +530,7 @@ Invoke-Pester ./Tests/LogHorizon.Tests.ps1 -Output Detailed
 
 ## License
 
-MIT
+GPL-3.0. See [LICENSE](LICENSE).
 
 ## Version history
 

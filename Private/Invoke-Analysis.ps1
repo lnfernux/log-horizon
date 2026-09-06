@@ -340,7 +340,7 @@ function Invoke-Analysis {
             })
         }
 
-        # 9. Split candidate — high-volume tables with some detections that could benefit from split
+        # 9. Split candidate - high-volume tables with some detections that could benefit from split
         if (-not $t.IsFree -and
             -not $t.IsSplitTable -and
             -not $t.HasTransform -and
@@ -413,7 +413,7 @@ function Invoke-Analysis {
             Priority      = 'High'
             Type          = 'RetentionShortfall'
             TableName     = '(workspace default)'
-            Title         = "Workspace default retention is $($WorkspaceRetentionDays)d — increase to at least 90d"
+            Title         = "Workspace default retention is $($WorkspaceRetentionDays)d - increase to at least 90d"
             Detail        = "The workspace default retention is $($WorkspaceRetentionDays) days. " +
                             "A 90-day minimum is recommended as a security baseline. " +
                             "Tables inheriting the default will not meet compliance requirements."
