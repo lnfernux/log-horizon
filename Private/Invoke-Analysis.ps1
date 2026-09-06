@@ -35,6 +35,11 @@ function Invoke-Analysis {
     $platformTables = if ($RulesData.PSObject.Properties.Name -contains 'PlatformTables' -and $RulesData.PlatformTables) { @($RulesData.PlatformTables) } else { @() }
     $xdrCoverage    = if ($DefenderXDR -and $DefenderXDR.XDRTableCoverage) { $DefenderXDR.XDRTableCoverage } else { @{} }
     $knownXDRTables = if ($DefenderXDR -and $DefenderXDR.KnownXDRTables) { @($DefenderXDR.KnownXDRTables) } else { @() }
+    # The classification DB is the source of truth for which XDR tables the connector can stream
+    $knownXDRTables = @($knownXDRTables | Where-Object {
+        $c = $classMap[$_]
+        -not ($c -and $c.PSObject.Properties.Name -contains 'XdrStreamable' -and $c.XdrStreamable -eq $false)
+    })
 
     # Build retention lookup from Tables API data
     $retentionMap = @{}
@@ -72,7 +77,9 @@ function Invoke-Analysis {
         $huntCount    = if ($huntCoverage.ContainsKey($name)) { [int]$huntCoverage[$name] } else { 0 }
         $xdrRuleCount = if ($xdrCoverage.ContainsKey($name)) { [int]$xdrCoverage[$name] } else { 0 }
         $implicitCount = if ($implicitCoverage.ContainsKey($name)) { [int]$implicitCoverage[$name] } else { 0 }
-        $isPlatform   = $name -in $platformTables
+        $isPlatform   = ($name -in $platformTables) -or ($cls -and $cls.PSObject.Properties.Name -contains 'IsPlatform' -and $cls.IsPlatform -eq $true)
+        $lifecycleStatus = if ($cls -and $cls.PSObject.Properties.Name -contains 'Status') { $cls.Status } else { $null }
+        $replacedBy = if ($cls -and $cls.PSObject.Properties.Name -contains 'ReplacedBy') { @($cls.ReplacedBy) } else { @() }
         $totalCoverage = $ruleCount + $huntCount
         $effectiveCoverage = $ruleCount + $huntCount + $xdrRuleCount + $implicitCount
 
@@ -169,6 +176,8 @@ function Invoke-Analysis {
         # Schema columns from retention data
         $schemaColumns = if ($ret -and $ret.Columns) { @($ret.Columns) } else { @() }
 
+        $supportsAuxiliary = Test-TableSupportsAuxiliaryPlan -Table ([PSCustomObject]@{ TableName = $name; Plan = $tablePlan; TableSubType = $tableSubType })
+
         $splitSuggestion = Get-SplitKql -TableName $name `
                                         -Rules $(if ($rulesByTable.ContainsKey($name)) { @($rulesByTable[$name]) } else { @() }) `
                                         -HighValueFieldsDB $HighValueFields `
@@ -189,6 +198,9 @@ function Invoke-Analysis {
             XDRRules                     = $xdrRuleCount
             ImplicitRules                = $implicitCount
             IsPlatform                   = $isPlatform
+            Status                       = $lifecycleStatus
+            ReplacedBy                   = $replacedBy
+            SupportsAuxiliaryPlan        = $supportsAuxiliary
             CoverageSource               = $coverageSource
             TotalCoverage                = $totalCoverage
             EffectiveCoverage            = $effectiveCoverage
@@ -247,23 +259,58 @@ function Invoke-Analysis {
     $recommendations = [System.Collections.Generic.List[PSCustomObject]]::new()
 
     foreach ($t in $tableAnalysis) {
-        # 1. Data lake candidates: secondary + high cost + low rules (split copies are already lake data)
+        # 1. Data lake candidates: secondary + high cost + low rules (split copies are already lake data).
+        #    Only when the table can actually move: Auxiliary where the feature matrix allows it, else Basic.
         if ($t.Classification -eq 'secondary' -and
             -not $t.IsSplitTable -and
             $t.TablePlan -ne 'Auxiliary' -and
             $t.CostTier -in @('High', 'Very High') -and
             $t.DetectionTier -in @('None', 'Low')) {
 
-            # Savings = current cost minus what the same volume costs at the lake rate
-            $savings = [math]::Max(0, [math]::Round($t.EstMonthlyCostUSD - ($t.MonthlyGB * $LakePricePerGB), 2))
+            $planProbe = [PSCustomObject]@{ TableName = $t.TableName; Plan = $t.TablePlan; TableSubType = $t.TableSubType }
+            if ($t.SupportsAuxiliaryPlan) {
+                $savings = [math]::Max(0, [math]::Round($t.EstMonthlyCostUSD - ($t.MonthlyGB * $LakePricePerGB), 2))
+                $recommendations.Add([PSCustomObject]@{
+                    Priority     = 'High'
+                    Type         = 'DataLake'
+                    TableName    = $t.TableName
+                    Title        = "Move $($t.TableName) to Data Lake tier"
+                    Detail       = "Secondary source ingesting $($t.MonthlyGB) GB/mo with $($t.EffectiveCoverage) detection(s). " +
+                                   "Create summary rules to aggregate key events back to analytics tier."
+                    EstSavingsUSD = $savings
+                    CurrentCost   = $t.EstMonthlyCostUSD
+                })
+            }
+            elseif ($t.TablePlan -ne 'Basic' -and (Test-TableSupportsBasicPlan -Table $planProbe)) {
+                $savings = [math]::Max(0, [math]::Round($t.EstMonthlyCostUSD - ($t.MonthlyGB * $BasicPricePerGB), 2))
+                $recommendations.Add([PSCustomObject]@{
+                    Priority     = 'High'
+                    Type         = 'DataLake'
+                    TableName    = $t.TableName
+                    Title        = "Move $($t.TableName) to Basic plan"
+                    Detail       = "Secondary source ingesting $($t.MonthlyGB) GB/mo with $($t.EffectiveCoverage) detection(s). " +
+                                   "This table does not support the Auxiliary (Data Lake) plan; Basic is the lowest supported tier."
+                    EstSavingsUSD = $savings
+                    CurrentCost   = $t.EstMonthlyCostUSD
+                })
+            }
+            else {
+                Write-Verbose "$($t.TableName) is a data lake candidate but supports neither the Auxiliary nor the Basic plan; no tier recommendation."
+            }
+        }
+
+        # 12. Deprecated or legacy source still ingesting
+        if ($t.Status -in @('deprecated', 'legacy') -and $t.MonthlyGB -gt 0) {
+            $replacement = if (@($t.ReplacedBy).Count -gt 0) { "Replacement table(s): $(@($t.ReplacedBy) -join ', '). " } else { 'No direct replacement table is documented. ' }
+            $verb = if ($t.Status -eq 'deprecated') { 'is deprecated' } else { 'uses a legacy collection path' }
             $recommendations.Add([PSCustomObject]@{
-                Priority     = 'High'
-                Type         = 'DataLake'
-                TableName    = $t.TableName
-                Title        = "Move $($t.TableName) to Data Lake tier"
-                Detail       = "Secondary source ingesting $($t.MonthlyGB) GB/mo with $($t.EffectiveCoverage) detection(s). " +
-                               "Create summary rules to aggregate key events back to analytics tier."
-                EstSavingsUSD = $savings
+                Priority      = 'Medium'
+                Type          = 'DeprecatedSource'
+                TableName     = $t.TableName
+                Title         = "$($t.TableName) $verb"
+                Detail        = "Ingesting $($t.MonthlyGB) GB/mo into a table whose connector $verb. " + $replacement +
+                                'Migrate detections to the replacement, then retire the old connector to avoid paying for both.'
+                EstSavingsUSD = $t.EstMonthlyCostUSD
                 CurrentCost   = $t.EstMonthlyCostUSD
             })
         }
@@ -632,6 +679,23 @@ function Get-SortedRecommendation {
     @($Recommendations | Sort-Object `
         @{ Expression = { if ($prioOrder.ContainsKey("$($_.Priority)")) { $prioOrder["$($_.Priority)"] } else { 3 } } }, `
         @{ Expression = { [double]($_.EstSavingsUSD ?? 0) }; Descending = $true })
+}
+
+function Get-TableStatusLabel {
+    <#
+    .SYNOPSIS
+        Short lifecycle label for a table analysis row ("deprecated, use X, Y"
+        or "legacy"), or $null when the source has no status.
+    #>
+    [CmdletBinding()]
+    param([object]$Table)
+
+    if ($null -eq $Table -or $Table.PSObject.Properties.Name -notcontains 'Status') { return $null }
+    $status = "$($Table.Status)".Trim().ToLowerInvariant()
+    if ($status -notin 'deprecated', 'legacy') { return $null }
+    $replacement = @()
+    if ($Table.PSObject.Properties.Name -contains 'ReplacedBy') { $replacement = @($Table.ReplacedBy | Where-Object { -not [string]::IsNullOrWhiteSpace("$_") }) }
+    if ($replacement.Count -gt 0) { "$status, use $($replacement -join ', ')" } else { $status }
 }
 
 function Get-Assessment {

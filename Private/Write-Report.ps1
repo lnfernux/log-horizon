@@ -89,6 +89,21 @@ function Get-SafeEscapedText {
     Get-SpectreEscapedText $Value
 }
 
+function Get-TableNameMarkup {
+    <#
+    .SYNOPSIS
+        Escaped table name with a lifecycle badge when the source is deprecated or legacy.
+    #>
+    [CmdletBinding()]
+    param([Parameter(Mandatory)][PSCustomObject]$Table)
+
+    $name = Get-SafeEscapedText $Table.TableName
+    $label = Get-TableStatusLabel -Table $Table
+    if (-not $label) { return $name }
+    $status = ($label -split ',')[0]
+    "$name [orange3]($(Get-SafeEscapedText $status))[/]"
+}
+
 function Get-TablePlanDisplay {
     [CmdletBinding()]
     param([Parameter(Mandatory)][PSCustomObject]$Table)
@@ -258,7 +273,7 @@ function Write-Dashboard {
 
         $table += [PSCustomObject]@{
             '#'          = $rank
-            'Table'      = Get-SafeEscapedText $t.TableName
+            'Table'      = Get-TableNameMarkup -Table $t
             'Plans'      = Get-TablePlanDisplay -Table $t
             'GB/mo'      = $t.MonthlyGB
             'Cost/mo'    = $costStr
@@ -597,7 +612,7 @@ function Write-DetectionAssessmentTable {
 
         $row = [ordered]@{
             '#'              = $rank
-            'Table'          = Get-SafeEscapedText $t.TableName
+            'Table'          = Get-TableNameMarkup -Table $t
             'GB/mo'          = $t.MonthlyGB
             'Cost/mo'        = $costStr
             'Cost Tier'      = $t.CostTier
@@ -1405,7 +1420,7 @@ function Write-TableInventory {
 
         $row = [ordered]@{
             '#'          = $rank
-            'Table'      = Get-SafeEscapedText $t.TableName
+            'Table'      = Get-TableNameMarkup -Table $t
             'Plans'      = Get-TablePlanDisplay -Table $t
             'GB/mo'      = $t.MonthlyGB
             'Cost/mo'    = $costStr

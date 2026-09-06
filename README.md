@@ -25,7 +25,7 @@ I've had to answer *"what are we actually getting out of these logs?"* or *"what
 
 | Feature | Description |
 |---|---|
-| **Classification Engine** | 345-entry knowledge base covering 190+ connectors, 21 categories, with automatic heuristic fallback for unknown tables |
+| **Classification Engine** | 481-entry knowledge base covering 240+ connectors, 22 categories, with lifecycle status (deprecated/legacy plus replacement tables) and automatic heuristic fallback for unknown tables |
 | **Cost-Value Scoring** | Per-table cost tier vs detection tier matrix with combined assessment (High Value → Low Value) |
 | **Recommendations** | Prioritised actions: data lake candidates, zero-detection tables, XDR streaming waste, ingest-time filtering, retention shortfalls |
 | **Detection Mapping** | Maps analytics rules, hunting queries, and XDR detections to each table to spot coverage gaps |
@@ -252,7 +252,7 @@ The module connects to Azure and pulls data from the Log Analytics and Security 
 
 Every table gets classified through two passes:
 
-**First**, a direct lookup against the 345-entry knowledge base in `Data/log-classifications.json`. Each entry carries the connector name, primary/secondary classification, security category, MITRE data source mappings, and a recommended pricing tier.
+**First**, a direct lookup against the 481-entry knowledge base in `Data/log-classifications.json`. Each entry carries the connector name, primary/secondary classification, security category, MITRE data source mappings, and a recommended pricing tier.
 
 **If there's no match**, heuristic rules kick in:
 - Name contains security patterns like `Alert`, `Incident`, `Threat`, `Signin`, `Audit`, `Risk` -> **primary**
@@ -343,7 +343,7 @@ Rules with a score ≥ 70 and at least 5 incidents are automatically surfaced as
 
 ## The classification database
 
-Sitting at `Data/log-classifications.json`. **345 entries**, **190 connectors**, **21 categories**.
+Sitting at `Data/log-classifications.json`. **481 entries**, **243 connectors**, **22 categories**.
 
 ### What's in each entry
 
@@ -358,40 +358,50 @@ Sitting at `Data/log-classifications.json`. **345 entries**, **190 connectors**,
 | `mitreSources` | MITRE ATT&CK data source mappings |
 | `recommendedTier` | `analytics` (hot tier) or `datalake` (auxiliary candidate) |
 | `recommendedRetentionDays` | Minimum recommended total retention in days (regulatory guidance) |
-| `isFree` | Whether Microsoft ingests this one for free |
+| `isFree` | Whether Microsoft ingests this one for free (runtime uses `Usage.IsBillable` first) |
+| `status` | Optional. `deprecated` (connector retired or ingestion stopped) or `legacy` (older collection path with a documented successor) |
+| `replacedBy` | Optional. Table names to migrate to; present whenever `status` is set (may be empty) |
+| `xdrStreamable` | Optional, Defender tables only. `true` for the 21 tables the Defender XDR connector streams; `false` for portal-only and TVM tables |
+| `platform` | Optional. `true` for tables Sentinel itself consumes (`SecurityIncident`, `Usage`, `Watchlist`, ...) which never need analytics rules |
+
+Tables with a `status` show a badge in the TUI and the reports, and any that still ingest raise a `DeprecatedSource` recommendation naming the replacement. Tables with `xdrStreamable: false` are never treated as XDR streaming candidates by the XDR Checker.
 
 ### Primary vs secondary security data
 
-**Primary** (211 entries): the tables you're actually building detections on. Sign-in logs, security alerts, threat intel, audit trails, vulnerability findings, firewall hits, EDR telemetry.
+**Primary** (278 entries): the tables you're actually building detections on. Sign-in logs, security alerts, threat intel, audit trails, vulnerability findings, firewall hits, EDR telemetry.
 
-**Secondary** (133 entries): supporting stuff. Perf metrics, infrastructure diagnostics, network flow volumes, inventory snapshots, config baselines, health checks.
+**Secondary** (203 entries): supporting stuff. Perf metrics, infrastructure diagnostics, network flow volumes, inventory snapshots, config baselines, health checks.
 
 ### Categories at a glance
 
 | Category | Count | Examples |
 |---|---|---|
-| Identity & Access | 33 | `SigninLogs`, `OktaSSO`, `CyberArk_AuditEvents_CL` |
-| Network Security | 29 | `AZFWNetworkRule`, `Cloudflare_CL`, `darktrace_model_alerts_CL` |
-| Security Alerts | 26 | `SecurityAlert`, `SecurityIncident`, `SentinelOneAlerts_CL` |
-| Endpoint Detection | 22 | `DeviceProcessEvents`, `DeviceFileEvents`, `SentinelOne_CL` |
-| Cloud Control Plane | 22 | `AzureActivity`, `OfficeActivity`, `GoogleWorkspaceReports` |
-| Network Flow | 23 | `AzureNetworkAnalytics_CL`, `CommonSecurityLog`, `AZFWFatFlow` |
-| Cloud Security | 13 | `McasShadowItReporting`, `PaloAltoPrismaCloudAlertV2_CL` |
-| Email Security | 20 | `EmailEvents`, `ProofPointTAPMessagesBlockedV2_CL`, `MimecastSIEM_CL` |
-| Endpoint Telemetry | 14 | `DeviceInfo`, `SentinelOneAgents_CL`, `jamfprotecttelemetryv2_CL` |
-| Vulnerability Mgmt | 11 | `DeviceTvmSoftwareVulnerabilities`, `QualysHostDetectionV3_CL` |
-| Data Security | 12 | `PurviewDataSensitivityLogs`, `VaronisAlerts_CL`, `MimecastDLP_CL` |
-| Application Logs | 22 | `AppServiceHTTPLogs`, `FunctionAppLogs`, `DynatraceAttacks_CL` |
-| Threat Intelligence | 8 | `ThreatIntelligenceIndicator`, `CybleVisionAlerts_CL` |
+| Identity & Access | 51 | `SigninLogs`, `MicrosoftServicePrincipalSignInLogs`, `OktaSSO` |
+| Network Security | 49 | `AZFWNetworkRule`, `NSPAccessLogs`, `DarktraceModelAlerts_CL` |
+| Cloud Control Plane | 37 | `AzureActivity`, `AZKVAuditLogs`, `GoogleWorkspaceReports` |
+| Network Flow | 36 | `NTANetAnalytics`, `CommonSecurityLog`, `AZFWFatFlow` |
+| Endpoint Detection | 33 | `DeviceProcessEvents`, `CrowdStrikeAuditEvents`, `SentinelOneAlertsV2_CL` |
+| Application Logs | 32 | `AppServiceHTTPLogs`, `AppServiceAuditLogs`, `DynatraceAttacksV2_CL` |
+| Email Security | 29 | `EmailEvents`, `CampaignInfo`, `Ttp_Url_CL` |
+| Security Alerts | 29 | `SecurityAlert`, `SentinelBehaviorInfo`, `DisruptionAndResponseEvents` |
+| Vulnerability Mgmt | 23 | `DeviceTvmSoftwareVulnerabilities`, `Rapid7InsightVMCloudVulnerabilities` |
+| Cloud Security | 20 | `EnrichedMicrosoft365AuditLogs`, `OAuthAppInfo`, `PowerAppsActivity` |
+| Endpoint Telemetry | 18 | `DeviceInfo`, `Windows365NetworkLogs`, `SentinelOneAgents_CL` |
+| Posture Management | 17 | `ExposureGraphNodes`, `SecurityNestedRecommendation`, `ZTSMetadata` |
+| Data Security | 16 | `PurviewDataSensitivityLogs`, `DataSecurityEvents`, `PowerPlatformDlpActivity` |
+| Data Platform | 16 | `SQLSecurityAuditEvents`, `CDBControlPlaneRequests`, `SnowflakeLogin_CL` |
+| Platform Health | 14 | `SentinelHealth`, `Usage`, `SecurityCaseEvent` |
+| Container & K8s | 13 | `AKSAudit`, `CloudProcessEvents`, `GKEAudit` |
+| Infrastructure Diag | 13 | `AzureMetrics`, `AGWPerformanceLogs`, `ContainerAppSystemLogs` |
+| Threat Intelligence | 10 | `ThreatIntelIndicators`, `ThreatIntelObjects`, `CybleVisionAlerts_CL` |
+| Configuration Mgmt | 8 | `ConfigurationData`, `AVNMRuleCollectionChange` |
 | SAP Security | 7 | `ABAPAuditLog`, `SAPBTPAuditLog_CL`, `Onapsis_Defend_CL` |
+| Storage Access | 6 | `StorageBlobLogs`, `CloudStorageAggregatedEvents`, `AWSS3ServerAccess` |
 | IoT/OT Security | 4 | `RadiflowEvent`, `DragosAlerts_CL`, `Phosphorus_CL` |
-| Data Platform | 13 | `AzureDiagnostics`, `SnowflakeLogin_CL`, `MongoDBAudit_CL` |
-| Container & K8s | 7 | `ContainerLog`, `KubeEvents`, `GKEAudit`, `AWSEKSLogs_CL` |
-| Platform Health | 6 | `SentinelHealth`, `Watchlist`, `SOCPrimeAuditLogs_CL` |
-| Infrastructure Diag | 7 | `AzureMetrics`, `GCPComputeEngine`, `GCPMonitoring` |
-| Posture Management | 7 | `DeviceTvmSecureConfigurationAssessment`, `CortexXpanseAlerts_CL` |
-| Configuration Mgmt | 6 | `ConfigurationData`, `ESIExchangeOnlineConfig_CL` |
-| Storage Access | 5 | `StorageBlobLogs`, `StorageFileLogs`, `AWSS3ServerAccess` |
+
+### Table plan support
+
+`Data/basic-plan-tables.json` and `Data/auxiliary-plan-tables.json` list the built-in tables that the [Azure Monitor table feature matrix](https://learn.microsoft.com/en-us/azure/azure-monitor/reference/tables-features) marks as supporting the Basic and Auxiliary (Data Lake) plans. The retention wizard uses the Basic list to validate plan switches, and the `DataLake` recommendation only proposes the lake tier for tables that support it, falling back to a Basic plan suggestion where that is the lowest supported tier. DCR-based custom tables support both plans; Classic custom tables support neither. Regenerate both files with `Tools/Update-TablePlanSupport.ps1`.
 
 ### Custom classifications
 
@@ -501,7 +511,10 @@ Private/
   Write-Report.ps1           Spectre.Console TUI rendering
   Export-Report.ps1          JSON / Markdown / static HTML export with shared section renderer
 Data/
-  log-classifications.json              345-entry classification knowledge base
+  log-classifications.json              481-entry classification knowledge base
+  basic-plan-tables.json                Built-in tables that support the Basic plan (from the Azure Monitor feature matrix)
+  auxiliary-plan-tables.json            Built-in tables that support the Auxiliary / Data Lake plan
+  implicit-consumers.json               Non-KQL rule kinds to tables, plus platform tables
   high-value-fields.json                15-table split KQL knowledge base with curated fields and split hints
   field-frequency-stats.json            Community field frequency stats (generated by Build-FieldKnowledgeBase.ps1)
   custom-classifications-example.json   Example custom classification override file

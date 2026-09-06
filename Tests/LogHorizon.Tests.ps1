@@ -1252,34 +1252,90 @@ Describe 'Invoke-Analysis plan-aware pricing' {
 
     It 'computes DataLake savings as current cost minus the lake rate for the same volume' {
         $tableUsage = @(
-            [PSCustomObject]@{ TableName = 'BigSecondary'; DataGB = 300; MonthlyGB = 100; UsageRowCount = 1; EstMonthlyCostUSD = 559.00; IsFree = $false; IsFreeSource = 'usage'; ObservedPlans = @('Analytics'); ObservedPlanCount = 1; ObservedPlanBreakdown = @() }
+            [PSCustomObject]@{ TableName = 'Syslog'; DataGB = 300; MonthlyGB = 100; UsageRowCount = 1; EstMonthlyCostUSD = 559.00; IsFree = $false; IsFreeSource = 'usage'; ObservedPlans = @('Analytics'); ObservedPlanCount = 1; ObservedPlanBreakdown = @() }
         )
         $classifications = [PSCustomObject]@{
-            Classifications = @{ 'BigSecondary' = [PSCustomObject]@{ Classification = 'secondary'; Category = 'Infra'; RecommendedTier = 'datalake'; IsFree = $false; RecommendedRetentionDays = 90 } }
+            Classifications = @{ 'Syslog' = [PSCustomObject]@{ Classification = 'secondary'; Category = 'Infra'; RecommendedTier = 'datalake'; IsFree = $false; RecommendedRetentionDays = 90 } }
             KeywordGaps = @(); DatabaseEntries = 1
         }
         $result = Invoke-Analysis -TableUsage $tableUsage -Classifications $classifications -RulesData $script:pricingRules -HuntingData $script:pricingHunting -PricePerGB 5.59 -LakePricePerGB 0.20
 
         $rec = @($result.Recommendations | Where-Object Type -eq 'DataLake')[0]
         $rec | Should -Not -BeNullOrEmpty
+        $rec.Title | Should -Match 'Data Lake tier'
         # 559.00 - 100 GB x 0.20
         $rec.EstSavingsUSD | Should -Be 539
+        ($result.TableAnalysis | Where-Object TableName -eq 'Syslog').SupportsAuxiliaryPlan | Should -BeTrue
         $result.Summary.LakePricePerGB | Should -Be 0.20
         $result.Summary.BasicPricePerGB | Should -Be 1.15
     }
 
     It 'never reports negative DataLake savings' {
         $tableUsage = @(
-            [PSCustomObject]@{ TableName = 'CheapSecondary'; DataGB = 300; MonthlyGB = 100; UsageRowCount = 1; EstMonthlyCostUSD = 5; IsFree = $false; IsFreeSource = 'usage'; ObservedPlans = @('Analytics'); ObservedPlanCount = 1; ObservedPlanBreakdown = @() }
+            [PSCustomObject]@{ TableName = 'WindowsEvent'; DataGB = 300; MonthlyGB = 100; UsageRowCount = 1; EstMonthlyCostUSD = 5; IsFree = $false; IsFreeSource = 'usage'; ObservedPlans = @('Analytics'); ObservedPlanCount = 1; ObservedPlanBreakdown = @() }
         )
         $classifications = [PSCustomObject]@{
-            Classifications = @{ 'CheapSecondary' = [PSCustomObject]@{ Classification = 'secondary'; Category = 'Infra'; RecommendedTier = 'datalake'; IsFree = $false; RecommendedRetentionDays = 90 } }
+            Classifications = @{ 'WindowsEvent' = [PSCustomObject]@{ Classification = 'secondary'; Category = 'Infra'; RecommendedTier = 'datalake'; IsFree = $false; RecommendedRetentionDays = 90 } }
             KeywordGaps = @(); DatabaseEntries = 1
         }
         $result = Invoke-Analysis -TableUsage $tableUsage -Classifications $classifications -RulesData $script:pricingRules -HuntingData $script:pricingHunting -LakePricePerGB 0.20
 
         # CostTier is High by volume (100 GB) so the DataLake rule fires; savings clamp at 0
         @($result.Recommendations | Where-Object Type -eq 'DataLake')[0].EstSavingsUSD | Should -Be 0
+    }
+
+    It 'falls back to a Basic plan recommendation when the table supports Basic but not Auxiliary' {
+        $tableUsage = @(
+            [PSCustomObject]@{ TableName = 'Perf'; DataGB = 300; MonthlyGB = 100; UsageRowCount = 1; EstMonthlyCostUSD = 559.00; IsFree = $false; IsFreeSource = 'usage'; ObservedPlans = @('Analytics'); ObservedPlanCount = 1; ObservedPlanBreakdown = @() }
+        )
+        $classifications = [PSCustomObject]@{
+            Classifications = @{ 'Perf' = [PSCustomObject]@{ Classification = 'secondary'; Category = 'Infra'; RecommendedTier = 'datalake'; IsFree = $false; RecommendedRetentionDays = 90 } }
+            KeywordGaps = @(); DatabaseEntries = 1
+        }
+        $result = Invoke-Analysis -TableUsage $tableUsage -Classifications $classifications -RulesData $script:pricingRules -HuntingData $script:pricingHunting -BasicPricePerGB 1.15
+
+        $rec = @($result.Recommendations | Where-Object Type -eq 'DataLake')[0]
+        $rec.Title | Should -Be 'Move Perf to Basic plan'
+        $rec.Detail | Should -Match 'does not support the Auxiliary'
+        # 559.00 - 100 GB x 1.15
+        $rec.EstSavingsUSD | Should -Be 444
+        ($result.TableAnalysis | Where-Object TableName -eq 'Perf').SupportsAuxiliaryPlan | Should -BeFalse
+    }
+
+    It 'makes no tier recommendation when the table supports neither Auxiliary nor Basic' {
+        $tableUsage = @(
+            [PSCustomObject]@{ TableName = 'AzureDiagnostics'; DataGB = 300; MonthlyGB = 100; UsageRowCount = 1; EstMonthlyCostUSD = 559.00; IsFree = $false; IsFreeSource = 'usage'; ObservedPlans = @('Analytics'); ObservedPlanCount = 1; ObservedPlanBreakdown = @() }
+        )
+        $classifications = [PSCustomObject]@{
+            Classifications = @{ 'AzureDiagnostics' = [PSCustomObject]@{ Classification = 'secondary'; Category = 'Infra'; RecommendedTier = 'datalake'; IsFree = $false; RecommendedRetentionDays = 90 } }
+            KeywordGaps = @(); DatabaseEntries = 1
+        }
+        $result = Invoke-Analysis -TableUsage $tableUsage -Classifications $classifications -RulesData $script:pricingRules -HuntingData $script:pricingHunting
+
+        @($result.Recommendations | Where-Object Type -eq 'DataLake').Count | Should -Be 0
+        @($result.Recommendations | Where-Object Type -eq 'LowValue').Count | Should -Be 1
+    }
+
+    It 'recommends the lake tier for DCR-based custom tables and skips Classic custom tables' {
+        $tableUsage = @(
+            [PSCustomObject]@{ TableName = 'Dcr_CL'; DataGB = 300; MonthlyGB = 100; UsageRowCount = 1; EstMonthlyCostUSD = 559.00; IsFree = $false; IsFreeSource = 'usage'; ObservedPlans = @('Analytics'); ObservedPlanCount = 1; ObservedPlanBreakdown = @() },
+            [PSCustomObject]@{ TableName = 'Classic_CL'; DataGB = 300; MonthlyGB = 100; UsageRowCount = 1; EstMonthlyCostUSD = 559.00; IsFree = $false; IsFreeSource = 'usage'; ObservedPlans = @('Analytics'); ObservedPlanCount = 1; ObservedPlanBreakdown = @() }
+        )
+        $classifications = [PSCustomObject]@{
+            Classifications = @{
+                'Dcr_CL'     = [PSCustomObject]@{ Classification = 'secondary'; Category = 'Infra'; RecommendedTier = 'datalake'; IsFree = $false; RecommendedRetentionDays = 90 }
+                'Classic_CL' = [PSCustomObject]@{ Classification = 'secondary'; Category = 'Infra'; RecommendedTier = 'datalake'; IsFree = $false; RecommendedRetentionDays = 90 }
+            }
+            KeywordGaps = @(); DatabaseEntries = 2
+        }
+        $retention = @(
+            [PSCustomObject]@{ TableName = 'Dcr_CL'; Plan = 'Analytics'; RetentionInDays = 90; TotalRetentionInDays = 90; ArchiveRetentionInDays = 0; TableSubType = 'DataCollectionRuleBased' },
+            [PSCustomObject]@{ TableName = 'Classic_CL'; Plan = 'Analytics'; RetentionInDays = 90; TotalRetentionInDays = 90; ArchiveRetentionInDays = 0; TableSubType = 'Classic' }
+        )
+        $result = Invoke-Analysis -TableUsage $tableUsage -Classifications $classifications -RulesData $script:pricingRules -HuntingData $script:pricingHunting -TableRetention $retention
+
+        @($result.Recommendations | Where-Object { $_.Type -eq 'DataLake' -and $_.TableName -eq 'Dcr_CL' }).Count | Should -Be 1
+        @($result.Recommendations | Where-Object { $_.Type -eq 'DataLake' -and $_.TableName -eq 'Classic_CL' }).Count | Should -Be 0
     }
 
     It 'lets the classification database decide IsFree only when Usage had no billable flag' {
@@ -1321,19 +1377,31 @@ Describe 'Invoke-Analysis plan-aware pricing' {
 Describe 'Classification database integrity' {
     BeforeAll {
         $dbPath = Join-Path $PSScriptRoot '..\Data\log-classifications.json'
-        $script:db = Get-Content $dbPath -Raw | ConvertFrom-Json
+        $script:dbRaw = Get-Content $dbPath -Raw
+        $script:db = $script:dbRaw | ConvertFrom-Json
+        $script:dbNames = @($script:db.tableName)
+        $script:allowedCategories = @(
+            'Application Logs', 'Cloud Control Plane', 'Cloud Security', 'Configuration Management', 'Container & Kubernetes', 'Data Platform',
+            'Data Security', 'Email Security', 'Endpoint Detection', 'Endpoint Telemetry', 'Identity & Access', 'Infrastructure Diagnostics',
+            'IoT/OT Security', 'Network Flow', 'Network Security', 'Platform Health', 'Posture Management', 'SAP Security', 'Security Alerts',
+            'Storage Access', 'Threat Intelligence', 'Vulnerability Management'
+        )
     }
 
-    It 'has at least 100 entries' {
-        $script:db.Count | Should -BeGreaterOrEqual 100
+    It 'has at least 480 entries' {
+        $script:db.Count | Should -BeGreaterOrEqual 480
     }
 
-    It 'every entry has required fields' {
+    It 'every entry has required fields with allowed values' {
         foreach ($entry in $script:db) {
             $entry.tableName       | Should -Not -BeNullOrEmpty
+            $entry.connector       | Should -Not -BeNullOrEmpty -Because "$($entry.tableName) needs a connector"
+            $entry.description     | Should -Not -BeNullOrEmpty -Because "$($entry.tableName) needs a description"
             $entry.classification  | Should -BeIn @('primary', 'secondary')
-            $entry.category        | Should -Not -BeNullOrEmpty
+            $entry.category        | Should -BeIn $script:allowedCategories -Because "$($entry.tableName) category must be one of the known categories"
             $entry.recommendedTier | Should -BeIn @('analytics', 'datalake')
+            @($entry.keywords).Count | Should -BeGreaterThan 0 -Because "$($entry.tableName) needs keywords"
+            $entry.isFree | Should -BeOfType [bool]
         }
     }
 
@@ -1343,20 +1411,261 @@ Describe 'Classification database integrity' {
         }
     }
 
-    It 'free tables are correctly marked' {
-        $freeNames = @('SecurityAlert', 'SecurityIncident', 'AzureActivity', 'OfficeActivity', 'SentinelHealth', 'SentinelAudit')
+    It 'free tables are correctly marked and SentinelAudit is billable' {
+        $freeNames = @('SecurityAlert', 'SecurityIncident', 'AzureActivity', 'OfficeActivity', 'SentinelHealth', 'Heartbeat', 'Operation', 'Usage', 'Watchlist', 'ConfidentialWatchlist')
         foreach ($name in $freeNames) {
-            $entry = $script:db | Where-Object tableName -eq $name
-            if ($entry) {
-                $entry.isFree | Should -Be $true -Because "$name should be free"
-            }
+            ($script:db | Where-Object tableName -eq $name).isFree | Should -Be $true -Because "$name should be free"
         }
+        ($script:db | Where-Object tableName -eq 'SentinelAudit').isFree | Should -Be $false
     }
 
     It 'has no duplicate table names' {
-        $names = $script:db | ForEach-Object tableName
-        $dupes = $names | Group-Object | Where-Object Count -gt 1
+        $dupes = $script:dbNames | Group-Object | Where-Object Count -gt 1
         $dupes | Should -BeNullOrEmpty
+    }
+
+    It 'uses only deprecated or legacy for status and every replacedBy target exists' {
+        $withStatus = @($script:db | Where-Object { $_.PSObject.Properties.Name -contains 'status' })
+        $withStatus.Count | Should -BeGreaterOrEqual 40
+        foreach ($entry in $withStatus) {
+            $entry.status | Should -BeIn @('deprecated', 'legacy') -Because "$($entry.tableName)"
+            $entry.PSObject.Properties.Name | Should -Contain 'replacedBy' -Because "$($entry.tableName) with a status needs replacedBy (may be empty)"
+            foreach ($r in @($entry.replacedBy)) { $script:dbNames | Should -Contain $r -Because "$($entry.tableName) replacedBy '$r' must be a DB entry" }
+        }
+        foreach ($entry in ($script:db | Where-Object { $_.PSObject.Properties.Name -contains 'replacedBy' })) {
+            $entry.PSObject.Properties.Name | Should -Contain 'status' -Because "$($entry.tableName) has replacedBy without status"
+        }
+    }
+
+    It 'marks the documented deprecations' {
+        ($script:db | Where-Object tableName -eq 'ThreatIntelligenceIndicator').status | Should -Be 'deprecated'
+        ($script:db | Where-Object tableName -eq 'ThreatIntelligenceIndicator').replacedBy | Should -Be @('ThreatIntelIndicators', 'ThreatIntelObjects')
+        ($script:db | Where-Object tableName -eq 'DnsEvents').status | Should -Be 'legacy'
+        ($script:db | Where-Object tableName -eq 'DnsEvents').replacedBy | Should -Be @('ASimDnsActivityLogs')
+        ($script:db | Where-Object tableName -eq 'Okta_CL').replacedBy | Should -Be @('OktaSSO')
+        ($script:db | Where-Object tableName -eq 'Update').replacedBy | Should -BeNullOrEmpty
+        ($script:db | Where-Object tableName -eq 'darktrace_model_alerts_CL').replacedBy | Should -Contain 'DarktraceModelAlerts_CL'
+    }
+
+    It 'xdrStreamable true matches the Defender XDR connector streaming set used by Get-DefenderXDR' {
+        $streamable = @($script:db | Where-Object { $_.xdrStreamable -eq $true } | ForEach-Object tableName | Sort-Object)
+        $streamable | Should -Be @($script:KnownXDRTables | Sort-Object)
+        foreach ($n in 'DeviceTvmSoftwareInventory', 'DeviceTvmSoftwareVulnerabilities', 'DeviceTvmSecureConfigurationAssessment', 'DeviceTvmSecureConfigurationAssessmentKB', 'CloudAuditEvents', 'ExposureGraphNodes', 'GraphAPIAuditEvents', 'DeviceTvmInfoGathering') {
+            ($script:db | Where-Object tableName -eq $n).xdrStreamable | Should -Be $false -Because $n
+        }
+        foreach ($entry in ($script:db | Where-Object { $_.PSObject.Properties.Name -contains 'xdrStreamable' })) {
+            $entry.connector | Should -Match 'Defender' -Because "$($entry.tableName) xdrStreamable is only for Defender tables"
+        }
+    }
+
+    It 'platform flags match the implicit-consumers platform table list' {
+        $ic = Get-Content (Join-Path $PSScriptRoot '..\Data\implicit-consumers.json') -Raw | ConvertFrom-Json
+        $expected = @($ic.platformTables | Where-Object { $_ -in $script:dbNames } | Sort-Object)
+        $actual = @($script:db | Where-Object { $_.platform -eq $true } | ForEach-Object tableName | Sort-Object)
+        $actual | Should -Be $expected
+        $actual | Should -Contain 'Usage'
+    }
+
+    It 'contains the refreshed first-party and successor tables with corrected labels' {
+        foreach ($n in 'ThreatIntelObjects', 'MicrosoftServicePrincipalSignInLogs', 'SecurityCaseEvent', 'AKSAudit', 'AZKVAuditLogs', 'NSPAccessLogs', 'CrowdStrikeAuditEvents', 'ASimUserManagementActivityLogs', 'SentinelOneAlertsV2_CL', 'LookoutMtdV2_CL', 'SalesforceServiceCloudV3_CL', 'Rapid7InsightVMCloudVulnerabilities', 'Ttp_Url_CL', 'DynatraceAttacksV2_CL', 'HalcyonEventsV2_CL', 'CiscoUmbrellaAdminAudit_CL', 'IllumioInsights_CL', 'Usage') {
+            $script:dbNames | Should -Contain $n
+        }
+        $script:dbNames | Should -Not -Contain 'IlumioInsights'
+        ($script:db | Where-Object tableName -eq 'ThreatIntelObjects').classification | Should -Be 'primary'
+        ($script:db | Where-Object tableName -eq 'WsSecurityEvents_CL').connector | Should -Be 'WithSecure Elements'
+        ($script:db | Where-Object tableName -eq 'AlertInfo').connector | Should -Be 'Microsoft Defender XDR'
+        ($script:db | Where-Object tableName -eq 'OfficeActivity').connector | Should -Be 'Microsoft 365'
+        ($script:db | Where-Object tableName -eq 'ThreatIntelIndicators').connector | Should -Not -Be 'Threat Intelligence Platforms'
+    }
+
+    It 'contains no em dashes or escaped unicode' {
+        $script:dbRaw | Should -Not -Match ([char]0x2014)
+        $script:dbRaw | Should -Not -Match '\\u00'
+    }
+}
+
+Describe 'Table plan support data files' {
+    BeforeAll {
+        $script:basicDoc = Get-Content (Join-Path $PSScriptRoot '..\Data\basic-plan-tables.json') -Raw | ConvertFrom-Json
+        $script:auxDoc   = Get-Content (Join-Path $PSScriptRoot '..\Data\auxiliary-plan-tables.json') -Raw | ConvertFrom-Json
+    }
+
+    It 'both files carry source, generatedOn and a sorted unique table list' {
+        foreach ($doc in $script:basicDoc, $script:auxDoc) {
+            $doc.source | Should -Match '^https://learn\.microsoft\.com/.*tables-features$'
+            $doc.generatedOn | Should -Match '^\d{4}-\d{2}-\d{2}$'
+            @($doc.tables).Count | Should -BeGreaterOrEqual 450
+            @($doc.tables | Sort-Object -Unique).Count | Should -Be @($doc.tables).Count
+        }
+    }
+
+    It 'reflects the documented matrix (Basic-only, Auxiliary-only, both, neither)' {
+        $script:basicDoc.tables | Should -Contain 'Perf'
+        $script:auxDoc.tables | Should -Not -Contain 'Perf'
+        $script:auxDoc.tables | Should -Contain 'Syslog'
+        $script:basicDoc.tables | Should -Not -Contain 'Syslog'
+        $script:basicDoc.tables | Should -Contain 'AWSVPCFlow'
+        $script:auxDoc.tables | Should -Contain 'AWSVPCFlow'
+        $script:basicDoc.tables | Should -Not -Contain 'OGOAuditLogs'
+        $script:basicDoc.tables | Should -Contain 'Windows365ConnectionLogs'
+    }
+
+    It 'Get-PlanSupportedTableSet caches per plan and Test-TableSupportsAuxiliaryPlan applies the custom-table rules' {
+        $aux1 = Get-PlanSupportedTableSet -Plan Auxiliary
+        $aux2 = Get-PlanSupportedTableSet -Plan Auxiliary
+        [object]::ReferenceEquals($aux1, $aux2) | Should -BeTrue
+        ($aux1 -is [System.Collections.Generic.HashSet[string]]) | Should -BeTrue
+        $aux1.Contains('Syslog') | Should -BeTrue
+        $aux1.Contains('SYSLOG') | Should -BeTrue
+        (Get-PlanSupportedTableSet -Plan Basic).Contains('Perf') | Should -BeTrue
+        (Get-BasicPlanSupportedTableSet).Contains('Perf') | Should -BeTrue
+
+        (Test-TableSupportsAuxiliaryPlan -Table ([PSCustomObject]@{ TableName = 'Syslog'; Plan = 'Analytics' })) | Should -BeTrue
+        (Test-TableSupportsAuxiliaryPlan -Table ([PSCustomObject]@{ TableName = 'Perf'; Plan = 'Analytics' })) | Should -BeFalse
+        (Test-TableSupportsAuxiliaryPlan -Table ([PSCustomObject]@{ TableName = 'Perf'; Plan = 'Auxiliary' })) | Should -BeTrue
+        (Test-TableSupportsAuxiliaryPlan -Table ([PSCustomObject]@{ TableName = 'X_CL'; Plan = 'Analytics'; TableSubType = 'DataCollectionRuleBased' })) | Should -BeTrue
+        (Test-TableSupportsAuxiliaryPlan -Table ([PSCustomObject]@{ TableName = 'X_CL'; Plan = 'Analytics'; TableSubType = 'Classic' })) | Should -BeFalse
+        (Test-TableSupportsAuxiliaryPlan -Table ([PSCustomObject]@{ TableName = ''; Plan = 'Analytics' })) | Should -BeFalse
+    }
+}
+
+Describe 'Classification lifecycle keys' {
+    It 'Invoke-Classification surfaces Status, ReplacedBy, IsPlatform and XdrStreamable from the database' {
+        $usage = @(
+            [PSCustomObject]@{ TableName = 'ThreatIntelligenceIndicator'; MonthlyGB = 1 },
+            [PSCustomObject]@{ TableName = 'Usage'; MonthlyGB = 0.1 },
+            [PSCustomObject]@{ TableName = 'DeviceInfo'; MonthlyGB = 5 },
+            [PSCustomObject]@{ TableName = 'CloudAuditEvents'; MonthlyGB = 5 },
+            [PSCustomObject]@{ TableName = 'SecurityEvent'; MonthlyGB = 5 },
+            [PSCustomObject]@{ TableName = 'SecurityEvent_SPLT_CL'; MonthlyGB = 5 },
+            [PSCustomObject]@{ TableName = 'Zebra_CL'; MonthlyGB = 1 }
+        )
+        $r = Invoke-Classification -TableUsage $usage -RuleTableCoverage @{}
+        $c = $r.Classifications
+        $c['ThreatIntelligenceIndicator'].Status | Should -Be 'deprecated'
+        $c['ThreatIntelligenceIndicator'].ReplacedBy | Should -Be @('ThreatIntelIndicators', 'ThreatIntelObjects')
+        $c['Usage'].IsPlatform | Should -BeTrue
+        $c['Usage'].IsFree | Should -BeTrue
+        $c['DeviceInfo'].XdrStreamable | Should -BeTrue
+        $c['CloudAuditEvents'].XdrStreamable | Should -BeFalse
+        $c['SecurityEvent'].Status | Should -BeNullOrEmpty
+        $c['SecurityEvent'].XdrStreamable | Should -BeNullOrEmpty
+        $c['SecurityEvent'].IsPlatform | Should -BeFalse
+        $c['SecurityEvent_SPLT_CL'].Status | Should -BeNullOrEmpty
+        $c['SecurityEvent_SPLT_CL'].IsPlatform | Should -BeFalse
+        $c['Zebra_CL'].Status | Should -BeNullOrEmpty
+        @($c['Zebra_CL'].ReplacedBy).Count | Should -Be 0
+    }
+
+    It 'Get-ClassificationEntryStatus normalises and rejects unknown values' {
+        Get-ClassificationEntryStatus -Entry ([PSCustomObject]@{ status = ' Deprecated ' }) | Should -Be 'deprecated'
+        Get-ClassificationEntryStatus -Entry ([PSCustomObject]@{ status = 'legacy' }) | Should -Be 'legacy'
+        Get-ClassificationEntryStatus -Entry ([PSCustomObject]@{ status = 'retired' }) | Should -BeNullOrEmpty
+        Get-ClassificationEntryStatus -Entry ([PSCustomObject]@{ tableName = 'x' }) | Should -BeNullOrEmpty
+        Get-ClassificationEntryStatus -Entry $null | Should -BeNullOrEmpty
+    }
+
+    It 'defaults retention to 90 for a custom entry without recommendedRetentionDays and matches keywords in descriptions' {
+        $custom = Join-Path $TestDrive 'custom-lifecycle.json'
+        @(@{ tableName = 'NoRet_CL'; classification = 'secondary'; connector = 'Acme'; description = 'Acme widget telemetry'; keywords = @() }) | ConvertTo-Json | Set-Content $custom
+        $r = Invoke-Classification -TableUsage @([PSCustomObject]@{ TableName = 'NoRet_CL'; MonthlyGB = 1 }) -RuleTableCoverage @{} -CustomClassificationPath $custom -Keywords @('widget')
+        $r.Classifications['NoRet_CL'].RecommendedRetentionDays | Should -Be 90
+        $r.CustomEntries | Should -Be 1
+        (Test-ClassificationKeywordMatch -Entry ([PSCustomObject]@{ tableName = 'T'; connector = 'C'; description = 'Acme widget telemetry'; keywords = @() }) -Keyword 'widget') | Should -BeTrue
+        (Test-ClassificationKeywordMatch -Entry ([PSCustomObject]@{ tableName = 'T'; connector = 'Acme Cloud'; description = 'x'; keywords = @() }) -Keyword 'acme') | Should -BeTrue
+    }
+
+    It 'ConvertTo-ValidClassificationEntry passes valid lifecycle keys through and warns on a bad status' {
+        $ok = ConvertTo-ValidClassificationEntry -Entry ([PSCustomObject]@{ tableName = 'Old_CL'; classification = 'primary'; status = 'Legacy'; replacedBy = @('New_CL', ''); platform = 'true'; xdrStreamable = $false })
+        $ok.status | Should -Be 'legacy'
+        $ok.replacedBy | Should -Be @('New_CL')
+        $ok.platform | Should -BeTrue
+        $ok.xdrStreamable | Should -BeFalse
+
+        $plain = ConvertTo-ValidClassificationEntry -Entry ([PSCustomObject]@{ tableName = 'P_CL'; classification = 'primary' })
+        $plain.PSObject.Properties.Name | Should -Not -Contain 'status'
+        $plain.PSObject.Properties.Name | Should -Not -Contain 'replacedBy'
+        $plain.PSObject.Properties.Name | Should -Not -Contain 'platform'
+
+        $bad = ConvertTo-ValidClassificationEntry -Entry ([PSCustomObject]@{ tableName = 'B_CL'; classification = 'primary'; status = 'retired' }) -WarningVariable w -WarningAction SilentlyContinue
+        $bad.PSObject.Properties.Name | Should -Not -Contain 'status'
+        "$w" | Should -Match 'status must be deprecated or legacy'
+    }
+
+    It 'Get-TableStatusLabel and Get-TableNameMarkup render the lifecycle badge' {
+        Get-TableStatusLabel -Table ([PSCustomObject]@{ TableName = 'T'; Status = 'deprecated'; ReplacedBy = @('A', 'B') }) | Should -Be 'deprecated, use A, B'
+        Get-TableStatusLabel -Table ([PSCustomObject]@{ TableName = 'T'; Status = 'legacy'; ReplacedBy = @() }) | Should -Be 'legacy'
+        Get-TableStatusLabel -Table ([PSCustomObject]@{ TableName = 'T'; Status = $null }) | Should -BeNullOrEmpty
+        Get-TableStatusLabel -Table ([PSCustomObject]@{ TableName = 'T' }) | Should -BeNullOrEmpty
+        Get-TableStatusLabel -Table $null | Should -BeNullOrEmpty
+
+        Get-TableNameMarkup -Table ([PSCustomObject]@{ TableName = 'Okta_CL'; Status = 'deprecated'; ReplacedBy = @('OktaSSO') }) | Should -Be 'Okta_CL [orange3](deprecated)[/]'
+        Get-TableNameMarkup -Table ([PSCustomObject]@{ TableName = 'Plain[1]' }) | Should -Be 'Plain[[1]]'
+    }
+}
+
+Describe 'Invoke-Analysis lifecycle and XDR streamability' {
+    BeforeAll {
+        $script:lcRules = [PSCustomObject]@{ Rules = @(); TableCoverage = @{}; TotalRules = 0; EnabledRules = 0; DontCorrCount = 0; IncCorrCount = 0 }
+        $script:lcHunting = [PSCustomObject]@{ Queries = @(); TableCoverage = @{}; TotalQueries = 0 }
+    }
+
+    It 'raises a DeprecatedSource recommendation for deprecated and legacy tables that still ingest' {
+        $usage = @(
+            [PSCustomObject]@{ TableName = 'ThreatIntelligenceIndicator'; DataGB = 3; MonthlyGB = 1; EstMonthlyCostUSD = 5.59; IsFree = $false; IsFreeSource = 'usage' },
+            [PSCustomObject]@{ TableName = 'Update'; DataGB = 3; MonthlyGB = 1; EstMonthlyCostUSD = 5.59; IsFree = $false; IsFreeSource = 'usage' },
+            [PSCustomObject]@{ TableName = 'Fine'; DataGB = 3; MonthlyGB = 1; EstMonthlyCostUSD = 5.59; IsFree = $false; IsFreeSource = 'usage' }
+        )
+        $cls = [PSCustomObject]@{ Classifications = @{
+            'ThreatIntelligenceIndicator' = [PSCustomObject]@{ Classification = 'primary'; Category = 'Threat Intelligence'; RecommendedTier = 'analytics'; IsFree = $false; RecommendedRetentionDays = 365; Status = 'deprecated'; ReplacedBy = @('ThreatIntelIndicators', 'ThreatIntelObjects') }
+            'Update' = [PSCustomObject]@{ Classification = 'secondary'; Category = 'Configuration Management'; RecommendedTier = 'datalake'; IsFree = $false; RecommendedRetentionDays = 365; Status = 'legacy'; ReplacedBy = @() }
+            'Fine' = [PSCustomObject]@{ Classification = 'primary'; Category = 'X'; RecommendedTier = 'analytics'; IsFree = $false; RecommendedRetentionDays = 90 }
+        }; KeywordGaps = @(); DatabaseEntries = 3 }
+        $r = Invoke-Analysis -TableUsage $usage -Classifications $cls -RulesData $script:lcRules -HuntingData $script:lcHunting
+
+        $recs = @($r.Recommendations | Where-Object Type -eq 'DeprecatedSource')
+        $recs.Count | Should -Be 2
+        $ti = $recs | Where-Object TableName -eq 'ThreatIntelligenceIndicator'
+        $ti.Priority | Should -Be 'Medium'
+        $ti.Title | Should -Be 'ThreatIntelligenceIndicator is deprecated'
+        $ti.Detail | Should -Match 'Replacement table\(s\): ThreatIntelIndicators, ThreatIntelObjects'
+        $ti.EstSavingsUSD | Should -Be 5.59
+        $up = $recs | Where-Object TableName -eq 'Update'
+        $up.Title | Should -Match 'legacy collection path'
+        $up.Detail | Should -Match 'No direct replacement table'
+        ($r.TableAnalysis | Where-Object TableName -eq 'ThreatIntelligenceIndicator').Status | Should -Be 'deprecated'
+        ($r.TableAnalysis | Where-Object TableName -eq 'Fine').Status | Should -BeNullOrEmpty
+        @($r.Recommendations | Where-Object { $_.Type -eq 'DeprecatedSource' -and $_.TableName -eq 'Fine' }).Count | Should -Be 0
+    }
+
+    It 'treats a table as platform when the classification says so even if the implicit map does not' {
+        $usage = @([PSCustomObject]@{ TableName = 'Usage'; DataGB = 0.3; MonthlyGB = 0.1; EstMonthlyCostUSD = 0.56; IsFree = $false; IsFreeSource = 'usage' })
+        $cls = [PSCustomObject]@{ Classifications = @{ 'Usage' = [PSCustomObject]@{ Classification = 'secondary'; Category = 'Platform Health'; RecommendedTier = 'analytics'; IsFree = $false; RecommendedRetentionDays = 90; IsPlatform = $true } }; KeywordGaps = @(); DatabaseEntries = 1 }
+        $r = Invoke-Analysis -TableUsage $usage -Classifications $cls -RulesData $script:lcRules -HuntingData $script:lcHunting
+        $row = $r.TableAnalysis | Where-Object TableName -eq 'Usage'
+        $row.IsPlatform | Should -BeTrue
+        $row.Assessment | Should -Be 'Platform'
+        $row.CoverageSource | Should -Be 'platform'
+    }
+
+    It 'drops xdrStreamable=false tables from the XDR streaming set so they are never flagged by the XDR Checker' {
+        $usage = @(
+            [PSCustomObject]@{ TableName = 'DeviceTvmSoftwareInventory'; DataGB = 3; MonthlyGB = 1; EstMonthlyCostUSD = 5.59; IsFree = $false; IsFreeSource = 'usage' },
+            [PSCustomObject]@{ TableName = 'DeviceInfo'; DataGB = 3; MonthlyGB = 1; EstMonthlyCostUSD = 5.59; IsFree = $false; IsFreeSource = 'usage' }
+        )
+        $cls = [PSCustomObject]@{ Classifications = @{
+            'DeviceTvmSoftwareInventory' = [PSCustomObject]@{ Classification = 'secondary'; Category = 'Vulnerability Management'; RecommendedTier = 'datalake'; IsFree = $false; RecommendedRetentionDays = 365; XdrStreamable = $false }
+            'DeviceInfo' = [PSCustomObject]@{ Classification = 'secondary'; Category = 'Endpoint Telemetry'; RecommendedTier = 'analytics'; IsFree = $false; RecommendedRetentionDays = 180; XdrStreamable = $true }
+        }; KeywordGaps = @(); DatabaseEntries = 2 }
+        $xdr = [PSCustomObject]@{ TotalXDRRules = 0; XDRTableCoverage = @{}; KnownXDRTables = @('DeviceTvmSoftwareInventory', 'DeviceInfo', 'EmailEvents'); CustomRules = @() }
+        $ret = @([PSCustomObject]@{ TableName = 'DeviceInfo'; Plan = 'Analytics'; RetentionInDays = 90; TotalRetentionInDays = 90; ArchiveRetentionInDays = 0 })
+        $r = Invoke-Analysis -TableUsage $usage -Classifications $cls -RulesData $script:lcRules -HuntingData $script:lcHunting -DefenderXDR $xdr -TableRetention $ret
+
+        ($r.TableAnalysis | Where-Object TableName -eq 'DeviceTvmSoftwareInventory').IsXDRStreaming | Should -BeFalse
+        ($r.TableAnalysis | Where-Object TableName -eq 'DeviceTvmSoftwareInventory').XDRState | Should -BeNullOrEmpty
+        ($r.TableAnalysis | Where-Object TableName -eq 'DeviceInfo').IsXDRStreaming | Should -BeTrue
+        @($r.XdrChecker.Findings | Where-Object TableName -eq 'DeviceTvmSoftwareInventory').Count | Should -Be 0
+        @($r.XdrChecker.Findings | Where-Object { $_.Type -eq 'NotStreaming' -and $_.TableName -eq 'EmailEvents' }).Count | Should -Be 1
     }
 }
 

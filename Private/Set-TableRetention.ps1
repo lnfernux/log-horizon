@@ -84,18 +84,22 @@ function ConvertTo-TableRetentionApiValue {
     return $Value
 }
 
-function Get-BasicPlanSupportedTableSet {
+function Get-PlanSupportedTableSet {
     <#
     .SYNOPSIS
-        Returns a cached set of built-in table names that Microsoft Learn lists
-        as supporting the Basic table plan.
+        Returns a cached set of built-in table names that the Azure Monitor
+        table feature matrix lists as supporting the given plan. Regenerate
+        the underlying files with Tools/Update-TablePlanSupport.ps1.
     #>
-    if ($script:BasicPlanSupportedTableNames) {
-        return $script:BasicPlanSupportedTableNames
-    }
+    [CmdletBinding()]
+    param([Parameter(Mandatory)][ValidateSet('Basic', 'Auxiliary')][string]$Plan)
+
+    if (-not $script:PlanSupportedTableNames) { $script:PlanSupportedTableNames = @{} }
+    if ($script:PlanSupportedTableNames.ContainsKey($Plan)) { return , $script:PlanSupportedTableNames[$Plan] }
 
     $lookup = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
-    $path = Join-Path $PSScriptRoot '..\Data\basic-plan-tables.json'
+    $file = if ($Plan -eq 'Basic') { 'basic-plan-tables.json' } else { 'auxiliary-plan-tables.json' }
+    $path = Join-Path $PSScriptRoot "..\Data\$file"
     if (Test-Path $path) {
         $data = Get-Content -LiteralPath $path -Raw | ConvertFrom-Json
         foreach ($name in @($data.tables)) {
@@ -105,8 +109,39 @@ function Get-BasicPlanSupportedTableSet {
         }
     }
 
-    $script:BasicPlanSupportedTableNames = $lookup
-    return $script:BasicPlanSupportedTableNames
+    $script:PlanSupportedTableNames[$Plan] = $lookup
+    return , $lookup
+}
+
+function Get-BasicPlanSupportedTableSet {
+    <#
+    .SYNOPSIS
+        Built-in tables that support the Basic plan.
+    #>
+    return , (Get-PlanSupportedTableSet -Plan Basic)
+}
+
+function Test-TableSupportsAuxiliaryPlan {
+    <#
+    .SYNOPSIS
+        Determines whether a table can live on the Auxiliary (Data Lake) plan.
+    .DESCRIPTION
+        Built-in tables come from the Azure Monitor feature matrix; DCR-based
+        custom tables support Auxiliary while Classic custom tables do not.
+        Tables already on Auxiliary return $true.
+    #>
+    [CmdletBinding()]
+    param([Parameter(Mandatory)][PSCustomObject]$Table)
+
+    $tableName = Get-TableRetentionSourceValue -Table $Table -Names @('TableName', 'Name')
+    $currentPlan = Get-TableRetentionSourceValue -Table $Table -Names @('Plan', 'TablePlan', 'XDRState')
+    $tableSubType = Get-TableRetentionSourceValue -Table $Table -Names @('TableSubType')
+
+    if ([string]::IsNullOrWhiteSpace($tableName)) { return $false }
+    if ($currentPlan -eq 'Auxiliary') { return $true }
+    if ($tableName -match '_CL$') { return ($tableSubType -eq 'DataCollectionRuleBased') }
+
+    return (Get-PlanSupportedTableSet -Plan Auxiliary).Contains([string]$tableName)
 }
 
 function Test-TableSupportsBasicPlan {

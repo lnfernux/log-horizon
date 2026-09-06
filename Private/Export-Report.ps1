@@ -281,7 +281,9 @@ function ConvertTo-ReportSections {
         $costStr = if ($tableEntry.IsFree) { 'FREE' } else { "`$$($tableEntry.EstMonthlyCostUSD)" }
         $configuredPlan = if ($tableEntry.TablePlan) { mdEsc $tableEntry.TablePlan } else { '-' }
         $observedPlans = if ($tableEntry.ObservedPlanSummary) { mdEsc $tableEntry.ObservedPlanSummary } else { '-' }
-        [void]$mdSb.AppendLine("| $(mdEsc $tableEntry.TableName) | $(mdEsc $tableEntry.Classification) | $configuredPlan | $observedPlans | $($tableEntry.MonthlyGB) | $costStr | $($tableEntry.TotalCoverage) | $($tableEntry.HuntingQueries) | $(mdEsc $tableEntry.Assessment) |")
+        $statusNote = Get-TableStatusLabel -Table $tableEntry
+        $nameCell = if ($statusNote) { "$(mdEsc $tableEntry.TableName) ($(mdEsc $statusNote))" } else { mdEsc $tableEntry.TableName }
+        [void]$mdSb.AppendLine("| $nameCell | $(mdEsc $tableEntry.Classification) | $configuredPlan | $observedPlans | $($tableEntry.MonthlyGB) | $costStr | $($tableEntry.TotalCoverage) | $($tableEntry.HuntingQueries) | $(mdEsc $tableEntry.Assessment) |")
     }
     [void]$mdSb.AppendLine('')
 
@@ -294,7 +296,9 @@ function ConvertTo-ReportSections {
         $costStr = if ($tableEntry.IsFree) { '<span class="badge badge-savings">FREE</span>' } else { "`$$($tableEntry.EstMonthlyCostUSD)" }
         $configuredPlan = if ($tableEntry.TablePlan) { hEnc $tableEntry.TablePlan } else { '-' }
         $observedPlans = if ($tableEntry.ObservedPlanSummary) { hEnc $tableEntry.ObservedPlanSummary } else { '-' }
-        [void]$htmlSb.AppendLine("                <tr><td>$(hEnc $tableEntry.TableName)</td><td class=`"$classificationClass`">$($tableEntry.Classification.ToUpper())</td><td>$configuredPlan</td><td>$observedPlans</td><td class=`"num`">$($tableEntry.MonthlyGB)</td><td class=`"num`">$costStr</td><td class=`"num`">$($tableEntry.TotalCoverage)</td><td class=`"num`">$($tableEntry.HuntingQueries)</td><td>$(hEnc $tableEntry.Assessment)</td></tr>")
+        $statusNote = Get-TableStatusLabel -Table $tableEntry
+        $statusBadge = if ($statusNote) { " <span class=`"badge badge-status`">$(hEnc $statusNote)</span>" } else { '' }
+        [void]$htmlSb.AppendLine("                <tr><td>$(hEnc $tableEntry.TableName)$statusBadge</td><td class=`"$classificationClass`">$($tableEntry.Classification.ToUpper())</td><td>$configuredPlan</td><td>$observedPlans</td><td class=`"num`">$($tableEntry.MonthlyGB)</td><td class=`"num`">$costStr</td><td class=`"num`">$($tableEntry.TotalCoverage)</td><td class=`"num`">$($tableEntry.HuntingQueries)</td><td>$(hEnc $tableEntry.Assessment)</td></tr>")
     }
     [void]$htmlSb.AppendLine('                </tbody>')
     [void]$htmlSb.AppendLine('            </table></div>')

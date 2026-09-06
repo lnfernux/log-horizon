@@ -63,6 +63,10 @@ function Invoke-Classification {
                 RecommendedRetentionDays = if ($parentEntry -and $parentEntry.recommendedRetentionDays) { [int]$parentEntry.recommendedRetentionDays } else { 90 }
                 IsSplitTable           = $true
                 ParentTable            = $parentName
+                Status                 = $null
+                ReplacedBy             = @()
+                IsPlatform             = $false
+                XdrStreamable          = $null
             }
             continue
         }
@@ -82,6 +86,10 @@ function Invoke-Classification {
                 RecommendedRetentionDays = if ($entry.recommendedRetentionDays) { [int]$entry.recommendedRetentionDays } else { 90 }
                 IsSplitTable           = $false
                 ParentTable            = $null
+                Status                 = Get-ClassificationEntryStatus -Entry $entry
+                ReplacedBy             = @(@($entry.replacedBy) | Where-Object { -not [string]::IsNullOrWhiteSpace("$_") })
+                IsPlatform             = ($entry.platform -eq $true)
+                XdrStreamable          = if ($entry.PSObject.Properties.Name -contains 'xdrStreamable' -and $null -ne $entry.xdrStreamable) { [bool]$entry.xdrStreamable } else { $null }
             }
         }
         else {
@@ -176,7 +184,7 @@ function ConvertTo-ValidClassificationEntry {
     $isFree = $false
     if ($null -ne $Entry.isFree) { $isFree = [bool]$Entry.isFree }
 
-    [PSCustomObject]@{
+    $normalized = [ordered]@{
         tableName                = $name
         connector                = if ([string]::IsNullOrWhiteSpace("$($Entry.connector)")) { 'Custom' } else { "$($Entry.connector)" }
         classification           = $cls
@@ -188,6 +196,32 @@ function ConvertTo-ValidClassificationEntry {
         isFree                   = $isFree
         recommendedRetentionDays = $retention
     }
+
+    # Optional lifecycle keys pass through when valid
+    $status = Get-ClassificationEntryStatus -Entry $Entry
+    if ($status) { $normalized.status = $status }
+    elseif (-not [string]::IsNullOrWhiteSpace("$($Entry.status)")) { Write-Warning "Custom classification '$name': status must be deprecated or legacy (got '$($Entry.status)'); ignoring." }
+    $replacedBy = @(@($Entry.replacedBy) | Where-Object { -not [string]::IsNullOrWhiteSpace("$_") } | ForEach-Object { "$_" })
+    if ($replacedBy.Count -gt 0) { $normalized.replacedBy = $replacedBy }
+    if ($null -ne $Entry.platform) { $normalized.platform = [bool]$Entry.platform }
+    if ($null -ne $Entry.xdrStreamable) { $normalized.xdrStreamable = [bool]$Entry.xdrStreamable }
+
+    [PSCustomObject]$normalized
+}
+
+function Get-ClassificationEntryStatus {
+    <#
+    .SYNOPSIS
+        Returns 'deprecated' or 'legacy' from an entry's status key, or $null
+        when the key is absent or holds any other value.
+    #>
+    [CmdletBinding()]
+    param([object]$Entry)
+
+    if ($null -eq $Entry) { return $null }
+    $s = "$($Entry.status)".Trim().ToLowerInvariant()
+    if ($s -in 'deprecated', 'legacy') { return $s }
+    $null
 }
 
 function Resolve-DynamicClassification {
@@ -276,5 +310,9 @@ function Resolve-DynamicClassification {
         RecommendedRetentionDays = 90
         IsSplitTable           = $false
         ParentTable            = $null
+        Status                 = $null
+        ReplacedBy             = @()
+        IsPlatform             = $false
+        XdrStreamable          = $null
     }
 }
