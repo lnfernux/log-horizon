@@ -625,12 +625,16 @@ function Get-DetectionAnalyzerData {
         }
     }
 
-    # Build a unified rule list: analytics rules first, then CDRs
+    # Build a unified rule list: analytics rules first, then CDRs.
+    # RuleKey is the stable bucket key: rule id when known, display name otherwise.
     $unifiedRules = [System.Collections.Generic.List[object]]::new()
 
     if ($Rules) {
         foreach ($rule in $Rules) {
+            $ruleId = if ($rule.PSObject.Properties.Name -contains 'RuleId' -and $rule.RuleId) { "$($rule.RuleId)" } else { $null }
             $unifiedRules.Add([PSCustomObject]@{
+                RuleKey  = if ($ruleId) { $ruleId } else { "name:$($rule.RuleName)" }
+                RuleId   = $ruleId
                 RuleName = $rule.RuleName
                 Kind     = $rule.Kind
                 Enabled  = $rule.Enabled
@@ -668,7 +672,10 @@ function Get-DetectionAnalyzerData {
                 }
             }
 
+            $cdrId = if ($cdr.PSObject.Properties.Name -contains 'id' -and $cdr.id) { "cdr:$($cdr.id)" } else { $null }
             $unifiedRules.Add([PSCustomObject]@{
+                RuleKey   = if ($cdrId) { $cdrId } else { "name:$displayName" }
+                RuleId    = $cdrId
                 RuleName  = $displayName
                 Kind      = 'CustomDetection'
                 Enabled   = $isEnabled
@@ -680,45 +687,75 @@ function Get-DetectionAnalyzerData {
         }
     }
 
-    # Build incident buckets keyed by rule name
+    # Lookups: GUID tail of the rule id -> keys, display name -> keys (duplicate names map to several keys)
     $incidentBuckets = @{}
+    $keysByGuid = @{}
+    $keysByName = [System.Collections.Generic.Dictionary[string, System.Collections.Generic.List[string]]]::new([StringComparer]::OrdinalIgnoreCase)
     foreach ($rule in $unifiedRules) {
-        $incidentBuckets[$rule.RuleName] = [System.Collections.Generic.List[object]]::new()
+        $incidentBuckets[$rule.RuleKey] = [System.Collections.Generic.List[object]]::new()
+        if ($rule.RuleId) {
+            $guid = ("$($rule.RuleId)" -split '/')[-1]
+            if (-not $keysByGuid.ContainsKey($guid)) { $keysByGuid[$guid] = [System.Collections.Generic.List[string]]::new() }
+            $keysByGuid[$guid].Add($rule.RuleKey)
+        }
+        if (-not [string]::IsNullOrWhiteSpace($rule.RuleName)) {
+            if (-not $keysByName.ContainsKey($rule.RuleName)) { $keysByName[$rule.RuleName] = [System.Collections.Generic.List[string]]::new() }
+            $keysByName[$rule.RuleName].Add($rule.RuleKey)
+        }
     }
 
     foreach ($incident in $Incidents) {
-        $candidateNames = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
-        foreach ($n in @($incident.RelatedAnalyticRuleNames)) {
-            if (-not [string]::IsNullOrWhiteSpace($n)) { [void]$candidateNames.Add($n) }
+        $candidateKeys = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+
+        # 1. Rule ids (most precise)
+        foreach ($id in @($incident.RelatedAnalyticRuleIds)) {
+            if ([string]::IsNullOrWhiteSpace($id)) { continue }
+            $guid = ("$id" -split '/')[-1]
+            if ($keysByGuid.ContainsKey($guid)) { foreach ($k in $keysByGuid[$guid]) { [void]$candidateKeys.Add($k) } }
         }
 
-        # Title heuristic fallback — works for both analytics and CDR rules
-        if ($candidateNames.Count -eq 0 -and -not [string]::IsNullOrWhiteSpace($incident.Title)) {
+        # 2. Rule names
+        if ($candidateKeys.Count -eq 0) {
+            foreach ($n in @($incident.RelatedAnalyticRuleNames)) {
+                if ([string]::IsNullOrWhiteSpace($n)) { continue }
+                if ($keysByName.ContainsKey($n)) { foreach ($k in $keysByName[$n]) { [void]$candidateKeys.Add($k) } }
+            }
+        }
+
+        # 3. Title heuristic fallback - works for both analytics and CDR rules
+        if ($candidateKeys.Count -eq 0 -and -not [string]::IsNullOrWhiteSpace($incident.Title)) {
             foreach ($rule in $unifiedRules) {
+                if ([string]::IsNullOrWhiteSpace($rule.RuleName)) { continue }
                 if ($incident.Title.IndexOf($rule.RuleName, [System.StringComparison]::OrdinalIgnoreCase) -ge 0) {
-                    [void]$candidateNames.Add($rule.RuleName)
+                    [void]$candidateKeys.Add($rule.RuleKey)
                 }
             }
         }
 
-        foreach ($ruleName in $candidateNames) {
-            if ($incidentBuckets.ContainsKey($ruleName)) {
-                $incidentBuckets[$ruleName].Add($incident)
+        foreach ($key in $candidateKeys) {
+            if ($incidentBuckets.ContainsKey($key)) {
+                $incidentBuckets[$key].Add($incident)
             }
         }
     }
 
+    # Automation rules that can close incidents, computed once
+    $enabledAutoCloseRules = @($AutomationRules | Where-Object {
+        ($_.IsCloseIncidentRule -or $_.HasPlaybookAction) -and $_.Enabled
+    })
+    $distinctAutoClosed = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+
     # Compute per-rule metrics
     $ruleMetrics = [System.Collections.Generic.List[object]]::new()
     foreach ($rule in $unifiedRules) {
-        $ruleIncidents = @($incidentBuckets[$rule.RuleName])
+        $ruleIncidents = @($incidentBuckets[$rule.RuleKey])
         $total = $ruleIncidents.Count
         $closed = @($ruleIncidents | Where-Object { $_.Status -eq 'Closed' })
-        $enabledAutoCloseRules = @($AutomationRules | Where-Object {
-            ($_.IsCloseIncidentRule -or $_.HasPlaybookAction) -and $_.Enabled
-        })
 
-        $autoClosed = @()
+        $autoClosed = [System.Collections.Generic.List[object]]::new()
+        $autoClosedIds = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+        $linkedAutomation = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+
         foreach ($inc in $closed) {
             $isAutoClose = $false
 
@@ -727,13 +764,14 @@ function Get-DetectionAnalyzerData {
                 $isAutoClose = $true
             }
 
-            # Fallback: automation rule condition matching
-            if (-not $isAutoClose) {
+            # Automation rule condition matching: fallback attribution, and the source of linked rule names
+            if ($enabledAutoCloseRules.Count -gt 0) {
                 $matched = @($enabledAutoCloseRules | Where-Object {
                     Test-AutomationRuleIncidentMatch -AutomationRule $_ -IncidentTitle $inc.Title -IncidentRuleIds $inc.RelatedAnalyticRuleIds
                 })
                 if ($matched.Count -gt 0) {
                     $isAutoClose = $true
+                    foreach ($m in $matched) { if ($m.DisplayName) { [void]$linkedAutomation.Add($m.DisplayName) } }
                 }
             }
 
@@ -747,11 +785,16 @@ function Get-DetectionAnalyzerData {
             }
 
             if ($isAutoClose) {
-                $autoClosed += $inc
+                $autoClosed.Add($inc)
+                $incKey = if ($inc.IncidentId) { "$($inc.IncidentId)" } elseif ($inc.IncidentNumber) { "num:$($inc.IncidentNumber)" } else { $null }
+                if ($incKey) { [void]$autoClosedIds.Add($incKey); [void]$distinctAutoClosed.Add($incKey) }
             }
         }
 
-        $manualClosed = @($closed | Where-Object { $_ -notin $autoClosed })
+        $manualClosed = @($closed | Where-Object {
+            $k = if ($_.IncidentId) { "$($_.IncidentId)" } elseif ($_.IncidentNumber) { "num:$($_.IncidentNumber)" } else { $null }
+            -not ($k -and $autoClosedIds.Contains($k))
+        })
         $falsePositive = @($closed | Where-Object { $_.Classification -eq 'FalsePositive' })
         $benignPositive = @($closed | Where-Object { $_.Classification -eq 'BenignPositive' })
         $truePositive = @($closed | Where-Object { $_.Classification -eq 'TruePositive' })
@@ -768,6 +811,8 @@ function Get-DetectionAnalyzerData {
         $benignRatio = if ($closed.Count -gt 0) { [math]::Round(($benignPositive.Count / $closed.Count), 4) } else { 0 }
 
         $ruleMetrics.Add([PSCustomObject]@{
+            RuleKey                 = $rule.RuleKey
+            RuleId                  = $rule.RuleId
             RuleName                = $rule.RuleName
             RuleKind                = $rule.Kind
             Enabled                 = $rule.Enabled
@@ -785,16 +830,16 @@ function Get-DetectionAnalyzerData {
             FalsePositiveRatio      = $falseRatio
             BenignPositiveRatio     = $benignRatio
             AvgCloseMinutes         = $avgClose
-            LinkedAutomationRules   = @($AutomationRules | Where-Object {
-                $_.IsCloseIncidentRule -and $_.Enabled -and $_.TitleFilters.Count -gt 0
-            } | ForEach-Object DisplayName | Select-Object -Unique)
+            LinkedAutomationRules   = @($linkedAutomation | Sort-Object)
         })
     }
 
-    # Noisiness scoring — only score rules that have incident data
+    # Noisiness scoring - only score rules that have incident data, and only when
+    # the population is large enough for a percentile to carry meaning.
     $scorableMetrics = @($ruleMetrics | Where-Object { $_.IncidentsTotal -gt 0 })
+    $minScorablePopulation = 3
 
-    if ($scorableMetrics.Count -gt 0) {
+    if ($scorableMetrics.Count -ge $minScorablePopulation) {
         $volumes = @($scorableMetrics | ForEach-Object IncidentsTotal)
         $autoRatios = @($scorableMetrics | ForEach-Object AutoCloseRatio)
         $falseRatios = @($scorableMetrics | ForEach-Object FalsePositiveRatio)
@@ -806,16 +851,19 @@ function Get-DetectionAnalyzerData {
 
             $score = [math]::Round(($volumePct * 0.35) + ($autoPct * 0.40) + ($falsePct * 0.25), 2)
             Add-Member -InputObject $metric -NotePropertyName NoisinessScore -NotePropertyValue $score
+            Add-Member -InputObject $metric -NotePropertyName ScoreStatus -NotePropertyValue 'Scored'
             Add-Member -InputObject $metric -NotePropertyName PercentileVolume -NotePropertyValue $volumePct
             Add-Member -InputObject $metric -NotePropertyName PercentileAutoClose -NotePropertyValue $autoPct
             Add-Member -InputObject $metric -NotePropertyName PercentileFalsePositive -NotePropertyValue $falsePct
         }
     }
 
-    # Rules with no incidents get null score (listing-only in UI)
+    # Rules without a score: no incidents, or too few scorable rules for a percentile
     foreach ($metric in $ruleMetrics) {
         if (-not ($metric.PSObject.Properties.Name -contains 'NoisinessScore')) {
+            $status = if ($metric.IncidentsTotal -gt 0) { 'InsufficientSample' } else { 'NoIncidents' }
             Add-Member -InputObject $metric -NotePropertyName NoisinessScore -NotePropertyValue $null
+            Add-Member -InputObject $metric -NotePropertyName ScoreStatus -NotePropertyValue $status
             Add-Member -InputObject $metric -NotePropertyName PercentileVolume -NotePropertyValue $null
             Add-Member -InputObject $metric -NotePropertyName PercentileAutoClose -NotePropertyValue $null
             Add-Member -InputObject $metric -NotePropertyName PercentileFalsePositive -NotePropertyValue $null
@@ -849,7 +897,9 @@ function Get-DetectionAnalyzerData {
             RulesAnalyzed = $ruleMetrics.Count
             NoisyRules = $noisyRules.Count
             IncidentsAnalyzed = $Incidents.Count
-            AutoClosedIncidents = @($ruleMetrics | Measure-Object IncidentsAutoClosed -Sum).Sum
+            AutoClosedIncidents = $distinctAutoClosed.Count
+            ScorableRules = $scorableMetrics.Count
+            MinScorablePopulation = $minScorablePopulation
             CustomDetectionRules = $cdrMetrics.Count
             CDRCorrelatedIncidents = $cdrCorrelated
         }
@@ -975,6 +1025,12 @@ function Get-XdrCheckerData {
 }
 
 function Get-PercentileRank {
+    <#
+    .SYNOPSIS
+        Percentage of the population less than or equal to Value. Returns 0 when
+        the population is empty or flat (no relative signal), so a single rule or
+        an all-equal set is never ranked as noisy.
+    #>
     [CmdletBinding()]
     param(
         [double]$Value,
@@ -983,10 +1039,7 @@ function Get-PercentileRank {
 
     $clean = @($Population | Where-Object { $null -ne $_ } | ForEach-Object { [double]$_ })
     if ($clean.Count -eq 0) { return 0 }
-    if ($clean.Count -eq 1) { return 100 }
 
-    # If all values are identical, percentile carries no relative signal.
-    # Return 0 so rules are not falsely classified as noisy when everything is flat (for example all zeros).
     $min = ($clean | Measure-Object -Minimum).Minimum
     $max = ($clean | Measure-Object -Maximum).Maximum
     if ($min -eq $max) { return 0 }
@@ -996,6 +1049,15 @@ function Get-PercentileRank {
 }
 
 function Test-AutomationRuleIncidentMatch {
+    <#
+    .SYNOPSIS
+        Decides whether an automation rule's modelled conditions apply to an incident.
+    .DESCRIPTION
+        Sentinel ANDs all conditions on a rule, so when both an analytic-rule-id group
+        and a title group are present both must match. A rule whose conditions are
+        not modelled here (severity, status, tactics, entities) is treated as a match,
+        the same as a rule with no conditions at all.
+    #>
     [CmdletBinding()]
     param(
         [PSCustomObject]$AutomationRule,
@@ -1003,44 +1065,78 @@ function Test-AutomationRuleIncidentMatch {
         [string[]]$IncidentRuleIds
     )
 
-    # Blanket close rule: no conditions at all means it matches everything
     if (-not $AutomationRule.HasConditions) { return $true }
 
-    # Check analytic rule ID conditions
-    $ruleIdFilters = @($AutomationRule.RuleIdFilters)
-    if ($ruleIdFilters.Count -gt 0 -and $IncidentRuleIds.Count -gt 0) {
+    $ruleIdFilters = @($AutomationRule.RuleIdFilters | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+    $titleConditions = @(Get-AutomationTitleConditions -AutomationRule $AutomationRule)
+
+    # Only unmodelled conditions (severity, status, tactics ...) - cannot exclude, so it applies
+    if ($ruleIdFilters.Count -eq 0 -and $titleConditions.Count -eq 0) { return $true }
+
+    if ($ruleIdFilters.Count -gt 0) {
+        $idMatch = $false
         foreach ($filter in $ruleIdFilters) {
-            foreach ($incidentRuleId in $IncidentRuleIds) {
-                # Exact match or GUID-tail match for ARM resource IDs
-                if ($incidentRuleId -eq $filter) { return $true }
-                $filterGuid = ($filter -split '/')[-1]
+            $filterGuid = ($filter -split '/')[-1]
+            foreach ($incidentRuleId in @($IncidentRuleIds)) {
+                if ([string]::IsNullOrWhiteSpace($incidentRuleId)) { continue }
+                if ($incidentRuleId -eq $filter) { $idMatch = $true; break }
                 $incidentGuid = ($incidentRuleId -split '/')[-1]
-                if ($filterGuid -and $incidentGuid -and $filterGuid -eq $incidentGuid) { return $true }
+                if ($filterGuid -and $incidentGuid -and $filterGuid -eq $incidentGuid) { $idMatch = $true; break }
             }
+            if ($idMatch) { break }
         }
+        if (-not $idMatch) { return $false }
     }
 
-    # Check title conditions with operator awareness
-    if ([string]::IsNullOrWhiteSpace($IncidentTitle)) { return $false }
-
-    $titleFilters = @($AutomationRule.TitleFilters)
-    $titleOperators = @($AutomationRule.TitleOperators)
-    for ($i = 0; $i -lt $titleFilters.Count; $i++) {
-        $filter = $titleFilters[$i]
-        if ([string]::IsNullOrWhiteSpace($filter)) { continue }
-        $op = if ($i -lt $titleOperators.Count) { $titleOperators[$i] } else { 'Contains' }
-
-        switch ($op) {
-            'Equals'     { if ($IncidentTitle -eq $filter) { return $true } }
-            'StartsWith' { if ($IncidentTitle.StartsWith($filter, [System.StringComparison]::OrdinalIgnoreCase)) { return $true } }
-            'EndsWith'   { if ($IncidentTitle.EndsWith($filter, [System.StringComparison]::OrdinalIgnoreCase)) { return $true } }
-            default {
-                # Contains or unknown operator: substring match; also support wildcard patterns
-                $pattern = [regex]::Escape($filter).Replace('\*', '.*')
-                if ($IncidentTitle -match $pattern) { return $true }
+    if ($titleConditions.Count -gt 0) {
+        if ([string]::IsNullOrWhiteSpace($IncidentTitle)) { return $false }
+        $titleMatch = $false
+        foreach ($cond in $titleConditions) {
+            $filter = $cond.Value
+            switch ($cond.Operator) {
+                'Equals'     { if ($IncidentTitle -eq $filter) { $titleMatch = $true } }
+                'StartsWith' { if ($IncidentTitle.StartsWith($filter, [System.StringComparison]::OrdinalIgnoreCase)) { $titleMatch = $true } }
+                'EndsWith'   { if ($IncidentTitle.EndsWith($filter, [System.StringComparison]::OrdinalIgnoreCase)) { $titleMatch = $true } }
+                default {
+                    # Contains or unknown operator: substring match; also support wildcard patterns
+                    $pattern = [regex]::Escape($filter).Replace('\*', '.*')
+                    if ($IncidentTitle -match $pattern) { $titleMatch = $true }
+                }
             }
+            if ($titleMatch) { break }
         }
+        if (-not $titleMatch) { return $false }
     }
 
-    return $false
+    return $true
+}
+
+function Get-AutomationTitleConditions {
+    <#
+    .SYNOPSIS
+        Returns the rule's title conditions as (Value, Operator) pairs. Prefers the
+        TitleConditions property; falls back to zipping TitleFilters with TitleOperators
+        (missing operators default to Contains).
+    #>
+    [CmdletBinding()]
+    param([PSCustomObject]$AutomationRule)
+
+    $result = [System.Collections.Generic.List[object]]::new()
+    if ($AutomationRule.PSObject.Properties.Name -contains 'TitleConditions' -and $AutomationRule.TitleConditions) {
+        foreach ($c in @($AutomationRule.TitleConditions)) {
+            if ([string]::IsNullOrWhiteSpace("$($c.Value)")) { continue }
+            $op = if ([string]::IsNullOrWhiteSpace("$($c.Operator)")) { 'Contains' } else { "$($c.Operator)" }
+            $result.Add([PSCustomObject]@{ Value = "$($c.Value)"; Operator = $op })
+        }
+        return @($result)
+    }
+
+    $filters = @($AutomationRule.TitleFilters)
+    $operators = @($AutomationRule.TitleOperators)
+    for ($i = 0; $i -lt $filters.Count; $i++) {
+        if ([string]::IsNullOrWhiteSpace("$($filters[$i])")) { continue }
+        $op = if ($i -lt $operators.Count -and -not [string]::IsNullOrWhiteSpace("$($operators[$i])")) { "$($operators[$i])" } else { 'Contains' }
+        $result.Add([PSCustomObject]@{ Value = "$($filters[$i])"; Operator = $op })
+    }
+    @($result)
 }

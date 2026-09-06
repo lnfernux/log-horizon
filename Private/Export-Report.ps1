@@ -688,6 +688,9 @@ function ConvertTo-ReportSections {
         [void]$mdSb.AppendLine("**Rules analyzed:** $($daSummary.RulesAnalyzed)  ")
         [void]$mdSb.AppendLine("**Noisy rules (score >= 70):** $($daSummary.NoisyRules)  ")
         [void]$mdSb.AppendLine("**Incidents analyzed:** $($daSummary.IncidentsAnalyzed)  ")
+        if ($daSummary.ScorableRules -gt 0 -and $daSummary.ScorableRules -lt $daSummary.MinScorablePopulation) {
+            [void]$mdSb.AppendLine("**Note:** only $($daSummary.ScorableRules) rule(s) have incidents; noisiness scores need at least $($daSummary.MinScorablePopulation) rules to compare against, so scores are N/A.  ")
+        }
         if ($daSummary.CustomDetectionRules -gt 0) {
             [void]$mdSb.AppendLine("**Custom Detection Rules:** $($daSummary.CustomDetectionRules) ($($daSummary.CDRCorrelatedIncidents) with incidents)  ")
         }

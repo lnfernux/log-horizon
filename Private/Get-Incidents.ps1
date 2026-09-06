@@ -14,8 +14,9 @@ function Get-Incidents {
     $headers = @{ Authorization = "Bearer $($Context.ArmToken)" }
     $since = (Get-Date).ToUniversalTime().AddDays(-$DaysBack).ToString('o')
     $escapedSince = [System.Uri]::EscapeDataString("properties/createdTimeUtc ge $since")
+    # $top max is 1000 per the Incidents List API
     $uri = "https://management.azure.com$($Context.ResourceId)" +
-           "/providers/Microsoft.SecurityInsights/incidents?api-version=2021-10-01&`$filter=$escapedSince"
+           "/providers/Microsoft.SecurityInsights/incidents?api-version=2025-09-01&`$top=1000&`$filter=$escapedSince"
 
     $allIncidents = [System.Collections.Generic.List[object]]::new()
     $maxPages = 1000
@@ -32,6 +33,8 @@ function Get-Incidents {
             break
         }
     } while ($uri)
+
+    Write-Verbose "Fetched $($allIncidents.Count) incident(s) across $pageCount page(s)."
 
     $normalized = foreach ($incident in $allIncidents) {
         $props = $incident.properties
@@ -53,7 +56,7 @@ function Get-Incidents {
             RelatedAnalyticRuleIds     = @(Get-NormalizedArray -Value $props.relatedAnalyticRuleIds)
             RelatedAnalyticRuleNames   = @(Get-NormalizedArray -Value $props.relatedAnalyticRuleNames)
             Owner                      = if ($props.owner) { $props.owner.userPrincipalName } else { $null }
-            Raw                         = $incident
+            Etag                       = $incident.etag
         }
     }
 
@@ -96,9 +99,11 @@ function Get-AutoCloseFromHealth {
     .SYNOPSIS
         Queries SentinelHealth for automation rule run events to determine auto-closed incidents.
     .DESCRIPTION
-        Checks if SentinelHealth table is available (health monitoring enabled), then queries for
-        automation rule run events. Cross-references with known close-incident automation rules
-        to return a set of incident numbers that were auto-closed.
+        Queries SentinelHealth for automation rule run events and returns the set of
+        incident numbers touched by the supplied close-incident automation rules.
+        Without CloseRuleNames there is nothing to attribute, so an empty set is
+        returned rather than treating every automation run (tagging, assignment) as
+        an auto-close. Returns $null when the SentinelHealth table is not available.
     .OUTPUTS
         Hashtable of IncidentNumber (int) -> $true, or $null if SentinelHealth is unavailable.
     #>
@@ -109,25 +114,17 @@ function Get-AutoCloseFromHealth {
         [string[]]$CloseRuleNames = @()
     )
 
+    $CloseRuleNames = @($CloseRuleNames | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+    if ($CloseRuleNames.Count -eq 0) {
+        Write-Verbose 'No enabled close-incident automation rules supplied; skipping SentinelHealth auto-close attribution.'
+        return @{}
+    }
+
     $headers = @{
         Authorization  = "Bearer $($Context.LaToken)"
         'Content-Type' = 'application/json'
     }
     $baseUri = "https://api.loganalytics.io/v1/workspaces/$($Context.WorkspaceId)/query"
-
-    # Check if SentinelHealth table exists
-    $checkQuery = 'SentinelHealth | take 1'
-    $checkBody = @{ query = $checkQuery } | ConvertTo-Json -Compress
-    try {
-        $checkResponse = Invoke-AzRestWithRetry -Uri $baseUri -Method Post -Headers $headers -Body $checkBody
-        if (-not $checkResponse.tables -or $checkResponse.tables[0].rows.Count -eq 0) {
-            Write-Verbose 'SentinelHealth table exists but has no data.'
-        }
-    }
-    catch {
-        Write-Verbose "SentinelHealth table not available: $_"
-        return $null
-    }
 
     # Query automation rule run events
     $query = @"
@@ -148,28 +145,48 @@ SentinelHealth
         $response = Invoke-AzRestWithRetry -Uri $baseUri -Method Post -Headers $headers -Body $body
     }
     catch {
-        Write-Warning "Failed to query SentinelHealth for auto-close data: $_"
+        if (Test-KqlTableMissingError -ErrorRecord $_ -TableName 'SentinelHealth') {
+            Write-Verbose 'SentinelHealth table not available (health monitoring not enabled).'
+        }
+        else {
+            Write-Warning "Failed to query SentinelHealth for auto-close data: $($_.Exception.Message)"
+        }
         return $null
     }
 
-    $rows = $response.tables[0].rows
+    $rows = @($response.tables[0].rows)
     Write-Verbose "SentinelHealth returned $($rows.Count) automation rule run event(s)."
 
-    if ($rows.Count -eq 0) {
-        return @{}
-    }
-
-    # If we have close rule names, filter to only those rules; otherwise return all
     $autoClosedSet = @{}
     foreach ($row in $rows) {
         $incidentNum = [int]$row[0]
         $ruleName    = "$($row[1])"
 
-        if ($CloseRuleNames.Count -eq 0 -or $ruleName -in $CloseRuleNames) {
+        if ($ruleName -in $CloseRuleNames) {
             $autoClosedSet[$incidentNum] = $true
         }
     }
 
     Write-Verbose "Identified $($autoClosedSet.Count) auto-closed incident(s) from SentinelHealth."
     $autoClosedSet
+}
+
+function Test-KqlTableMissingError {
+    <#
+    .SYNOPSIS
+        True when a Log Analytics query error indicates the table does not exist
+        in the workspace (semantic error, "Failed to resolve table").
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][System.Management.Automation.ErrorRecord]$ErrorRecord,
+        [string]$TableName
+    )
+
+    $text = "$($ErrorRecord.Exception.Message) $($ErrorRecord.ErrorDetails.Message)"
+    if ($text -match '(?i)SemanticError|Failed to resolve (table|scalar expression)|could not be resolved') {
+        if ([string]::IsNullOrWhiteSpace($TableName)) { return $true }
+        return ($text -match [regex]::Escape($TableName))
+    }
+    $false
 }

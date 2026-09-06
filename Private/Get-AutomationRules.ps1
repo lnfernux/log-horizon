@@ -38,7 +38,6 @@ function Get-AutomationRules {
         # Detect close action: check for Closed or Resolved status
         $closeAction = $actions | Where-Object {
             $_.actionType -eq 'ModifyProperties' -and
-            $_.order -ge 0 -and
             $_.actionConfiguration -and
             ($_.actionConfiguration.status -eq 'Closed' -or $_.actionConfiguration.status -eq 'Resolved')
         }
@@ -46,8 +45,9 @@ function Get-AutomationRules {
         # Detect playbook action: automation rule triggers a playbook (may close incidents indirectly)
         $playbookAction = $actions | Where-Object { $_.actionType -eq 'RunPlaybook' }
 
-        $titleFilters = [System.Collections.Generic.List[string]]::new()
-        $titleOperators = [System.Collections.Generic.List[string]]::new()
+        # Title conditions are kept as (Value, Operator) pairs so de-duplication never misaligns them
+        $titleConditions = [System.Collections.Generic.List[object]]::new()
+        $titleSeen = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
         $ruleIdFilters = [System.Collections.Generic.List[string]]::new()
         $hasConditions = $conditions.Count -gt 0
 
@@ -73,47 +73,46 @@ function Get-AutomationRules {
 
             # Title conditions
             if ($propertyName -match 'Title') {
-                $value = $cond.conditionProperties.propertyValues
-                if ($value -is [System.Array]) {
-                    foreach ($item in $value) {
-                        if (-not [string]::IsNullOrWhiteSpace("$item")) {
-                            [void]$titleFilters.Add("$item")
-                            [void]$titleOperators.Add($operator)
-                        }
+                foreach ($item in @($cond.conditionProperties.propertyValues)) {
+                    if ([string]::IsNullOrWhiteSpace("$item")) { continue }
+                    if ($titleSeen.Add("$operator|$item")) {
+                        [void]$titleConditions.Add([PSCustomObject]@{ Value = "$item"; Operator = $operator })
                     }
-                } elseif (-not [string]::IsNullOrWhiteSpace("$value")) {
-                    [void]$titleFilters.Add("$value")
-                    [void]$titleOperators.Add($operator)
                 }
             }
 
             # Analytic rule ID conditions
             if ($propertyName -match 'AnalyticRuleIds') {
-                $value = $cond.conditionProperties.propertyValues
-                if ($value -is [System.Array]) {
-                    foreach ($item in $value) {
-                        if (-not [string]::IsNullOrWhiteSpace("$item")) {
-                            [void]$ruleIdFilters.Add("$item")
-                        }
+                foreach ($item in @($cond.conditionProperties.propertyValues)) {
+                    if (-not [string]::IsNullOrWhiteSpace("$item")) {
+                        [void]$ruleIdFilters.Add("$item")
                     }
-                } elseif (-not [string]::IsNullOrWhiteSpace("$value")) {
-                    [void]$ruleIdFilters.Add("$value")
                 }
             }
+        }
+
+        # The API exposes the enabled flag under triggeringLogic.isEnabled
+        $isEnabled = if ($null -ne $props.triggeringLogic -and $null -ne $props.triggeringLogic.isEnabled) {
+            [bool]$props.triggeringLogic.isEnabled
+        } elseif ($null -ne $props.isEnabled) {
+            [bool]$props.isEnabled
+        } else {
+            $false
         }
 
         [PSCustomObject]@{
             AutomationRuleId      = $rule.name
             DisplayName           = $props.displayName
-            Enabled               = [bool]$props.isEnabled
+            Enabled               = $isEnabled
             Order                 = [int]$props.order
             TriggersOn            = $props.triggeringLogic.triggersOn
             TriggersWhen          = $props.triggeringLogic.triggersWhen
             IsCloseIncidentRule   = $null -ne $closeAction
             HasPlaybookAction     = $null -ne $playbookAction
             HasConditions         = $hasConditions
-            TitleFilters          = @($titleFilters | Select-Object -Unique)
-            TitleOperators        = @($titleOperators)
+            TitleConditions       = @($titleConditions)
+            TitleFilters          = @($titleConditions | ForEach-Object Value)
+            TitleOperators        = @($titleConditions | ForEach-Object Operator)
             RuleIdFilters         = @($ruleIdFilters | Select-Object -Unique)
             Conditions            = $conditions
             Actions               = $actions

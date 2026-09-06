@@ -109,7 +109,8 @@ function Invoke-LogHorizon {
             try { $result.Incidents = Get-Incidents -Context $ctx -DaysBack $DetectionLookbackDays } catch { Write-Verbose "Get-Incidents failed: $($_.Exception.Message)" }
             try { $result.AutomationRules = Get-AutomationRules -Context $ctx } catch { Write-Verbose "Get-AutomationRules failed: $($_.Exception.Message)" }
             try {
-                $result.AutoCloseHealth = Get-AutoCloseFromHealth -Context $ctx -DaysBack $DetectionLookbackDays
+                $closeRuleNames = @($result.AutomationRules | Where-Object { $_.Enabled -and ($_.IsCloseIncidentRule -or $_.HasPlaybookAction) } | ForEach-Object DisplayName)
+                $result.AutoCloseHealth = Get-AutoCloseFromHealth -Context $ctx -DaysBack $DetectionLookbackDays -CloseRuleNames $closeRuleNames
             } catch { Write-Verbose "Get-AutoCloseFromHealth failed: $($_.Exception.Message)" }
         }
 

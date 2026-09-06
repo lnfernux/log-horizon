@@ -267,7 +267,7 @@ When you pass `-IncludeDetectionAnalyzer`, the module fetches recent incidents a
 | Metric | How it's calculated |
 |---|---|
 | Incidents total | Count of incidents linked to the rule |
-| AutoClose ratio | Incidents closed by automation rules ÷ total incidents. Primary source: SentinelHealth table (definitive match via incident number). Fallback: operator-aware title matching against automation rule conditions. |
+| AutoClose ratio | Incidents closed by automation rules ÷ total incidents. Primary source: SentinelHealth table (automation rule runs by enabled close-incident or playbook rules, matched on incident number). Fallback: automation rule condition matching (analytic rule id and title conditions, ANDed like Sentinel does). Rules whose conditions are only severity/status/tactics are treated as applying to every incident. |
 | FalsePositive ratio | Incidents classified as false positive ÷ total incidents |
 
 **Noisiness score formula**:
@@ -289,7 +289,9 @@ Score = (Volume_percentile × 0.35) + (AutoClose_percentile × 0.40) + (FalsePos
 | ≥ 70 | Noisy | Rule likely needs tuning or disabling |
 | ≥ 50 | Watch | Rule shows early signs of noisiness |
 | < 50 | Healthy | Rule is within normal range |
-| N/A | — | Rule has no correlated incidents (no score possible) |
+| N/A | — | Rule has no correlated incidents, or fewer than 3 rules have incidents so there is nothing to rank against |
+
+Incidents are bucketed by analytic rule id (falling back to rule name, then title), so two rules sharing a display name are scored separately.
 
 Rules with a score ≥ 70 and at least 5 incidents are automatically surfaced as **High-priority recommendations** in the Recommendations view.
 

@@ -69,12 +69,14 @@ function Get-AnalyticsRules {
 
     Write-Verbose "Fetched $($allRules.Count) analytics rule(s) across $pageCount page(s)."
 
+    # TableCoverage counts enabled rules only; AllRuleTableCoverage includes disabled rules
     $tableCoverage = @{}
+    $allRuleTableCoverage = @{}
     $rules = foreach ($rule in $allRules) {
         $kind = $rule.kind
         $query = $null
         $displayName = $rule.properties.displayName
-        $enabled = $rule.properties.enabled
+        $enabled = [bool]$rule.properties.enabled
         $description = $rule.properties.description
 
         # Parse Defender correlation tags from description
@@ -84,23 +86,25 @@ function Get-AnalyticsRules {
         switch ($kind) {
             'Scheduled'           { $query = $rule.properties.query }
             'NRT'                 { $query = $rule.properties.query }
-            'MicrosoftSecurityIncidentCreation' {
-                $query = $null
-            }
-            'Fusion' { $query = $null }
+            default               { $query = $null }   # Fusion, MicrosoftSecurityIncidentCreation, ThreatIntelligence, MLBehaviorAnalytics carry no KQL
         }
 
         $tables = @()
         if ($query) {
-            $tables = Get-TablesFromKql -Kql $query
+            $tables = @(Get-TablesFromKql -Kql $query)
         }
 
         foreach ($t in $tables) {
-            if (-not $tableCoverage.ContainsKey($t)) { $tableCoverage[$t] = 0 }
-            $tableCoverage[$t]++
+            if (-not $allRuleTableCoverage.ContainsKey($t)) { $allRuleTableCoverage[$t] = 0 }
+            $allRuleTableCoverage[$t]++
+            if ($enabled) {
+                if (-not $tableCoverage.ContainsKey($t)) { $tableCoverage[$t] = 0 }
+                $tableCoverage[$t]++
+            }
         }
 
         [PSCustomObject]@{
+            RuleId                  = $rule.name
             RuleName                = $displayName
             Kind                    = $kind
             Enabled                 = $enabled
@@ -114,9 +118,10 @@ function Get-AnalyticsRules {
     }
 
     [PSCustomObject]@{
-        Rules         = $rules
-        TableCoverage = $tableCoverage
-        TotalRules    = $allRules.Count
+        Rules                = @($rules)
+        TableCoverage        = $tableCoverage
+        AllRuleTableCoverage = $allRuleTableCoverage
+        TotalRules           = $allRules.Count
         EnabledRules  = @($rules | Where-Object Enabled).Count
         DontCorrCount = @($rules | Where-Object ExcludedFromCorrelation).Count
         IncCorrCount  = @($rules | Where-Object IncludedInCorrelation).Count

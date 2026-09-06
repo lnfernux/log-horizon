@@ -1729,6 +1729,12 @@ function Write-DetectionAnalyzer {
     $metrics = @($scored) + @($unscored)
     $displayMetrics = @($metrics | Select-Object -First 15)
 
+    $daSummary = $Analysis.DetectionAnalyzer.Summary
+    if ($daSummary.ScorableRules -gt 0 -and $daSummary.ScorableRules -lt $daSummary.MinScorablePopulation) {
+        Write-SpectreHost "[yellow]Only $($daSummary.ScorableRules) rule(s) have incidents; noisiness scores need at least $($daSummary.MinScorablePopulation) to compare against. Scores shown as N/A.[/]"
+        Write-SpectreHost ""
+    }
+
     $width = Get-ConsoleWidth
     $showKind = ($width -ge 100)
     # Reserve space for table borders + other columns; remaining goes to rule name
