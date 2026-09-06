@@ -197,9 +197,8 @@ function ConvertTo-ReportSections {
 
     # - 2. Recommendations -
     if ($Analysis.Recommendations.Count -gt 0) {
-        $sortedRecs = $Analysis.Recommendations | Sort-Object @{Expression={
-            switch ($_.Priority) { 'High' { 1 } 'Medium' { 2 } 'Low' { 3 } default { 4 } }
-        }}
+        # Already ordered by Invoke-Analysis (Get-SortedRecommendation)
+        $sortedRecs = @($Analysis.Recommendations)
 
         $mdSb = [System.Text.StringBuilder]::new()
         [void]$mdSb.AppendLine('## Recommendations')

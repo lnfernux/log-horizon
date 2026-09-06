@@ -31,8 +31,10 @@ function Invoke-Analysis {
     $classMap       = $Classifications.Classifications   # hashtable
     $ruleCoverage   = $RulesData.TableCoverage            # hashtable: table -> count
     $huntCoverage   = $HuntingData.TableCoverage          # hashtable: table -> count
-    $xdrCoverage    = if ($DefenderXDR) { $DefenderXDR.XDRTableCoverage } else { @{} }
-    $knownXDRTables = if ($DefenderXDR) { $DefenderXDR.KnownXDRTables } else { @() }
+    $implicitCoverage = if ($RulesData.PSObject.Properties.Name -contains 'ImplicitCoverage' -and $RulesData.ImplicitCoverage) { $RulesData.ImplicitCoverage } else { @{} }
+    $platformTables = if ($RulesData.PSObject.Properties.Name -contains 'PlatformTables' -and $RulesData.PlatformTables) { @($RulesData.PlatformTables) } else { @() }
+    $xdrCoverage    = if ($DefenderXDR -and $DefenderXDR.XDRTableCoverage) { $DefenderXDR.XDRTableCoverage } else { @{} }
+    $knownXDRTables = if ($DefenderXDR -and $DefenderXDR.KnownXDRTables) { @($DefenderXDR.KnownXDRTables) } else { @() }
 
     # Build retention lookup from Tables API data
     $retentionMap = @{}
@@ -58,8 +60,17 @@ function Invoke-Analysis {
         $ruleCount    = if ($ruleCoverage.ContainsKey($name)) { [int]$ruleCoverage[$name] } else { 0 }
         $huntCount    = if ($huntCoverage.ContainsKey($name)) { [int]$huntCoverage[$name] } else { 0 }
         $xdrRuleCount = if ($xdrCoverage.ContainsKey($name)) { [int]$xdrCoverage[$name] } else { 0 }
+        $implicitCount = if ($implicitCoverage.ContainsKey($name)) { [int]$implicitCoverage[$name] } else { 0 }
+        $isPlatform   = $name -in $platformTables
         $totalCoverage = $ruleCount + $huntCount
-        $effectiveCoverage = $ruleCount + $huntCount + $xdrRuleCount
+        $effectiveCoverage = $ruleCount + $huntCount + $xdrRuleCount + $implicitCount
+
+        # Where the coverage signal comes from (first match wins for display)
+        $coverageSource = if ($ruleCount -gt 0 -or $huntCount -gt 0) { 'kql' }
+                          elseif ($xdrRuleCount -gt 0) { 'xdr' }
+                          elseif ($implicitCount -gt 0) { 'implicit' }
+                          elseif ($isPlatform) { 'platform' }
+                          else { 'none' }
 
         # Usage.IsBillable wins; the classification DB only decides when Usage had no flag
         $isFree = [bool]$table.IsFree
@@ -88,11 +99,14 @@ function Invoke-Analysis {
 
         $classification = if ($cls) { $cls.Classification } else { 'unknown' }
 
-        # Combined assessment
-        $assessment = Get-Assessment -Classification $classification `
-                                      -CostTier $costTier `
-                                      -DetectionTier $detectionTier `
-                                      -IsFree $isFree
+        # Combined assessment (platform tables are never "missing" coverage)
+        $assessment = if ($isPlatform -and $detectionTier -eq 'None' -and -not $isFree) { 'Platform' }
+                      else {
+                          Get-Assessment -Classification $classification `
+                                         -CostTier $costTier `
+                                         -DetectionTier $detectionTier `
+                                         -IsFree $isFree
+                      }
 
         # Retention data
         $ret = $retentionMap[$name]
@@ -126,8 +140,10 @@ function Invoke-Analysis {
         }
         # Compliant = at least 90 days total retention (baseline)
         $retentionCompliant = if ($null -ne $actualTotal -and $tablePlan -eq 'Analytics') { $actualTotal -ge 90 } else { $null }
-        # Can improve = meets 90d baseline but below category-specific recommendation
-        $retentionCanImprove = if ($retentionCompliant -and $recommendedRetention -gt 90) { $actualTotal -lt $recommendedRetention } else { $false }
+        # Can improve = meets 90d baseline but below category-specific recommendation; free and platform tables are excluded
+        $retentionCanImprove = if ($retentionCompliant -and $recommendedRetention -gt 90 -and -not $isFree -and -not $isPlatform) { $actualTotal -lt $recommendedRetention } else { $false }
+        # Interactive (hot) retention below the 90-day Sentinel baseline on an Analytics table
+        $interactiveBelowBaseline = ($tablePlan -eq 'Analytics' -and $null -ne $actualInteractive -and $actualInteractive -lt 90)
 
         # Transform data
         $tableTransforms = $transformLookup[$name]
@@ -159,6 +175,9 @@ function Invoke-Analysis {
             AnalyticsRules               = $ruleCount
             HuntingQueries               = $huntCount
             XDRRules                     = $xdrRuleCount
+            ImplicitRules                = $implicitCount
+            IsPlatform                   = $isPlatform
+            CoverageSource               = $coverageSource
             TotalCoverage                = $totalCoverage
             EffectiveCoverage            = $effectiveCoverage
             CostTier                     = $costTier
@@ -182,6 +201,7 @@ function Invoke-Analysis {
             ObservedPlanMismatch         = $observedPlanMismatch
             RetentionCompliant           = $retentionCompliant
             RetentionCanImprove          = $retentionCanImprove
+            InteractiveBelowBaseline     = $interactiveBelowBaseline
             HasTransform                 = $hasTransform
             TransformTypes               = $transformTypes
             TransformKql                 = $transformKql
@@ -191,6 +211,7 @@ function Invoke-Analysis {
             SplitSuggestion              = $splitSuggestion
         }
     }
+    $tableAnalysis = @($tableAnalysis)
 
     $cdrRules = if ($DefenderXDR -and $DefenderXDR.CustomRules) { $DefenderXDR.CustomRules } else { @() }
     $detectionAnalyzer = if ($IncludeDetectionAnalyzer) {
@@ -210,8 +231,9 @@ function Invoke-Analysis {
     $recommendations = [System.Collections.Generic.List[PSCustomObject]]::new()
 
     foreach ($t in $tableAnalysis) {
-        # 1. Data lake candidates: secondary + high cost + low rules
+        # 1. Data lake candidates: secondary + high cost + low rules (split copies are already lake data)
         if ($t.Classification -eq 'secondary' -and
+            -not $t.IsSplitTable -and
             $t.TablePlan -ne 'Auxiliary' -and
             $t.CostTier -in @('High', 'Very High') -and
             $t.DetectionTier -in @('None', 'Low')) {
@@ -268,9 +290,10 @@ function Invoke-Analysis {
             })
         }
 
-        # 4. Missing coverage on primary sources
+        # 4. Missing coverage on primary sources (not platform tables, which are consumed by Sentinel itself)
         if ($t.Classification -eq 'primary' -and
             -not $t.IsFree -and
+            -not $t.IsPlatform -and
             $t.EffectiveCoverage -eq 0) {
             $recommendations.Add([PSCustomObject]@{
                 Priority     = 'Medium'
@@ -416,6 +439,22 @@ function Invoke-Analysis {
         })
     }
 
+    # 12. Interactive retention below the 90-day Sentinel baseline (total may still be compliant via archive)
+    foreach ($t in $tableAnalysis) {
+        if (-not $t.InteractiveBelowBaseline) { continue }
+
+        $recommendations.Add([PSCustomObject]@{
+            Priority      = 'Medium'
+            Type          = 'RetentionInteractiveBelowBaseline'
+            TableName     = $t.TableName
+            Title         = "$($t.TableName) interactive retention is $($t.ActualInteractiveRetentionDays)d"
+            Detail        = "Analytics-tier interactive retention is $($t.ActualInteractiveRetentionDays) days; Sentinel includes 90 days at no extra charge. " +
+                            "Total retention is $($t.ActualRetentionDays) days. Raise interactive retention to 90 days unless the shorter hot window is deliberate."
+            EstSavingsUSD = 0
+            CurrentCost   = $t.EstMonthlyCostUSD
+        })
+    }
+
     foreach ($rec in $detectionAnalyzer.Recommendations) {
         $recommendations.Add($rec)
     }
@@ -424,7 +463,8 @@ function Invoke-Analysis {
         $recommendations.Add($rec)
     }
 
-    $sortedRecs = $recommendations | Sort-Object EstSavingsUSD -Descending
+    # Single canonical order: High > Medium > Low, then savings descending
+    $sortedRecs = @(Get-SortedRecommendation -Recommendations $recommendations)
 
     # Build schema lookup for live tuning analysis
     $schemaLookup = @{}
@@ -561,6 +601,21 @@ function Invoke-Analysis {
             XdrAdvisoryRetention   = $xdrChecker.Summary.AdvisoryRetentionDays
         }
     }
+}
+
+function Get-SortedRecommendation {
+    <#
+    .SYNOPSIS
+        Orders recommendations High > Medium > Low, then by estimated savings descending.
+        This is the only place recommendations are sorted; exports and the TUI keep this order.
+    #>
+    [CmdletBinding()]
+    param([array]$Recommendations)
+
+    $prioOrder = @{ 'High' = 0; 'Medium' = 1; 'Low' = 2 }
+    @($Recommendations | Sort-Object `
+        @{ Expression = { if ($prioOrder.ContainsKey("$($_.Priority)")) { $prioOrder["$($_.Priority)"] } else { 3 } } }, `
+        @{ Expression = { [double]($_.EstSavingsUSD ?? 0) }; Descending = $true })
 }
 
 function Get-Assessment {

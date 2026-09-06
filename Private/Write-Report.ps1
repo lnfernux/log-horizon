@@ -1,4 +1,4 @@
-﻿function Write-Report {
+function Write-Report {
     <#
     .SYNOPSIS
         Renders the Log Horizon analysis report using Spectre.Console via
@@ -250,6 +250,7 @@ function Write-Dashboard {
             'Low Value'        { '[red]Low Value[/]' }
             'Underutilized'    { '[grey]Underutilized[/]' }
             'Free Tier'        { '[deepskyblue1]Free[/]' }
+            'Platform'         { '[deepskyblue1]Platform[/]' }
             default            { '[grey]-[/]' }
         }
 
@@ -368,10 +369,8 @@ function Write-RecommendationView {
         return
     }
 
-    # High first, then Medium, then Low, savings desc within each
-    $prioOrder = @{ 'High' = 0; 'Medium' = 1; 'Low' = 2 }
-    $sorted = $Analysis.Recommendations |
-        Sort-Object { $prioOrder[$_.Priority] }, { -$_.EstSavingsUSD }
+    # Recommendations arrive already ordered High > Medium > Low, savings desc (Get-SortedRecommendation)
+    $sorted = @($Analysis.Recommendations)
 
     $initialMax = 10
     $showCount = [math]::Min($initialMax, $sorted.Count)
@@ -439,7 +438,7 @@ function Write-DetectionAssessment {
     param([PSCustomObject]$Analysis)
 
     # Cost-value matrix: classification rows x assessment columns
-    $assessmentOrder = @('High Value', 'Good Value', 'Missing Coverage', 'Optimize', 'Low Value', 'Underutilized', 'Free Tier')
+    $assessmentOrder = @('High Value', 'Good Value', 'Missing Coverage', 'Optimize', 'Low Value', 'Underutilized', 'Free Tier', 'Platform')
     $classRows = @('primary', 'secondary')
     $matrixTable = @()
 
@@ -452,7 +451,7 @@ function Write-DetectionAssessment {
             $count = ($subset | Where-Object { $_.Assessment -eq $assess }).Count
             $cellValue = if ($count -eq 0) { '[dim]-[/]' }
                 elseif ($assess -in @('Missing Coverage', 'Low Value', 'Optimize')) { "[yellow]$count[/]" }
-                elseif ($assess -in @('High Value', 'Good Value', 'Free Tier')) { "[green]$count[/]" }
+                elseif ($assess -in @('High Value', 'Good Value', 'Free Tier', 'Platform')) { "[green]$count[/]" }
                 else { "$count" }
             $row[$assess] = $cellValue
         }
@@ -590,6 +589,7 @@ function Write-DetectionAssessmentTable {
             'Low Value'        { '[red]Low Value[/]' }
             'Underutilized'    { '[grey]Underutilized[/]' }
             'Free Tier'        { '[deepskyblue1]Free[/]' }
+            'Platform'         { '[deepskyblue1]Platform[/]' }
             default            { '[grey]-[/]' }
         }
 
@@ -1444,6 +1444,7 @@ function Write-TableInventory {
             'Low Value'        { '[red]Low Value[/]' }
             'Underutilized'    { '[grey]Underutilized[/]' }
             'Free Tier'        { '[deepskyblue1]Free[/]' }
+            'Platform'         { '[deepskyblue1]Platform[/]' }
             default            { '[grey]-[/]' }
         }
 

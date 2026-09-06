@@ -1,0 +1,21 @@
+{
+  "description": "Tables consumed by Sentinel features that carry no KQL, plus platform tables that are never expected to have analytics rules. Used by Get-AnalyticsRules (ImplicitCoverage) and Invoke-Analysis (CoverageSource, Missing Coverage suppression).",
+  "ruleKinds": {
+    "ThreatIntelligence": ["ThreatIntelIndicators", "ThreatIntelObjects", "ThreatIntelligenceIndicator"],
+    "Fusion": ["SecurityAlert", "Anomalies"],
+    "MLBehaviorAnalytics": ["BehaviorAnalytics", "UserPeerAnalytics", "IdentityInfo"],
+    "MicrosoftSecurityIncidentCreation": ["SecurityAlert"]
+  },
+  "platformTables": [
+    "SecurityIncident",
+    "SecurityCaseEvent",
+    "SentinelHealth",
+    "SentinelAudit",
+    "Watchlist",
+    "ConfidentialWatchlist",
+    "Usage",
+    "Operation",
+    "LAQueryLogs",
+    "ThreatIntelExportOperation"
+  ]
+}

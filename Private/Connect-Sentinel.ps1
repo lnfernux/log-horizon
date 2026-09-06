@@ -84,9 +84,15 @@ function Resolve-AzToken {
         Wraps Get-AzAccessToken and handles both plain-string and SecureString
         token formats across Az module versions.
     #>
-    param([string]$ResourceUrl)
+    [CmdletBinding()]
+    param(
+        [string]$ResourceUrl,
+        [string]$TenantId
+    )
 
-    $tokenObj = Get-AzAccessToken -ResourceUrl $ResourceUrl -ErrorAction Stop
+    $splat = @{ ResourceUrl = $ResourceUrl; ErrorAction = 'Stop' }
+    if (-not [string]::IsNullOrWhiteSpace($TenantId)) { $splat.TenantId = $TenantId }
+    $tokenObj = Get-AzAccessToken @splat
     $raw = $tokenObj.Token
 
     if ($raw -is [System.Security.SecureString]) {

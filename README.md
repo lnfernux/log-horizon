@@ -245,6 +245,8 @@ Each table gets scored on a few dimensions:
 - **Detection tier**: None / Low (1-2 rules) / Medium (3-9 rules) / High (10+ rules)
 - **Assessment**: High Value / Good Value / Missing Coverage / Review Needed / Data Lake Candidate / Free Tier
 - **Coverage %**: Percentage of tables with at least one analytics rule or hunting query referencing them, calculated as `tablesWithRules / totalTables * 100`. Per-table coverage sums analytics rules + hunting queries found by parsing KQL for table names.
+- **Implicit coverage**: Rule kinds that carry no KQL still consume tables. `Data/implicit-consumers.json` maps them (Threat Intelligence matching -> `ThreatIntelIndicators`/`ThreatIntelObjects`, Fusion -> `SecurityAlert`/`Anomalies`, UEBA -> `BehaviorAnalytics`/`UserPeerAnalytics`/`IdentityInfo`, Microsoft incident creation -> `SecurityAlert`). Enabled rules of those kinds count toward effective coverage, and each table reports a `CoverageSource` of `kql`, `xdr`, `implicit`, `platform` or `none`. Platform tables Sentinel writes for itself (`SecurityIncident`, `SentinelHealth`, `Watchlist`, `Usage` ...) are never flagged as missing coverage and get the `Platform` assessment.
+- Only enabled analytics rules and enabled Defender custom detections count toward coverage.
 
 Then the module generates recommendations:
 
@@ -257,6 +259,10 @@ Then the module generates recommendations:
 | **Ingest-time Filter** | Primary + >20 GB + <=3 detections | Apply ingest-time transformation to cut volume |
 | **Split Candidate** | Primary + high volume + detections + no existing transform | Split the table — high-value rows stay on Analytics, the rest goes to Data Lake |
 | **Retention Shortfall** | Table retention below recommended minimum | Increase total/archive retention to meet regulatory guidance |
+| **Retention Improvement** | Paid, non-platform table meets 90d but sits below the category recommendation | Consider longer total retention |
+| **Interactive Below Baseline** | Analytics table with interactive (hot) retention under 90 days | Raise interactive retention to the 90 days Sentinel includes, unless the short hot window is deliberate |
+
+Recommendations are sorted once, High > Medium > Low and then by estimated savings, and every output (JSON, Markdown, HTML, TUI) keeps that order.
 
 ### 4. Detection Analyzer (noisiness scoring)
 

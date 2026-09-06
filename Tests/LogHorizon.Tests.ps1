@@ -14,6 +14,7 @@ BeforeAll {
     . "$privatePath\Connect-Sentinel.ps1"
     . "$privatePath\Set-TableRetention.ps1"
     . "$privatePath\Invoke-AzRestWithRetry.ps1"
+    . "$privatePath\Get-DefenderXDR.ps1"
     . (Join-Path $PSScriptRoot '..\Public\Set-LogHorizonTableRetention.ps1')
 
     function New-MockAnalysis {
@@ -2430,6 +2431,348 @@ Describe 'Get-AnalyticsRules coverage and identity' {
         $data.TableCoverage.ContainsKey('AuditLogs') | Should -Be $false
         $data.AllRuleTableCoverage['SigninLogs'] | Should -Be 2
         $data.AllRuleTableCoverage['AuditLogs'] | Should -Be 1
+    }
+
+    It 'maps enabled non-KQL rule kinds to the tables they consume implicitly' {
+        $mockResponse = [PSCustomObject]@{
+            value = @(
+                [PSCustomObject]@{ name = 'ti-1'; kind = 'ThreatIntelligence'; properties = [PSCustomObject]@{ displayName = 'TI map'; enabled = $true; description = '' } },
+                [PSCustomObject]@{ name = 'ti-2'; kind = 'ThreatIntelligence'; properties = [PSCustomObject]@{ displayName = 'TI map disabled'; enabled = $false; description = '' } },
+                [PSCustomObject]@{ name = 'fu-1'; kind = 'Fusion'; properties = [PSCustomObject]@{ displayName = 'Fusion'; enabled = $true; description = '' } },
+                [PSCustomObject]@{ name = 'ml-1'; kind = 'MLBehaviorAnalytics'; properties = [PSCustomObject]@{ displayName = 'ML'; enabled = $true; description = '' } },
+                [PSCustomObject]@{ name = 'ms-1'; kind = 'MicrosoftSecurityIncidentCreation'; properties = [PSCustomObject]@{ displayName = 'MDC'; enabled = $true; description = '' } },
+                [PSCustomObject]@{ name = 'zz-1'; kind = 'SomethingNew'; properties = [PSCustomObject]@{ displayName = 'Unknown kind'; enabled = $true; description = '' } }
+            )
+        }
+        Mock Invoke-AzRestWithRetry { $mockResponse }
+        $ctx = [PSCustomObject]@{ ArmToken = 'fake'; ResourceId = '/subscriptions/xxx/resourceGroups/rg/providers/Microsoft.OperationalInsights/workspaces/ws' }
+
+        $data = Get-AnalyticsRules -Context $ctx
+
+        $data.ImplicitCoverage['ThreatIntelIndicators'] | Should -Be 1
+        $data.ImplicitCoverage['ThreatIntelObjects'] | Should -Be 1
+        $data.ImplicitCoverage['SecurityAlert'] | Should -Be 2
+        $data.ImplicitCoverage['Anomalies'] | Should -Be 1
+        $data.ImplicitCoverage['BehaviorAnalytics'] | Should -Be 1
+        $data.ImplicitCoverage['UserPeerAnalytics'] | Should -Be 1
+        $data.ImplicitCoverage['IdentityInfo'] | Should -Be 1
+        $data.TableCoverage.Count | Should -Be 0
+        $data.Rules[0].ImplicitTables | Should -Contain 'ThreatIntelIndicators'
+        $data.Rules[0].Tables | Should -Be @()
+        $data.Rules[5].ImplicitTables | Should -Be @()
+        $data.PlatformTables | Should -Contain 'SecurityIncident'
+        $data.PlatformTables | Should -Contain 'SentinelHealth'
+    }
+}
+
+Describe 'Get-ImplicitConsumerMap' {
+    It 'loads the shipped map' {
+        $map = Get-ImplicitConsumerMap
+        $map.RuleKinds.Keys | Should -Contain 'ThreatIntelligence'
+        $map.RuleKinds['Fusion'] | Should -Contain 'SecurityAlert'
+        $map.PlatformTables | Should -Contain 'Usage'
+    }
+
+    It 'returns empty structures when the file is missing' {
+        $map = Get-ImplicitConsumerMap -Path (Join-Path $TestDrive 'nope.json')
+        $map.RuleKinds.Count | Should -Be 0
+        @($map.PlatformTables).Count | Should -Be 0
+    }
+
+    It 'tolerates a file without either section' {
+        $p = Join-Path $TestDrive 'partial.json'
+        '{ "description": "x" }' | Set-Content $p
+        $map = Get-ImplicitConsumerMap -Path $p
+        $map.RuleKinds.Count | Should -Be 0
+        @($map.PlatformTables).Count | Should -Be 0
+    }
+}
+
+Describe 'Implicit consumers data integrity' {
+    It 'only references tables that exist in the classification database or are known Sentinel tables' {
+        $db = Get-Content "$PSScriptRoot\..\Data\log-classifications.json" -Raw | ConvertFrom-Json
+        $known = [System.Collections.Generic.HashSet[string]]::new([string[]]$db.tableName, [StringComparer]::OrdinalIgnoreCase)
+        # Not (yet) in the DB but documented Sentinel tables
+        foreach ($extra in 'ThreatIntelObjects', 'SecurityCaseEvent', 'ConfidentialWatchlist', 'Usage', 'Operation', 'ThreatIntelExportOperation') { [void]$known.Add($extra) }
+        $map = Get-Content "$PSScriptRoot\..\Data\implicit-consumers.json" -Raw | ConvertFrom-Json
+        foreach ($p in $map.ruleKinds.PSObject.Properties) {
+            foreach ($t in $p.Value) { $known.Contains($t) | Should -Be $true -Because "$($p.Name) references $t" }
+        }
+        foreach ($t in $map.platformTables) { $known.Contains($t) | Should -Be $true -Because "platform table $t" }
+    }
+}
+
+Describe 'Invoke-Analysis coverage semantics' {
+    BeforeAll {
+        $script:covRules = [PSCustomObject]@{
+            Rules = @(); TotalRules = 2; EnabledRules = 2; DontCorrCount = 0; IncCorrCount = 0
+            TableCoverage = @{ 'SigninLogs' = 1 }
+            ImplicitCoverage = @{ 'ThreatIntelIndicators' = 1 }
+            PlatformTables = @('SecurityIncident', 'SentinelHealth')
+        }
+        $script:covHunting = [PSCustomObject]@{ Queries = @(); TableCoverage = @{}; TotalQueries = 0 }
+        $script:covUsage = @(
+            [PSCustomObject]@{ TableName = 'SigninLogs'; DataGB = 3; MonthlyGB = 1; UsageRowCount = 1; EstMonthlyCostUSD = 5.59; IsFree = $false; IsFreeSource = 'usage' },
+            [PSCustomObject]@{ TableName = 'ThreatIntelIndicators'; DataGB = 6; MonthlyGB = 2; UsageRowCount = 1; EstMonthlyCostUSD = 11.18; IsFree = $false; IsFreeSource = 'usage' },
+            [PSCustomObject]@{ TableName = 'SecurityIncident'; DataGB = 0.1; MonthlyGB = 0.03; UsageRowCount = 1; EstMonthlyCostUSD = 0; IsFree = $true; IsFreeSource = 'usage' },
+            [PSCustomObject]@{ TableName = 'SecurityCaseEvent'; DataGB = 0.1; MonthlyGB = 0.03; UsageRowCount = 1; EstMonthlyCostUSD = 0.17; IsFree = $false; IsFreeSource = 'usage' },
+            [PSCustomObject]@{ TableName = 'DeviceEvents'; DataGB = 3; MonthlyGB = 1; UsageRowCount = 1; EstMonthlyCostUSD = 5.59; IsFree = $false; IsFreeSource = 'usage' },
+            [PSCustomObject]@{ TableName = 'Lonely'; DataGB = 3; MonthlyGB = 1; UsageRowCount = 1; EstMonthlyCostUSD = 5.59; IsFree = $false; IsFreeSource = 'usage' }
+        )
+        $primary = { param($cat) [PSCustomObject]@{ Classification = 'primary'; Category = $cat; RecommendedTier = 'analytics'; IsFree = $false; RecommendedRetentionDays = 365 } }
+        $script:covClass = [PSCustomObject]@{
+            Classifications = @{
+                'SigninLogs' = & $primary 'Identity & Access'
+                'ThreatIntelIndicators' = & $primary 'Threat Intelligence'
+                'SecurityIncident' = [PSCustomObject]@{ Classification = 'primary'; Category = 'Security Alerts'; RecommendedTier = 'analytics'; IsFree = $true; RecommendedRetentionDays = 365 }
+                'SecurityCaseEvent' = & $primary 'Security Alerts'
+                'DeviceEvents' = & $primary 'Endpoint Detection'
+                'Lonely' = & $primary 'Identity & Access'
+            }
+            KeywordGaps = @(); DatabaseEntries = 6
+        }
+        $script:covXdr = [PSCustomObject]@{ TotalXDRRules = 1; XDRTableCoverage = @{ 'DeviceEvents' = 1 }; KnownXDRTables = @('DeviceEvents'); CustomRules = @() }
+        $script:covRetention = @(
+            [PSCustomObject]@{ TableName = 'SigninLogs'; RetentionInDays = 30; TotalRetentionInDays = 365; ArchiveRetentionInDays = 335; Plan = 'Analytics' },
+            [PSCustomObject]@{ TableName = 'ThreatIntelIndicators'; RetentionInDays = 90; TotalRetentionInDays = 90; ArchiveRetentionInDays = 0; Plan = 'Analytics' },
+            [PSCustomObject]@{ TableName = 'SecurityIncident'; RetentionInDays = 90; TotalRetentionInDays = 90; ArchiveRetentionInDays = 0; Plan = 'Analytics' },
+            [PSCustomObject]@{ TableName = 'SecurityCaseEvent'; RetentionInDays = 90; TotalRetentionInDays = 90; ArchiveRetentionInDays = 0; Plan = 'Analytics' },
+            [PSCustomObject]@{ TableName = 'DeviceEvents'; RetentionInDays = 90; TotalRetentionInDays = 90; ArchiveRetentionInDays = 0; Plan = 'Analytics' },
+            [PSCustomObject]@{ TableName = 'Lonely'; RetentionInDays = 90; TotalRetentionInDays = 90; ArchiveRetentionInDays = 0; Plan = 'Analytics' }
+        )
+        $script:covResult = Invoke-Analysis -TableUsage $script:covUsage -Classifications $script:covClass -RulesData $script:covRules -HuntingData $script:covHunting -DefenderXDR $script:covXdr -TableRetention $script:covRetention
+        $script:byName = @{}
+        foreach ($t in $script:covResult.TableAnalysis) { $script:byName[$t.TableName] = $t }
+    }
+
+    It 'counts implicit consumers toward effective coverage and labels the source' {
+        $ti = $script:byName['ThreatIntelIndicators']
+        $ti.ImplicitRules | Should -Be 1
+        $ti.EffectiveCoverage | Should -Be 1
+        $ti.CoverageSource | Should -Be 'implicit'
+        $ti.Assessment | Should -Not -Be 'Missing Coverage'
+        @($script:covResult.Recommendations | Where-Object { $_.Type -eq 'MissingCoverage' -and $_.TableName -eq 'ThreatIntelIndicators' }).Count | Should -Be 0
+    }
+
+    It 'labels kql, xdr, platform and none sources' {
+        $script:byName['SigninLogs'].CoverageSource | Should -Be 'kql'
+        $script:byName['DeviceEvents'].CoverageSource | Should -Be 'xdr'
+        $script:byName['SecurityIncident'].CoverageSource | Should -Be 'platform'
+        $script:byName['SecurityIncident'].IsPlatform | Should -Be $true
+        $script:byName['Lonely'].CoverageSource | Should -Be 'none'
+    }
+
+    It 'never flags platform tables as Missing Coverage but still flags primary tables with nothing' {
+        # SecurityCaseEvent is not in PlatformTables for this test, so it behaves like any primary table
+        @($script:covResult.Recommendations | Where-Object { $_.Type -eq 'MissingCoverage' -and $_.TableName -eq 'SecurityIncident' }).Count | Should -Be 0
+        @($script:covResult.Recommendations | Where-Object { $_.Type -eq 'MissingCoverage' -and $_.TableName -eq 'Lonely' }).Count | Should -Be 1
+    }
+
+    It 'gives a paid platform table the Platform assessment instead of Missing Coverage' {
+        $rules = [PSCustomObject]@{ Rules = @(); TotalRules = 0; EnabledRules = 0; DontCorrCount = 0; IncCorrCount = 0; TableCoverage = @{}; ImplicitCoverage = @{}; PlatformTables = @('SecurityCaseEvent') }
+        $r = Invoke-Analysis -TableUsage @($script:covUsage[3]) -Classifications $script:covClass -RulesData $rules -HuntingData $script:covHunting -TableRetention $script:covRetention
+        $r.TableAnalysis[0].Assessment | Should -Be 'Platform'
+        $r.TableAnalysis[0].CoverageSource | Should -Be 'platform'
+        @($r.Recommendations | Where-Object Type -eq 'MissingCoverage').Count | Should -Be 0
+    }
+
+    It 'does not raise RetentionImprovement for free or platform tables' {
+        $script:byName['SecurityIncident'].RetentionCanImprove | Should -Be $false
+        @($script:covResult.Recommendations | Where-Object { $_.Type -eq 'RetentionImprovement' -and $_.TableName -eq 'SecurityIncident' }).Count | Should -Be 0
+        $script:byName['Lonely'].RetentionCanImprove | Should -Be $true
+    }
+
+    It 'flags interactive retention below the 90-day baseline even when total retention is compliant' {
+        $signin = $script:byName['SigninLogs']
+        $signin.RetentionCompliant | Should -Be $true
+        $signin.InteractiveBelowBaseline | Should -Be $true
+        $rec = @($script:covResult.Recommendations | Where-Object { $_.Type -eq 'RetentionInteractiveBelowBaseline' })
+        $rec.Count | Should -Be 1
+        $rec[0].TableName | Should -Be 'SigninLogs'
+        $rec[0].Priority | Should -Be 'Medium'
+        $script:byName['ThreatIntelIndicators'].InteractiveBelowBaseline | Should -Be $false
+    }
+
+    It 'returns TableAnalysis as an array even for a single table' {
+        $rules = [PSCustomObject]@{ Rules = @(); TotalRules = 0; EnabledRules = 0; DontCorrCount = 0; IncCorrCount = 0; TableCoverage = @{} }
+        $r = Invoke-Analysis -TableUsage @($script:covUsage[0]) -Classifications $script:covClass -RulesData $rules -HuntingData $script:covHunting
+        ,$r.TableAnalysis | Should -BeOfType [array]
+        $r.TableAnalysis.Count | Should -Be 1
+    }
+
+    It 'tolerates a DefenderXDR object with null coverage and table lists' {
+        $xdr = [PSCustomObject]@{ TotalXDRRules = 0; XDRTableCoverage = $null; KnownXDRTables = $null; CustomRules = $null }
+        $rules = [PSCustomObject]@{ Rules = @(); TotalRules = 0; EnabledRules = 0; DontCorrCount = 0; IncCorrCount = 0; TableCoverage = @{} }
+        { Invoke-Analysis -TableUsage @($script:covUsage[0]) -Classifications $script:covClass -RulesData $rules -HuntingData $script:covHunting -DefenderXDR $xdr } | Should -Not -Throw
+    }
+
+    It 'sorts recommendations High > Medium > Low then by savings' {
+        $recs = $script:covResult.Recommendations
+        $order = @{ High = 0; Medium = 1; Low = 2 }
+        for ($i = 1; $i -lt $recs.Count; $i++) {
+            $prev = $recs[$i - 1]; $cur = $recs[$i]
+            ($order[$prev.Priority] -le $order[$cur.Priority]) | Should -Be $true
+            if ($prev.Priority -eq $cur.Priority) { ($prev.EstSavingsUSD -ge $cur.EstSavingsUSD) | Should -Be $true }
+        }
+    }
+}
+
+Describe 'Get-DefenderXDR REST fallback' {
+    BeforeAll {
+        $script:xdrCtx = [PSCustomObject]@{ TenantId = 'tid'; SubscriptionId = 'sub' }
+    }
+
+    It 'skips disabled custom detections when building table coverage and hoists the known table list' {
+        Mock Get-Command { $null } -ParameterFilter { $Name -eq 'Invoke-MgGraphRequest' }
+        Mock Resolve-AzToken { 'graph-token' }
+        Mock Invoke-AzRestWithRetry {
+            [PSCustomObject]@{
+                value = @(
+                    [PSCustomObject]@{ id = 'r1'; displayName = 'On';  isEnabled = $true;  queryCondition = [PSCustomObject]@{ queryText = 'DeviceEvents | where ActionType == "x"' } },
+                    [PSCustomObject]@{ id = 'r2'; displayName = 'Off'; isEnabled = $false; queryCondition = [PSCustomObject]@{ queryText = 'EmailEvents | take 1' } },
+                    [PSCustomObject]@{ id = 'r3'; displayName = 'Nested'; detectionAction = [PSCustomObject]@{ queryCondition = [PSCustomObject]@{ queryText = 'DeviceEvents | take 1' } } }
+                )
+            }
+        }
+
+        $result = Get-DefenderXDR -Context $script:xdrCtx
+
+        $result.TotalXDRRules | Should -Be 3
+        $result.XDRTableCoverage['DeviceEvents'] | Should -Be 2
+        $result.XDRTableCoverage.ContainsKey('EmailEvents') | Should -Be $false
+        $result.KnownXDRTables.Count | Should -Be 21
+        $result.KnownXDRTables | Should -Contain 'AlertEvidence'
+        Should -Invoke Resolve-AzToken -Times 1 -ParameterFilter { $ResourceUrl -eq 'https://graph.microsoft.com' -and $TenantId -eq 'tid' }
+    }
+
+    It 'follows @odata.nextLink' {
+        Mock Get-Command { $null } -ParameterFilter { $Name -eq 'Invoke-MgGraphRequest' }
+        Mock Resolve-AzToken { 'graph-token' }
+        Mock Invoke-AzRestWithRetry {
+            if ($Uri -like '*skip*') { return [PSCustomObject]@{ value = @([PSCustomObject]@{ id = 'r2'; isEnabled = $true }) } }
+            [PSCustomObject]@{ value = @([PSCustomObject]@{ id = 'r1'; isEnabled = $true }); '@odata.nextLink' = 'https://graph.microsoft.com/beta/security/rules/detectionRules?$skip=1' }
+        }
+        (Get-DefenderXDR -Context $script:xdrCtx).TotalXDRRules | Should -Be 2
+    }
+
+    It 'returns null when no Graph token can be acquired' {
+        Mock Get-Command { $null } -ParameterFilter { $Name -eq 'Invoke-MgGraphRequest' }
+        Mock Resolve-AzToken { throw 'no token' }
+        Get-DefenderXDR -Context ([PSCustomObject]@{ SubscriptionId = 'sub' }) -WarningAction SilentlyContinue | Should -BeNullOrEmpty
+    }
+
+    It 'returns the empty shape with the known table list when every endpoint fails' {
+        Mock Get-Command { $null } -ParameterFilter { $Name -eq 'Invoke-MgGraphRequest' }
+        Mock Resolve-AzToken { 'graph-token' }
+        Mock Invoke-AzRestWithRetry { throw 'boom' }
+        $result = Get-DefenderXDR -Context $script:xdrCtx -WarningVariable w -WarningAction SilentlyContinue
+        $result.TotalXDRRules | Should -Be 0
+        $result.KnownXDRTables.Count | Should -Be 21
+        "$w" | Should -Match 'Microsoft.Graph.Authentication'
+    }
+}
+
+Describe 'Get-DefenderXDR delegated Graph path' {
+    BeforeAll {
+        # Stubs so the Microsoft.Graph cmdlets can be mocked without the module installed
+        function Get-MgContext { }
+        function Connect-MgGraph { param([string[]]$Scopes, [string]$ContextScope, [switch]$NoWelcome, [string]$TenantId) }
+        function Invoke-MgGraphRequest { param([string]$Method, [string]$Uri, [string]$OutputType) }
+        $script:xdrCtx2 = [PSCustomObject]@{ TenantId = 'tid'; SubscriptionId = 'sub' }
+    }
+
+    It 'uses an existing delegated context with the required scope' {
+        Mock Get-Command { [PSCustomObject]@{ Name = 'Invoke-MgGraphRequest' } } -ParameterFilter { $Name -eq 'Invoke-MgGraphRequest' }
+        Mock Get-MgContext { [PSCustomObject]@{ Scopes = @('CustomDetection.Read.All') } }
+        Mock Connect-MgGraph { throw 'should not reconnect' }
+        Mock Invoke-MgGraphRequest {
+            if ($Uri -like '*skip*') { return [PSCustomObject]@{ value = @([PSCustomObject]@{ id = 'r2'; isEnabled = $true; queryCondition = [PSCustomObject]@{ queryText = 'EmailEvents | take 1' } }) } }
+            [PSCustomObject]@{ value = @([PSCustomObject]@{ id = 'r1'; isEnabled = $true; queryCondition = [PSCustomObject]@{ queryText = 'DeviceEvents | take 1' } }); '@odata.nextLink' = 'https://graph.microsoft.com/beta/x?$skip=1' }
+        }
+        Mock Resolve-AzToken { throw 'fallback must not run' }
+
+        $result = Get-DefenderXDR -Context $script:xdrCtx2
+        $result.TotalXDRRules | Should -Be 2
+        $result.XDRTableCoverage['DeviceEvents'] | Should -Be 1
+        $result.XDRTableCoverage['EmailEvents'] | Should -Be 1
+        Should -Invoke Connect-MgGraph -Times 0
+    }
+
+    It 'connects with the tenant when the current context lacks the scope' {
+        Mock Get-Command { [PSCustomObject]@{ Name = 'Invoke-MgGraphRequest' } } -ParameterFilter { $Name -eq 'Invoke-MgGraphRequest' }
+        $script:mgConnected = $false
+        Mock Get-MgContext { if ($script:mgConnected) { [PSCustomObject]@{ Scopes = @('CustomDetection.ReadWrite.All') } } else { [PSCustomObject]@{ Scopes = @('User.Read') } } }
+        Mock Connect-MgGraph { $script:mgConnected = $true }
+        Mock Invoke-MgGraphRequest { [PSCustomObject]@{ value = @([PSCustomObject]@{ id = 'r1'; isEnabled = $true }) } }
+
+        $result = Get-DefenderXDR -Context $script:xdrCtx2
+        $result.TotalXDRRules | Should -Be 1
+        Should -Invoke Connect-MgGraph -Times 1 -ParameterFilter { $TenantId -eq 'tid' -and $Scopes -contains 'CustomDetection.Read.All' }
+    }
+
+    It 'warns and falls back to the Az token when the scope cannot be established' {
+        Mock Get-Command { [PSCustomObject]@{ Name = 'Invoke-MgGraphRequest' } } -ParameterFilter { $Name -eq 'Invoke-MgGraphRequest' }
+        Mock Get-MgContext { $null }
+        Mock Connect-MgGraph { }
+        Mock Invoke-MgGraphRequest { throw 'not used' }
+        Mock Resolve-AzToken { 'graph-token' }
+        Mock Invoke-AzRestWithRetry { [PSCustomObject]@{ value = @([PSCustomObject]@{ id = 'r1'; isEnabled = $true }) } }
+
+        $result = Get-DefenderXDR -Context $script:xdrCtx2 -WarningVariable w -WarningAction SilentlyContinue
+        $result.TotalXDRRules | Should -Be 1
+        "$w" | Should -Match 'CustomDetection.Read.All'
+    }
+
+    It 'falls back to the Az token when every delegated request fails, without naming the Graph module' {
+        Mock Get-Command { [PSCustomObject]@{ Name = 'Invoke-MgGraphRequest' } } -ParameterFilter { $Name -eq 'Invoke-MgGraphRequest' }
+        Mock Get-MgContext { [PSCustomObject]@{ Scopes = @('CustomDetection.Read.All') } }
+        Mock Invoke-MgGraphRequest { throw 'graph down' }
+        Mock Resolve-AzToken { 'graph-token' }
+        Mock Invoke-AzRestWithRetry { throw 'rest down' }
+
+        $result = Get-DefenderXDR -Context $script:xdrCtx2 -WarningVariable w -WarningAction SilentlyContinue
+        $result.TotalXDRRules | Should -Be 0
+        "$w" | Should -Not -Match 'Microsoft.Graph.Authentication'
+    }
+
+    It 'survives a throwing Connect-MgGraph by falling back' {
+        Mock Get-Command { [PSCustomObject]@{ Name = 'Invoke-MgGraphRequest' } } -ParameterFilter { $Name -eq 'Invoke-MgGraphRequest' }
+        Mock Get-MgContext { $null }
+        Mock Connect-MgGraph { throw 'user cancelled' }
+        Mock Resolve-AzToken { 'graph-token' }
+        Mock Invoke-AzRestWithRetry { [PSCustomObject]@{ value = @() } }
+
+        (Get-DefenderXDR -Context ([PSCustomObject]@{ SubscriptionId = 'sub' })).TotalXDRRules | Should -Be 0
+    }
+}
+
+Describe 'Get-SortedRecommendation' {
+    It 'orders by priority then savings and pushes unknown priorities last' {
+        $input = @(
+            [PSCustomObject]@{ Priority = 'Low'; EstSavingsUSD = 500 },
+            [PSCustomObject]@{ Priority = 'High'; EstSavingsUSD = 0 },
+            [PSCustomObject]@{ Priority = 'Weird'; EstSavingsUSD = 999 },
+            [PSCustomObject]@{ Priority = 'Medium'; EstSavingsUSD = 10 },
+            [PSCustomObject]@{ Priority = 'High'; EstSavingsUSD = 50 },
+            [PSCustomObject]@{ Priority = 'Medium'; EstSavingsUSD = $null }
+        )
+        $sorted = Get-SortedRecommendation -Recommendations $input
+        ($sorted | ForEach-Object { "$($_.Priority):$($_.EstSavingsUSD)" }) | Should -Be @('High:50', 'High:0', 'Medium:10', 'Medium:', 'Low:500', 'Weird:999')
+    }
+
+    It 'returns an empty array for no input' {
+        @(Get-SortedRecommendation -Recommendations @()).Count | Should -Be 0
+    }
+}
+
+Describe 'Invoke-Analysis skips split copies for DataLake recommendations' {
+    It 'does not recommend moving a _SPLT_CL table to the lake' {
+        $usage = @([PSCustomObject]@{ TableName = 'SecurityEvent_SPLT_CL'; DataGB = 300; MonthlyGB = 100; UsageRowCount = 1; EstMonthlyCostUSD = 559; IsFree = $false; IsFreeSource = 'usage' })
+        $cls = [PSCustomObject]@{ Classifications = @{ 'SecurityEvent_SPLT_CL' = [PSCustomObject]@{ Classification = 'secondary'; Category = 'Split Table (Data Lake)'; RecommendedTier = 'datalake'; IsFree = $false; RecommendedRetentionDays = 90; IsSplitTable = $true; ParentTable = 'SecurityEvent' } }; KeywordGaps = @(); DatabaseEntries = 1 }
+        $rules = [PSCustomObject]@{ Rules = @(); TotalRules = 0; EnabledRules = 0; DontCorrCount = 0; IncCorrCount = 0; TableCoverage = @{} }
+        $hunting = [PSCustomObject]@{ Queries = @(); TableCoverage = @{}; TotalQueries = 0 }
+        $r = Invoke-Analysis -TableUsage $usage -Classifications $cls -RulesData $rules -HuntingData $hunting
+        @($r.Recommendations | Where-Object Type -eq 'DataLake').Count | Should -Be 0
     }
 }
 

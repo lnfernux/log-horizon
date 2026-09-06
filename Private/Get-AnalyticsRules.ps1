@@ -69,9 +69,13 @@ function Get-AnalyticsRules {
 
     Write-Verbose "Fetched $($allRules.Count) analytics rule(s) across $pageCount page(s)."
 
-    # TableCoverage counts enabled rules only; AllRuleTableCoverage includes disabled rules
+    $implicit = Get-ImplicitConsumerMap
+
+    # TableCoverage counts enabled rules only; AllRuleTableCoverage includes disabled rules.
+    # ImplicitCoverage counts enabled non-KQL rules (TI matching, Fusion, UEBA ...) against the tables they consume.
     $tableCoverage = @{}
     $allRuleTableCoverage = @{}
+    $implicitCoverage = @{}
     $rules = foreach ($rule in $allRules) {
         $kind = $rule.kind
         $query = $null
@@ -90,8 +94,18 @@ function Get-AnalyticsRules {
         }
 
         $tables = @()
+        $implicitTables = @()
         if ($query) {
             $tables = @(Get-TablesFromKql -Kql $query)
+        }
+        elseif ($implicit.RuleKinds.ContainsKey("$kind")) {
+            $implicitTables = @($implicit.RuleKinds["$kind"])
+            if ($enabled) {
+                foreach ($t in $implicitTables) {
+                    if (-not $implicitCoverage.ContainsKey($t)) { $implicitCoverage[$t] = 0 }
+                    $implicitCoverage[$t]++
+                }
+            }
         }
 
         foreach ($t in $tables) {
@@ -109,6 +123,7 @@ function Get-AnalyticsRules {
             Kind                    = $kind
             Enabled                 = $enabled
             Tables                  = $tables
+            ImplicitTables          = $implicitTables
             HasQuery                = [bool]$query
             Query                   = $query
             Description             = $description
@@ -121,10 +136,40 @@ function Get-AnalyticsRules {
         Rules                = @($rules)
         TableCoverage        = $tableCoverage
         AllRuleTableCoverage = $allRuleTableCoverage
+        ImplicitCoverage     = $implicitCoverage
+        PlatformTables       = @($implicit.PlatformTables)
         TotalRules           = $allRules.Count
         EnabledRules  = @($rules | Where-Object Enabled).Count
         DontCorrCount = @($rules | Where-Object ExcludedFromCorrelation).Count
         IncCorrCount  = @($rules | Where-Object IncludedInCorrelation).Count
+    }
+}
+
+function Get-ImplicitConsumerMap {
+    <#
+    .SYNOPSIS
+        Loads Data/implicit-consumers.json: rule kind -> tables consumed without KQL,
+        and the platform tables that never need analytics rule coverage.
+    #>
+    [CmdletBinding()]
+    param([string]$Path = (Join-Path $PSScriptRoot '..\Data\implicit-consumers.json'))
+
+    $ruleKinds = @{}
+    $platform = @()
+    if (Test-Path $Path) {
+        $raw = Get-Content $Path -Raw | ConvertFrom-Json
+        if ($raw.ruleKinds) {
+            foreach ($p in $raw.ruleKinds.PSObject.Properties) { $ruleKinds[$p.Name] = @($p.Value) }
+        }
+        if ($raw.platformTables) { $platform = @($raw.platformTables) }
+    }
+    else {
+        Write-Verbose "Implicit consumer map not found at $Path; non-KQL rule kinds will not contribute coverage."
+    }
+
+    [PSCustomObject]@{
+        RuleKinds      = $ruleKinds
+        PlatformTables = $platform
     }
 }
 
