@@ -120,8 +120,8 @@ function Invoke-LogHorizon {
         # Table retention configuration
         $result.TableRetention = Get-TableRetention -Context $ctx
 
-        # Data transforms (DCR-based)
-        $result.DataTransforms = Get-DataTransforms -Context $ctx
+        # Data transforms (DCR-based); the workspace transformation DCR id comes from the workspace resource
+        $result.DataTransforms = Get-DataTransforms -Context $ctx -WorkspaceDefaultDcrId $result.TableRetention.WorkspaceDefaultDcrId
 
         [PSCustomObject]$result
     }

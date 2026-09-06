@@ -15,12 +15,14 @@ function Get-TableRetention {
 
     $headers = @{ Authorization = "Bearer $($Context.ArmToken)" }
 
-    # Workspace-level default retention
+    # Workspace-level default retention and the workspace transformation DCR (if any)
     $wsUri = "https://management.azure.com$($Context.ResourceId)?api-version=2023-09-01"
     $wsResponse = Invoke-AzRestWithRetry -Uri $wsUri -Headers $headers
     $workspaceRetention = [int]$wsResponse.properties.retentionInDays
+    $defaultDcrId = if ($wsResponse.properties.PSObject.Properties.Name -contains 'defaultDataCollectionRuleResourceId') { $wsResponse.properties.defaultDataCollectionRuleResourceId } else { $null }
 
-    # Per-table retention and plan
+    # Per-table retention and plan. retentionInDays / totalRetentionInDays are always the
+    # effective values; the *AsDefault booleans say whether they are inherited.
     $uri = "https://management.azure.com$($Context.ResourceId)/tables?api-version=2025-07-01"
     $response = Invoke-AzRestWithRetry -Uri $uri -Headers $headers
 
@@ -43,12 +45,17 @@ function Get-TableRetention {
             ArchiveRetentionInDays = if ($null -ne $props.archiveRetentionInDays) { [int]$props.archiveRetentionInDays } else { $null } # total - retention
             ProvisioningState      = $props.provisioningState           # Succeeded | Updating | ...
             TableSubType           = $props.tableSubType                # Any | Classic | DataCollectionRuleBased
+            TableType              = if ($props.schema) { $props.schema.tableType } else { $null }   # Microsoft | CustomLog | RestoredLogs | SearchResults
+            RetentionInDaysAsDefault      = [bool]$props.retentionInDaysAsDefault
+            TotalRetentionInDaysAsDefault = [bool]$props.totalRetentionInDaysAsDefault
+            LastPlanModifiedDate   = if ($props.lastPlanModifiedDate) { $props.lastPlanModifiedDate } else { $null }
             Columns                = $allCols                           # string[] of visible column names
         }
     }
 
     [PSCustomObject]@{
         WorkspaceRetentionDays = $workspaceRetention
+        WorkspaceDefaultDcrId  = $defaultDcrId
         Tables                 = @($tables)
     }
 }

@@ -33,9 +33,9 @@ I've had to answer *"what are we actually getting out of these logs?"* or *"what
 | **Retention Compliance** | Compares actual retention against recommended minimums based on industry standards and security best practices |
 | **SOC Optimisation** | Pulls Microsoft's own SOC improvement recommendations from the Security Insights API |
 | **Keyword Gap Analysis** | Flag tables you should be ingesting but aren't based on vendor/product keywords |
-| **Transform Discovery** | Discovers Data Collection Rules (DCRs) and classifies ingest-time transforms (filter, projection, enrichment, aggregation) |
+| **Transform Discovery** | Discovers Data Collection Rules (DCRs) targeting the workspace (subscription list filtered on destination, the workspace transformation DCR, and workspace associations), parses inline and multi-stage transforms, and labels every operation (filter, projection, column removal, enrichment, aggregation) |
 | **Split Table Detection** | Identifies `_SPLT_CL` split tables and links them back to parent tables in the classification engine |
-| **Split KQL Generator** | Generates portal-ready split KQL from a curated knowledge base, live rule analysis, and community field frequency stats -- condition-only format that pastes straight into the Sentinel split rule editor |
+| **Split KQL Generator** | Generates portal-ready split KQL from a curated knowledge base, live rule analysis, and community field frequency stats -- condition-only format that pastes straight into the Sentinel split rule editor. Field lists are intersected with the table's live schema; anything not present is reported as dropped |
 | **Detection Analyzer** | Scores analytic rules for potential noisiness using incident outcomes (auto-close ratio, false positive ratio, and incident volume percentiles) |
 | **XDR Checker** | Adds an XDR-focused advisory layer: streaming coverage checks and one-year Data Lake retention guidance for XDR-related telemetry |
 | **Custom Classifications** | Provide your own JSON to add or override the built-in classification database |
@@ -61,6 +61,8 @@ I've had to answer *"what are we actually getting out of these logs?"* or *"what
 | Other modules | `PwshSpectreConsole` 2.6.3+ |
 
 If you're not already logged into Azure, the module will fire up `Connect-AzAccount` for you. If you are, it'll just carry on.
+
+Permissions: Log Analytics Reader and Microsoft Sentinel Reader on the workspace cover the analysis. Transform discovery also needs `Microsoft.Insights/dataCollectionRules/read` (Monitoring Reader) on the subscription or resource group; without it the run continues and prints a warning naming the missing permission. `-IncludeDefenderXDR` uses Microsoft Graph with `CustomDetection.Read.All`, which for a signed-in user means the optional `Microsoft.Graph.Authentication` module.
 
 ## Getting started
 

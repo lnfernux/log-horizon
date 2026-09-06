@@ -802,14 +802,16 @@ function Write-DataTransformView {
                 $kqlPreview = $kqlPreview.Substring(0, 77) + '...'
             }
 
-            $typeMarkup = switch ($t.TransformType) {
-                'Filter'        { '[red]Filter[/]' }
-                'ColumnRemoval' { '[yellow]ColumnRemoval[/]' }
-                'Projection'    { '[yellow]Projection[/]' }
-                'Enrichment'    { '[green]Enrichment[/]' }
-                'Aggregation'   { '[deepskyblue1]Aggregation[/]' }
-                default         { '[grey]Custom[/]' }
-            }
+            $typeMarkup = (@("$($t.TransformType)" -split '\+') | ForEach-Object {
+                switch ($_) {
+                    'Filter'        { '[red]Filter[/]' }
+                    'ColumnRemoval' { '[yellow]ColumnRemoval[/]' }
+                    'Projection'    { '[yellow]Projection[/]' }
+                    'Enrichment'    { '[green]Enrichment[/]' }
+                    'Aggregation'   { '[deepskyblue1]Aggregation[/]' }
+                    default         { '[grey]Custom[/]' }
+                }
+            }) -join '+'
 
             $table += [PSCustomObject]@{
                 'Table'     = Get-SafeEscapedText $t.OutputTable

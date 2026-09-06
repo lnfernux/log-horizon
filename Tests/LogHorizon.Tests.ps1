@@ -199,6 +199,36 @@ Describe 'Get-TableRetentionChangeSet' {
         $change[0].Reason | Should -Match 'Auxiliary'
     }
 
+    It 'treats inherit (-1/null) as a no-op when the table already inherits per the AsDefault flags' {
+        $inheriting = [PSCustomObject]@{ TableName = 'SigninLogs'; Plan = 'Analytics'; RetentionInDays = 90; TotalRetentionInDays = 90; RetentionInDaysAsDefault = $true; TotalRetentionInDaysAsDefault = $true }
+        $explicit   = [PSCustomObject]@{ TableName = 'AuditLogs';  Plan = 'Analytics'; RetentionInDays = 90; TotalRetentionInDays = 365; RetentionInDaysAsDefault = $false; TotalRetentionInDaysAsDefault = $false }
+
+        $change = @(Get-TableRetentionChangeSet -Tables @($inheriting, $explicit) -RetentionInDays $null -TotalRetentionInDays $null)
+
+        $change[0].Status | Should -Be 'Skipped'
+        $change[1].Status | Should -Be 'Pending'
+        $change[1].RetentionChanged | Should -Be $true
+        $change[1].TotalChanged | Should -Be $true
+    }
+
+    It 'treats removing long-term retention as a no-op when total already equals interactive' {
+        $table = [PSCustomObject]@{ TableName = 'AuditLogs'; Plan = 'Analytics'; RetentionInDays = 120; TotalRetentionInDays = 120 }
+        $change = @(Get-TableRetentionChangeSet -Tables @($table) -TotalRetentionInDays $null)
+        $change[0].Status | Should -Be 'Skipped'
+    }
+
+    It 'rejects search-job and restore tables up front' {
+        $tables = @(
+            [PSCustomObject]@{ TableName = 'Hunt_SRCH'; Plan = 'Analytics'; RetentionInDays = 90; TotalRetentionInDays = 90; TableType = 'SearchResults' },
+            [PSCustomObject]@{ TableName = 'Old_RST';   Plan = 'Analytics'; RetentionInDays = 90; TotalRetentionInDays = 90; TableType = 'RestoredLogs' }
+        )
+        $change = @(Get-TableRetentionChangeSet -Tables $tables -TotalRetentionInDays 365)
+        $change[0].Status | Should -Be 'Invalid'
+        $change[0].Reason | Should -Match 'SearchResults'
+        $change[1].Status | Should -Be 'Invalid'
+        $change[1].Reason | Should -Match 'RestoredLogs'
+    }
+
     It 'recognizes supported built-in tables from the Basic-plan allow-list' {
         $table = [PSCustomObject]@{ TableName = 'SigninLogs'; Plan = 'Analytics'; TableSubType = 'Any' }
 
@@ -1389,6 +1419,402 @@ Describe 'Get-TransformType' {
     It 'returns Custom for unrecognized transforms' {
         $result = Get-TransformType -KQL 'source | take 100'
         $result | Should -Be 'Custom'
+    }
+
+    It 'labels multi-operation transforms in order of appearance' {
+        Get-TransformType -KQL 'source | where EventID == 4624 | project-away RawData' | Should -Be 'Filter+ColumnRemoval'
+        Get-TransformType -KQL 'source | extend X = 1 | where X == 1' | Should -Be 'Enrichment+Filter'
+        Get-TransformType -KQL 'source | where A == 1 | project A, B' | Should -Be 'Filter+Projection'
+        Get-TransformType -KQL '' | Should -Be 'Custom'
+    }
+
+    It 'lists operations as an array' {
+        @(Get-TransformOperation -KQL 'source | where A == 1 | summarize count() by A') | Should -Be @('Filter', 'Aggregation')
+        @(Get-TransformOperation -KQL $null).Count | Should -Be 0
+    }
+}
+
+Describe 'Get-DataTransforms discovery' {
+    BeforeAll {
+        $script:dtCtx = [PSCustomObject]@{
+            ArmToken       = 'tok'
+            SubscriptionId = 'sub1'
+            ResourceGroup  = 'rg1'
+            ResourceId     = '/subscriptions/sub1/resourceGroups/rg1/providers/Microsoft.OperationalInsights/workspaces/ws1'
+        }
+        $script:wsId = $script:dtCtx.ResourceId
+
+        function New-Dcr {
+            param($Id, $Name, $Flows, $Kind = $null, $Transformations = $null, $WorkspaceResourceId = $script:wsId)
+            $props = [PSCustomObject]@{
+                dataFlows    = $Flows
+                destinations = [PSCustomObject]@{ logAnalytics = @([PSCustomObject]@{ name = 'la'; workspaceResourceId = $WorkspaceResourceId }) }
+            }
+            if ($Transformations) { $props | Add-Member -NotePropertyName transformations -NotePropertyValue $Transformations }
+            [PSCustomObject]@{ id = $Id; name = $Name; location = 'westeurope'; kind = $Kind; properties = $props }
+        }
+
+        $script:subDcr = New-Dcr -Id '/subscriptions/sub1/resourceGroups/other/providers/Microsoft.Insights/dataCollectionRules/agent-dcr' -Name 'agent-dcr' -Flows @(
+            [PSCustomObject]@{ streams = @('Microsoft-SecurityEvent'); destinations = @('la'); transformKql = 'source | where EventID != 4688'; outputStream = 'Microsoft-SecurityEvent' }
+        )
+        $script:otherWsDcr = New-Dcr -Id '/subscriptions/sub1/resourceGroups/other/providers/Microsoft.Insights/dataCollectionRules/elsewhere' -Name 'elsewhere' -WorkspaceResourceId '/subscriptions/sub1/resourceGroups/x/providers/Microsoft.OperationalInsights/workspaces/OTHER' -Flows @(
+            [PSCustomObject]@{ streams = @('Microsoft-Syslog'); destinations = @('la'); transformKql = 'source | where Facility == "auth"'; outputStream = 'Microsoft-Syslog' }
+        )
+        $script:wsTransformDcr = New-Dcr -Id '/subscriptions/sub1/resourceGroups/rg1/providers/Microsoft.Insights/dataCollectionRules/ws-transform' -Name 'ws-transform' -Kind 'WorkspaceTransforms' -Flows @(
+            [PSCustomObject]@{ streams = @('Microsoft-Table-SigninLogs'); destinations = @('la'); transformKql = 'source | project-away AuthenticationDetails' },
+            [PSCustomObject]@{ streams = @('Microsoft-Table-AuditLogs'); destinations = @('la'); transformKql = 'source' }
+        )
+        $script:multiStageDcr = New-Dcr -Id '/subscriptions/sub1/resourceGroups/rg1/providers/Microsoft.Insights/dataCollectionRules/multi' -Name 'multi' -Flows @(
+            [PSCustomObject]@{ streams = @('Custom-MyApp_CL'); destinations = @('la'); transform = 'stage1'; outputStream = 'Custom-MyApp_CL' }
+        ) -Transformations @(
+            [PSCustomObject]@{ name = 'stage1'; processors = @(
+                [PSCustomObject]@{ processor = 'transform.KQL'; configuration = [PSCustomObject]@{ expression = 'source | where Level != "Debug"' } },
+                [PSCustomObject]@{ processor = 'something.else'; configuration = [PSCustomObject]@{ foo = 1 } },
+                [PSCustomObject]@{ processor = 'transform.KQL'; configuration = [PSCustomObject]@{ transformKql = 'source | extend Env = "prod"' } }
+            ) }
+        )
+    }
+
+    It 'lists at subscription scope, filters on destination workspace, adds the default DCR and associations, and dedupes' {
+        Mock Invoke-AzRestWithRetry {
+            switch -Wildcard ($Uri) {
+                '*/subscriptions/sub1/providers/Microsoft.Insights/dataCollectionRules`?*' { return [PSCustomObject]@{ value = @($script:subDcr, $script:otherWsDcr) } }
+                '*/dataCollectionRules/ws-transform`?*' { return $script:wsTransformDcr }
+                '*/dataCollectionRuleAssociations`?*' { return [PSCustomObject]@{ value = @(
+                    [PSCustomObject]@{ properties = [PSCustomObject]@{ dataCollectionRuleId = $script:wsTransformDcr.id } },
+                    [PSCustomObject]@{ properties = [PSCustomObject]@{ dataCollectionRuleId = $script:multiStageDcr.id } }
+                ) } }
+                '*/dataCollectionRules/multi`?*' { return $script:multiStageDcr }
+                default { throw "unexpected $Uri" }
+            }
+        }
+
+        $result = Get-DataTransforms -Context $script:dtCtx -WorkspaceDefaultDcrId $script:wsTransformDcr.id
+
+        $result.TotalDCRs | Should -Be 3
+        $result.DiscoveryStatus.SubscriptionList | Should -Match 'Succeeded \(1 matching\)'
+        $result.DiscoveryStatus.ResourceGroupList | Should -Be 'NotAttempted'
+        $result.DiscoveryStatus.DefaultDcr | Should -Be 'Succeeded'
+        $result.DiscoveryStatus.Associations | Should -Match '2 association'
+        $result.DiscoveryStatus.Errors.Count | Should -Be 0
+        # ws-transform came from the default id, so associations only fetched multi
+        Should -Invoke Invoke-AzRestWithRetry -Times 1 -ParameterFilter { $Uri -like '*/dataCollectionRules/ws-transform`?*' }
+        $result.Transforms.Count | Should -Be 3
+        $result.TableLookup.Keys | Should -Contain 'SecurityEvent'
+        $result.TableLookup.Keys | Should -Contain 'SigninLogs'
+        $result.TableLookup.Keys | Should -Contain 'MyApp_CL'
+        $result.TableLookup.Keys | Should -Not -Contain 'Syslog'
+        $result.TableLookup.Keys | Should -Not -Contain 'AuditLogs'
+    }
+
+    It 'parses workspace transformation DCRs without outputStream and strips Microsoft-Table-' {
+        Mock Invoke-AzRestWithRetry {
+            switch -Wildcard ($Uri) {
+                '*/subscriptions/sub1/providers/Microsoft.Insights/dataCollectionRules`?*' { return [PSCustomObject]@{ value = @($script:wsTransformDcr) } }
+                '*/dataCollectionRuleAssociations`?*' { return [PSCustomObject]@{ value = @() } }
+                default { throw "unexpected $Uri" }
+            }
+        }
+        $result = Get-DataTransforms -Context $script:dtCtx
+        $t = $result.Transforms[0]
+        $t.OutputTable | Should -Be 'SigninLogs'
+        $t.InputStreams | Should -Be @('SigninLogs')
+        $t.TransformType | Should -Be 'ColumnRemoval'
+        $t.DCRKind | Should -Be 'WorkspaceTransforms'
+        $result.RelevantDCRs[0].Kind | Should -Be 'WorkspaceTransforms'
+        $result.DiscoveryStatus.DefaultDcr | Should -Be 'NotConfigured'
+    }
+
+    It 'resolves multi-stage transformations referenced by name' {
+        Mock Invoke-AzRestWithRetry {
+            switch -Wildcard ($Uri) {
+                '*/subscriptions/sub1/providers/Microsoft.Insights/dataCollectionRules`?*' { return [PSCustomObject]@{ value = @($script:multiStageDcr) } }
+                '*/dataCollectionRuleAssociations`?*' { return [PSCustomObject]@{ value = @() } }
+                default { throw "unexpected $Uri" }
+            }
+        }
+        $result = Get-DataTransforms -Context $script:dtCtx
+        $t = $result.Transforms[0]
+        $t.OutputTable | Should -Be 'MyApp_CL'
+        $t.TransformKql | Should -Match 'Level != "Debug"'
+        $t.TransformKql | Should -Match 'Env = "prod"'
+        $t.TransformType | Should -Be 'Filter+Enrichment'
+        $t.Operations | Should -Be @('Filter', 'Enrichment')
+    }
+
+    It 'falls back to resource-group scope when the subscription list is denied' {
+        Mock Invoke-AzRestWithRetry {
+            switch -Wildcard ($Uri) {
+                '*/subscriptions/sub1/providers/Microsoft.Insights/dataCollectionRules`?*' { throw 'Response status code does not indicate success: 403 (Forbidden).' }
+                '*/resourceGroups/rg1/providers/Microsoft.Insights/dataCollectionRules`?*' { return [PSCustomObject]@{ value = @($script:subDcr) } }
+                '*/dataCollectionRuleAssociations`?*' { return [PSCustomObject]@{ value = @() } }
+                default { throw "unexpected $Uri" }
+            }
+        }
+        $result = Get-DataTransforms -Context $script:dtCtx -WarningVariable w -WarningAction SilentlyContinue
+        $result.TotalDCRs | Should -Be 1
+        $result.DiscoveryStatus.SubscriptionList | Should -Be 'Failed'
+        $result.DiscoveryStatus.ResourceGroupList | Should -Match 'Succeeded'
+        $result.DiscoveryStatus.Errors.Count | Should -Be 1
+        @($w).Count | Should -Be 0
+    }
+
+    It 'warns but still returns association-discovered DCRs when every list is denied' {
+        Mock Invoke-AzRestWithRetry {
+            switch -Wildcard ($Uri) {
+                '*/dataCollectionRules`?*' { throw 'Response status code does not indicate success: 403 (Forbidden).' }
+                '*/dataCollectionRuleAssociations`?*' { return [PSCustomObject]@{ value = @([PSCustomObject]@{ properties = [PSCustomObject]@{ dataCollectionRuleId = $script:wsTransformDcr.id } }) } }
+                '*/dataCollectionRules/ws-transform`?*' { return $script:wsTransformDcr }
+                default { throw "unexpected $Uri" }
+            }
+        }
+        $result = Get-DataTransforms -Context $script:dtCtx -WarningVariable w -WarningAction SilentlyContinue
+        $result.TotalDCRs | Should -Be 1
+        "$w" | Should -Match 'DCR listing was denied'
+        $result.DiscoveryStatus.Errors.Count | Should -Be 2
+    }
+
+    It 'warns with the required permission when every route fails, and records per-DCR fetch errors' {
+        Mock Invoke-AzRestWithRetry {
+            switch -Wildcard ($Uri) {
+                '*/dataCollectionRules`?*' { throw 'Response status code does not indicate success: 403 (Forbidden).' }
+                '*/dataCollectionRules/ws-transform`?*' { throw 'Response status code does not indicate success: 404 (Not Found).' }
+                '*/dataCollectionRuleAssociations`?*' { throw 'Response status code does not indicate success: 400 (Bad Request).' }
+                default { throw "unexpected $Uri" }
+            }
+        }
+        $result = Get-DataTransforms -Context $script:dtCtx -WorkspaceDefaultDcrId $script:wsTransformDcr.id -WarningVariable w -WarningAction SilentlyContinue
+        $result.TotalDCRs | Should -Be 0
+        $result.Transforms.Count | Should -Be 0
+        $result.DiscoveryStatus.DefaultDcr | Should -Be 'Failed'
+        $result.DiscoveryStatus.Associations | Should -Be 'Failed'
+        "$w" | Should -Match 'Microsoft.Insights/dataCollectionRules/read'
+        "$w" | Should -Match 'transformation DCR'
+    }
+
+    It 'records an error for an associated DCR that cannot be read but keeps the others' {
+        Mock Invoke-AzRestWithRetry {
+            switch -Wildcard ($Uri) {
+                '*/subscriptions/sub1/providers/Microsoft.Insights/dataCollectionRules`?*' { return [PSCustomObject]@{ value = @() } }
+                '*/dataCollectionRuleAssociations`?*' { return [PSCustomObject]@{ value = @(
+                    [PSCustomObject]@{ properties = [PSCustomObject]@{ dataCollectionRuleId = $script:multiStageDcr.id } },
+                    [PSCustomObject]@{ properties = [PSCustomObject]@{ dataCollectionRuleId = '/subscriptions/sub1/resourceGroups/rg1/providers/Microsoft.Insights/dataCollectionRules/gone' } },
+                    [PSCustomObject]@{ properties = [PSCustomObject]@{ dataCollectionRuleId = '' } }
+                ) } }
+                '*/dataCollectionRules/multi`?*' { return $script:multiStageDcr }
+                '*/dataCollectionRules/gone`?*' { throw 'Response status code does not indicate success: 404 (Not Found).' }
+                default { throw "unexpected $Uri" }
+            }
+        }
+        $result = Get-DataTransforms -Context $script:dtCtx
+        $result.TotalDCRs | Should -Be 1
+        $result.DiscoveryStatus.Errors.Count | Should -Be 1
+        $result.DiscoveryStatus.Errors[0] | Should -Match 'gone'
+    }
+}
+
+Describe 'Get-DataTransforms helpers' {
+    It 'strips every stream prefix' {
+        ConvertTo-DcrTableName -Stream 'Microsoft-Table-SigninLogs' | Should -Be 'SigninLogs'
+        ConvertTo-DcrTableName -Stream 'Microsoft-SecurityEvent' | Should -Be 'SecurityEvent'
+        ConvertTo-DcrTableName -Stream 'Custom-MyApp_CL' | Should -Be 'MyApp_CL'
+        ConvertTo-DcrTableName -Stream 'Plain' | Should -Be 'Plain'
+        ConvertTo-DcrTableName -Stream '' | Should -BeNullOrEmpty
+    }
+
+    It 'matches the workspace destination case-insensitively and rejects others' {
+        $ws = '/subscriptions/S/resourceGroups/RG/providers/Microsoft.OperationalInsights/workspaces/WS'
+        $dcr = [PSCustomObject]@{ properties = [PSCustomObject]@{ destinations = [PSCustomObject]@{ logAnalytics = @([PSCustomObject]@{ workspaceResourceId = $ws.ToLower() }) } } }
+        Test-DcrTargetsWorkspace -Dcr $dcr -WorkspaceResourceId $ws | Should -Be $true
+        Test-DcrTargetsWorkspace -Dcr $dcr -WorkspaceResourceId "$ws-other" | Should -Be $false
+        Test-DcrTargetsWorkspace -Dcr ([PSCustomObject]@{ properties = [PSCustomObject]@{ destinations = $null } }) -WorkspaceResourceId $ws | Should -Be $false
+    }
+
+    It 'resolves flow KQL from inline, named multi-stage, or nothing' {
+        $props = [PSCustomObject]@{ transformations = @([PSCustomObject]@{ name = 's'; processors = @([PSCustomObject]@{ processor = 'transform.KQL'; configuration = [PSCustomObject]@{ expression = 'source | where A == 1' } }) }) }
+        Resolve-DcrFlowTransformKql -Flow ([PSCustomObject]@{ transformKql = 'source | take 1' }) -Properties $props | Should -Be 'source | take 1'
+        Resolve-DcrFlowTransformKql -Flow ([PSCustomObject]@{ transform = 's' }) -Properties $props | Should -Be 'source | where A == 1'
+        Resolve-DcrFlowTransformKql -Flow ([PSCustomObject]@{ transform = 'missing' }) -Properties $props | Should -BeNullOrEmpty
+        Resolve-DcrFlowTransformKql -Flow ([PSCustomObject]@{ streams = @('x') }) -Properties $props | Should -BeNullOrEmpty
+        Resolve-DcrFlowTransformKql -Flow ([PSCustomObject]@{ transform = 's' }) -Properties ([PSCustomObject]@{}) | Should -BeNullOrEmpty
+        $noKql = [PSCustomObject]@{ transformations = @([PSCustomObject]@{ name = 's'; processors = @([PSCustomObject]@{ processor = 'other'; configuration = $null }, $null) }) }
+        Resolve-DcrFlowTransformKql -Flow ([PSCustomObject]@{ transform = 's' }) -Properties $noKql | Should -BeNullOrEmpty
+    }
+
+    It 'summarises ARM errors with code or message' {
+        $er = $null
+        try { throw 'Response status code does not indicate success: 403 (Forbidden).' } catch { $er = $_ }
+        Get-ArmErrorSummary -ErrorRecord $er | Should -Match 'Forbidden'
+        $long = 'x' * 200
+        try { throw $long } catch { $er = $_ }
+        (Get-ArmErrorSummary -ErrorRecord $er).Length | Should -Be 120
+    }
+
+    It 'pages an ARM list until nextLink is exhausted' {
+        Mock Invoke-AzRestWithRetry {
+            if ($Uri -like '*page2*') { return [PSCustomObject]@{ value = @(3) } }
+            [PSCustomObject]@{ value = @(1, 2); nextLink = 'https://example/page2' }
+        }
+        @(Get-ArmListPage -Uri 'https://example/page1' -Headers @{}) | Should -Be @(1, 2, 3)
+    }
+
+    It 'stops paging at the cap with a warning' {
+        Mock Invoke-AzRestWithRetry { [PSCustomObject]@{ value = @(1); nextLink = 'https://example/again' } }
+        $items = @(Get-ArmListPage -Uri 'https://example/page1' -Headers @{} -MaxPages 3 -WarningVariable w -WarningAction SilentlyContinue)
+        $items.Count | Should -Be 3
+        "$w" | Should -Match 'Pagination limit'
+    }
+
+    It 'extracts where conditions across lines with a length window' {
+        $kql = "T`n| where A == 1`n   and B == 2`n| where short`n| project A"
+        $conds = @(Get-KqlWhereCondition -Kql $kql)
+        $conds | Should -Be @('A == 1 and B == 2')
+        @(Get-KqlWhereCondition -Kql '').Count | Should -Be 0
+    }
+}
+
+Describe 'Get-SplitKql schema intersection' {
+    BeforeAll {
+        $script:hvTI = @{
+            'ThreatIntelIndicators' = [PSCustomObject]@{
+                description     = 'TI'
+                highValueFields = @('TimeGenerated', 'ObservableValue', 'IndicatorType', 'NetworkSourceIP', 'Confidence')
+                splitHints      = @([PSCustomObject]@{ description = 'active'; kql = 'IsActive == true' })
+            }
+        }
+        $script:tiSchema = @('TimeGenerated', 'ObservableKey', 'ObservableValue', 'Confidence', 'IsActive', 'Pattern')
+    }
+
+    It 'drops candidate fields that are not in the live schema and reports them' {
+        $rules = @([PSCustomObject]@{ RuleName = 'r'; Enabled = $true; Tables = @('ThreatIntelIndicators'); Query = 'ThreatIntelIndicators | where Confidence > 50 | project ObservableValue, LegacyUrl' })
+        $result = Get-SplitKql -TableName 'ThreatIntelIndicators' -Rules $rules -HighValueFieldsDB $script:hvTI -SchemaColumns $script:tiSchema
+
+        $result.AllFields | Should -Be @('Confidence', 'ObservableValue', 'TimeGenerated')
+        $result.DroppedFields | Should -Contain 'IndicatorType'
+        $result.DroppedFields | Should -Contain 'NetworkSourceIP'
+        $result.DroppedFields | Should -Contain 'LegacyUrl'
+        $result.ProjectKql | Should -Not -Match 'IndicatorType'
+        $result.ProjectKql | Should -Match 'ObservableValue'
+    }
+
+    It 'keeps every field when no schema is supplied' {
+        $result = Get-SplitKql -TableName 'ThreatIntelIndicators' -HighValueFieldsDB $script:hvTI
+        $result.AllFields | Should -Contain 'IndicatorType'
+        $result.DroppedFields.Count | Should -Be 0
+    }
+
+    It 'appends distinct rule conditions to the knowledge-base hint and labels the result combined' {
+        $rules = @([PSCustomObject]@{ RuleName = 'r'; Enabled = $true; Tables = @('ThreatIntelIndicators'); Query = 'ThreatIntelIndicators | where Confidence > 50 | where IsActive == true' })
+        $result = Get-SplitKql -TableName 'ThreatIntelIndicators' -Rules $rules -HighValueFieldsDB $script:hvTI
+        $result.Source | Should -Be 'combined'
+        $result.SplitKql | Should -Match '^\(IsActive == true\)'
+        $result.SplitKql | Should -Match 'or \(Confidence > 50\)'
+        # the duplicate of the hint itself is not appended twice
+        ([regex]::Matches($result.SplitKql, 'IsActive == true')).Count | Should -Be 1
+    }
+
+    It 'uses the pre-grouped rule subset passed from Invoke-Analysis' {
+        $rules = @(
+            [PSCustomObject]@{ RuleName = 'other'; Enabled = $true; Tables = @('Other'); Query = 'Other | where X == 1' },
+            [PSCustomObject]@{ RuleName = 'off'; Enabled = $false; Tables = @('ThreatIntelIndicators'); Query = 'ThreatIntelIndicators | where Y == 1' }
+        )
+        $result = Get-SplitKql -TableName 'ThreatIntelIndicators' -Rules $rules
+        $result.RuleCount | Should -Be 0
+        $result.Source | Should -Be 'none'
+    }
+}
+
+Describe 'Get-LiveTuningAnalysis schema intersection' {
+    It 'removes rule fields absent from the schema from ProjectKql and reports DroppedFields' {
+        $rules = @([PSCustomObject]@{ RuleName = 'r'; Enabled = $true; Tables = @('SigninLogs'); Query = 'SigninLogs | where ResultType != 0 | project UserPrincipalName, csUserName' })
+        $schema = @{ 'SigninLogs' = @('TimeGenerated', 'ResultType', 'UserPrincipalName', 'IPAddress') }
+        $result = @(Get-LiveTuningAnalysis -Rules $rules -SchemaLookup $schema)
+        $result.Count | Should -Be 1
+        $result[0].DroppedFields | Should -Be @('csUserName')
+        $result[0].UsedFields | Should -Not -Contain 'csUserName'
+        $result[0].ProjectKql | Should -Not -Match 'csUserName'
+        $result[0].UnusedFields | Should -Be @('IPAddress')
+    }
+
+    It 'builds filter-only and project-only combined KQL and resolves rule names from hunting queries' {
+        $rules = @(
+            [PSCustomObject]@{ Enabled = $true; Tables = @('OnlyWhere'); Query = 'OnlyWhere | where 1 == 1' },
+            [PSCustomObject]@{ DisplayName = 'disp'; Enabled = $true; Tables = @('OnlyProject'); Query = 'OnlyProject | project Alpha, Beta' },
+            [PSCustomObject]@{ Enabled = $true; Tables = $null; Query = 'X | take 1' }
+        )
+        $hunting = @([PSCustomObject]@{ QueryName = 'hunt'; Enabled = $true; Tables = @('OnlyProject'); Query = 'OnlyProject | project Gamma' })
+        $result = @(Get-LiveTuningAnalysis -Rules $rules -HuntingQueries $hunting)
+        $onlyWhere = $result | Where-Object TableName -eq 'OnlyWhere'
+        $onlyWhere.CombinedKql | Should -Be "source`n| where (1 == 1)"
+        $onlyWhere.ProjectKql | Should -BeNullOrEmpty
+        $onlyWhere.RuleDetails[0].RuleName | Should -Be 'Unknown'
+        $onlyProject = $result | Where-Object TableName -eq 'OnlyProject'
+        $onlyProject.ProjectKql | Should -Match 'Alpha, Beta, Gamma, TimeGenerated'
+        $onlyProject.CombinedKql | Should -Be $onlyProject.ProjectKql
+        ($onlyProject.RuleDetails | ForEach-Object RuleName) | Should -Be @('disp', 'hunt')
+    }
+}
+
+Describe 'Get-ArmErrorSummary detail parsing' {
+    It 'prefers the error code from a JSON error body' {
+        $er = $null
+        try { throw 'HTTP failure' } catch { $er = $_ }
+        $er.ErrorDetails = [System.Management.Automation.ErrorDetails]::new('{"error":{"code":"AuthorizationFailed","message":"no"}}')
+        Get-ArmErrorSummary -ErrorRecord $er | Should -Be 'AuthorizationFailed'
+    }
+
+    It 'includes the HTTP status when a response is attached' {
+        $resp = [System.Net.Http.HttpResponseMessage]::new([System.Net.HttpStatusCode]::Forbidden)
+        $ex = [Microsoft.PowerShell.Commands.HttpResponseException]::new('Response status code does not indicate success: 403 (Forbidden).', $resp)
+        $er = [System.Management.Automation.ErrorRecord]::new($ex, 'x', 'InvalidOperation', $null)
+        $er.ErrorDetails = [System.Management.Automation.ErrorDetails]::new('{"error":{"code":"AuthorizationFailed"}}')
+        Get-ArmErrorSummary -ErrorRecord $er | Should -Be 'HTTP 403 AuthorizationFailed'
+        $resp.Dispose()
+    }
+}
+
+Describe 'Get-TableRetention collector' {
+    It 'captures AsDefault flags, table type, plan-modified date, columns and the default DCR id' {
+        Mock Invoke-AzRestWithRetry {
+            if ($Uri -like '*/tables?*') {
+                return [PSCustomObject]@{ value = @(
+                    [PSCustomObject]@{ name = 'SigninLogs'; properties = [PSCustomObject]@{ plan = 'Analytics'; retentionInDays = 90; totalRetentionInDays = 90; archiveRetentionInDays = 0; retentionInDaysAsDefault = $true; totalRetentionInDaysAsDefault = $true; provisioningState = 'Succeeded'; tableSubType = 'Any'; lastPlanModifiedDate = '2026-01-02T00:00:00Z'; schema = [PSCustomObject]@{ tableType = 'Microsoft'; columns = @([PSCustomObject]@{ name = 'UserPrincipalName'; isHidden = $false }, [PSCustomObject]@{ name = 'Secret'; isHidden = $true }); standardColumns = @([PSCustomObject]@{ name = 'TimeGenerated'; isHidden = $false }) } } },
+                    [PSCustomObject]@{ name = 'Hunt_SRCH'; properties = [PSCustomObject]@{ plan = 'Analytics'; retentionInDays = 30; totalRetentionInDays = 365; archiveRetentionInDays = 335; retentionInDaysAsDefault = $false; totalRetentionInDaysAsDefault = $false; schema = [PSCustomObject]@{ tableType = 'SearchResults'; columns = @(); standardColumns = @() } } },
+                    [PSCustomObject]@{ name = 'NoSchema'; properties = [PSCustomObject]@{ plan = 'Basic' } }
+                ) }
+            }
+            [PSCustomObject]@{ properties = [PSCustomObject]@{ retentionInDays = 90; defaultDataCollectionRuleResourceId = '/subscriptions/s/resourceGroups/rg/providers/Microsoft.Insights/dataCollectionRules/ws-dcr' } }
+        }
+        $ctx = [PSCustomObject]@{ ArmToken = 'tok'; ResourceId = '/subscriptions/s/resourceGroups/rg/providers/Microsoft.OperationalInsights/workspaces/ws' }
+
+        $result = Get-TableRetention -Context $ctx
+
+        $result.WorkspaceRetentionDays | Should -Be 90
+        $result.WorkspaceDefaultDcrId | Should -Match 'ws-dcr$'
+        $result.Tables.Count | Should -Be 3
+        $signin = $result.Tables | Where-Object TableName -eq 'SigninLogs'
+        $signin.RetentionInDaysAsDefault | Should -Be $true
+        $signin.TotalRetentionInDaysAsDefault | Should -Be $true
+        $signin.TableType | Should -Be 'Microsoft'
+        $signin.LastPlanModifiedDate | Should -Be '2026-01-02T00:00:00Z'
+        $signin.Columns | Should -Be @('TimeGenerated', 'UserPrincipalName')
+        ($result.Tables | Where-Object TableName -eq 'Hunt_SRCH').TableType | Should -Be 'SearchResults'
+        $noSchema = $result.Tables | Where-Object TableName -eq 'NoSchema'
+        $noSchema.TableType | Should -BeNullOrEmpty
+        $noSchema.RetentionInDays | Should -BeNullOrEmpty
+        $noSchema.RetentionInDaysAsDefault | Should -Be $false
+        $noSchema.LastPlanModifiedDate | Should -BeNullOrEmpty
+    }
+
+    It 'returns a null default DCR id when the workspace has none' {
+        Mock Invoke-AzRestWithRetry {
+            if ($Uri -like '*/tables?*') { return [PSCustomObject]@{ value = @() } }
+            [PSCustomObject]@{ properties = [PSCustomObject]@{ retentionInDays = 30 } }
+        }
+        $ctx = [PSCustomObject]@{ ArmToken = 'tok'; ResourceId = '/subscriptions/s/resourceGroups/rg/providers/Microsoft.OperationalInsights/workspaces/ws' }
+        $result = Get-TableRetention -Context $ctx
+        $result.WorkspaceDefaultDcrId | Should -BeNullOrEmpty
+        $result.Tables.Count | Should -Be 0
     }
 }
 

@@ -52,6 +52,17 @@ function Invoke-Analysis {
 
     Write-Verbose "Starting analysis for $($TableUsage.Count) table(s)."
 
+    # Group enabled rules by table once so Get-SplitKql does not rescan every rule per table
+    $rulesByTable = @{}
+    foreach ($rule in @($RulesData.Rules)) {
+        if (-not $rule.Enabled) { continue }
+        foreach ($t in @($rule.Tables)) {
+            if ([string]::IsNullOrWhiteSpace($t)) { continue }
+            if (-not $rulesByTable.ContainsKey($t)) { $rulesByTable[$t] = [System.Collections.Generic.List[object]]::new() }
+            $rulesByTable[$t].Add($rule)
+        }
+    }
+
     # Per-table analysis
     $tableAnalysis = foreach ($table in $TableUsage) {
         $name = $table.TableName
@@ -159,10 +170,11 @@ function Invoke-Analysis {
         $schemaColumns = if ($ret -and $ret.Columns) { @($ret.Columns) } else { @() }
 
         $splitSuggestion = Get-SplitKql -TableName $name `
-                                        -Rules $RulesData.Rules `
+                                        -Rules $(if ($rulesByTable.ContainsKey($name)) { @($rulesByTable[$name]) } else { @() }) `
                                         -HighValueFieldsDB $HighValueFields `
                                         -FieldFrequencyStats $FieldFrequencyStats `
-                                        -TableCategory $(if ($cls) { $cls.Category } else { $null })
+                                        -TableCategory $(if ($cls) { $cls.Category } else { $null }) `
+                                        -SchemaColumns $schemaColumns
 
         [PSCustomObject]@{
             TableName                    = $name
@@ -192,6 +204,10 @@ function Invoke-Analysis {
             RecommendedRetentionDays     = $recommendedRetention
             TablePlan                    = $tablePlan
             TableSubType                 = $tableSubType
+            TableType                    = if ($ret -and $ret.PSObject.Properties.Name -contains 'TableType') { $ret.TableType } else { $null }
+            RetentionInDaysAsDefault      = if ($ret -and $ret.PSObject.Properties.Name -contains 'RetentionInDaysAsDefault') { [bool]$ret.RetentionInDaysAsDefault } else { $false }
+            TotalRetentionInDaysAsDefault = if ($ret -and $ret.PSObject.Properties.Name -contains 'TotalRetentionInDaysAsDefault') { [bool]$ret.TotalRetentionInDaysAsDefault } else { $false }
+            LastPlanModifiedDate         = if ($ret -and $ret.PSObject.Properties.Name -contains 'LastPlanModifiedDate') { $ret.LastPlanModifiedDate } else { $null }
             ObservedPlans                = $observedPlans
             ObservedKnownPlans           = $observedKnownPlans
             ObservedPlanCount            = $observedPlanCount

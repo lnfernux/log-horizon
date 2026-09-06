@@ -201,8 +201,15 @@ function Get-TableRetentionChangeSet {
         $status   = 'Pending'
         $reason   = $null
 
+        # Search-job and restore tables are managed by their parent operation, not by PATCH.
+        $tableType = Get-TableRetentionSourceValue -Table $t -Names @('TableType')
+        if ($tableType -in @('SearchResults', 'RestoredLogs')) {
+            $status = 'Invalid'
+            $reason = "Tables of type $tableType cannot have plan or retention changed."
+        }
+
         # Auxiliary tables cannot have their plan switched in or out.
-        if ($currentPlan -eq 'Auxiliary' -or $effectivePlan -eq 'Auxiliary') {
+        if ($status -eq 'Pending' -and ($currentPlan -eq 'Auxiliary' -or $effectivePlan -eq 'Auxiliary')) {
             if ($changePlan -and $currentPlan -ne $effectivePlan) {
                 $status = 'Invalid'
                 $reason = 'Plan switching to or from Auxiliary is not supported by the Tables API.'
@@ -233,10 +240,14 @@ function Get-TableRetentionChangeSet {
             $reason = "Effective TotalRetentionInDays ($newTotal) is less than RetentionInDays ($newRetention)."
         }
 
-        # No-op detection.
+        # No-op detection. Inherit (null) targets compare against the AsDefault flags, since the
+        # API always reports the effective value.
+        $retentionInherits = (Get-TableRetentionSourceValue -Table $t -Names @('RetentionInDaysAsDefault')) -eq $true
+        $totalInherits     = (Get-TableRetentionSourceValue -Table $t -Names @('TotalRetentionInDaysAsDefault')) -eq $true -or
+                             ($null -ne $currentTotal -and $null -ne $currentRetention -and $currentTotal -eq $currentRetention)
         $planChanged      = $changePlan      -and ($currentPlan -ne $effectivePlan)
-        $retentionChanged = $changeRetention -and ($currentRetention -ne $newRetention)
-        $totalChanged     = $changeTotal     -and ($currentTotal -ne $newTotal)
+        $retentionChanged = $changeRetention -and $(if ($null -eq $newRetention) { -not $retentionInherits } else { $currentRetention -ne $newRetention })
+        $totalChanged     = $changeTotal     -and $(if ($null -eq $newTotal) { -not $totalInherits } else { $currentTotal -ne $newTotal })
         if ($status -eq 'Pending' -and -not ($planChanged -or $retentionChanged -or $totalChanged)) {
             $status = 'Skipped'
             $reason = 'Target values match current configuration.'
