@@ -26,7 +26,7 @@ function Get-DataTransforms {
     )
 
     $headers = @{ Authorization = "Bearer $($Context.ArmToken)" }
-    $arm = 'https://management.azure.com'
+    $arm = Get-LogHorizonEndpoint -Name Arm -Context $Context
     $workspaceId = "$($Context.ResourceId)"
 
     $dcrById = [System.Collections.Generic.Dictionary[string, object]]::new([StringComparer]::OrdinalIgnoreCase)

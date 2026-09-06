@@ -16,6 +16,10 @@ BeforeAll {
     . "$privatePath\Invoke-AzRestWithRetry.ps1"
     . "$privatePath\Get-DefenderXDR.ps1"
     . "$privatePath\Get-CollectionCache.ps1"
+    . "$privatePath\Get-LogHorizonEndpoint.ps1"
+    . "$privatePath\Get-HuntingQueries.ps1"
+    . "$privatePath\Get-DataConnectors.ps1"
+    . "$privatePath\Get-SocOptimization.ps1"
     . (Join-Path $PSScriptRoot '..\Public\Set-LogHorizonTableRetention.ps1')
 
     function New-MockAnalysis {
@@ -4521,8 +4525,32 @@ Describe 'Connect-Sentinel' {
         $ctx.DefaultDataCollectionRuleResourceId | Should -Be '/dcr'
         $ctx.ResourceId | Should -Be '/subscriptions/sub/resourceGroups/rg/providers/Microsoft.OperationalInsights/workspaces/ws'
         $ctx.PSObject.Properties.Name | Should -Not -Contain 'DefenderUnified'
-        Should -Invoke Invoke-AzRestWithRetry -Times 1 -ParameterFilter { $Uri -match 'api-version=2023-09-01$' }
+        $ctx.Endpoints.Arm | Should -Be 'https://management.azure.com'
+        $ctx.Endpoints.LogAnalytics | Should -Be 'https://api.loganalytics.io/v1'
+        Should -Invoke Invoke-AzRestWithRetry -Times 1 -ParameterFilter { $Uri -eq 'https://management.azure.com/subscriptions/sub/resourceGroups/rg/providers/Microsoft.OperationalInsights/workspaces/ws?api-version=2025-07-01' }
         Should -Invoke Connect-AzAccount -Times 0
+    }
+
+    It 'uses the sovereign endpoints of the signed-in environment for tokens and the workspace call' {
+        $gov = [PSCustomObject]@{
+            Name                                       = 'AzureUSGovernment'
+            ResourceManagerUrl                         = 'https://management.usgovcloudapi.net/'
+            AzureOperationalInsightsEndpoint           = 'https://api.loganalytics.us/v1'
+            AzureOperationalInsightsEndpointResourceId = 'https://api.loganalytics.us'
+            ExtendedProperties                         = @{ MicrosoftGraphUrl = 'https://graph.microsoft.us' }
+        }
+        Mock Get-AzContext { [PSCustomObject]@{ Subscription = [PSCustomObject]@{ Id = 'sub' }; Tenant = [PSCustomObject]@{ Id = 'tid' }; Environment = $gov } }
+        Mock Resolve-AzToken { "tok-$ResourceUrl" }
+        Mock Invoke-AzRestWithRetry { [PSCustomObject]@{ location = 'usgovvirginia'; properties = [PSCustomObject]@{ customerId = 'gov-guid' } } }
+
+        $ctx = Connect-Sentinel -SubscriptionId 'sub' -ResourceGroup 'rg' -WorkspaceName 'ws'
+
+        $ctx.ArmToken | Should -Be 'tok-https://management.usgovcloudapi.net'
+        $ctx.LaToken | Should -Be 'tok-https://api.loganalytics.us'
+        $ctx.Endpoints.Name | Should -Be 'AzureUSGovernment'
+        $ctx.Endpoints.Graph | Should -Be 'https://graph.microsoft.us'
+        $ctx.Endpoints.GraphEnvironment | Should -Be 'USGov'
+        Should -Invoke Invoke-AzRestWithRetry -Times 1 -ParameterFilter { $Uri -like 'https://management.usgovcloudapi.net/subscriptions/sub/*' }
     }
 
     It 'signs in when the current context is for another subscription and warns on a WorkspaceId mismatch' {
@@ -4560,6 +4588,150 @@ Describe 'Resolve-AzToken' {
         Mock Get-AzAccessToken { [PSCustomObject]@{ Token = 'plain-token' } }
         Resolve-AzToken -ResourceUrl 'https://x' | Should -Be 'plain-token'
         Should -Invoke Get-AzAccessToken -Times 1 -ParameterFilter { -not $PSBoundParameters.ContainsKey('TenantId') }
+    }
+}
+
+Describe 'Endpoint resolution' {
+    It 'returns the public cloud defaults when there is no Az context' {
+        Mock Get-AzContext { $null }
+        $e = Resolve-LogHorizonEndpoints
+        $e.Name | Should -Be 'AzureCloud'
+        $e.Arm | Should -Be 'https://management.azure.com'
+        $e.LogAnalytics | Should -Be 'https://api.loganalytics.io/v1'
+        $e.LogAnalyticsResource | Should -Be 'https://api.loganalytics.io'
+        $e.Graph | Should -Be 'https://graph.microsoft.com'
+        $e.GraphEnvironment | Should -Be 'Global'
+    }
+
+    It 'returns the defaults when Get-AzContext is unavailable' {
+        Mock Get-AzContext { throw 'no Az' }
+        (Resolve-LogHorizonEndpoints).Arm | Should -Be 'https://management.azure.com'
+    }
+
+    It 'reads sovereign values from properties and ExtendedProperties and trims trailing slashes' {
+        $china = [PSCustomObject]@{
+            Name                                       = 'AzureChinaCloud'
+            ResourceManagerUrl                         = 'https://management.chinacloudapi.cn/'
+            AzureOperationalInsightsEndpoint           = ''
+            AzureOperationalInsightsEndpointResourceId = $null
+            ExtendedProperties                         = @{
+                OperationalInsightsEndpoint           = 'https://api.loganalytics.azure.cn/v1/'
+                OperationalInsightsEndpointResourceId = 'https://api.loganalytics.azure.cn'
+                MicrosoftGraphEndpointResourceId      = 'https://microsoftgraph.chinacloudapi.cn/'
+            }
+        }
+        $e = Resolve-LogHorizonEndpoints -Environment $china
+        $e.Name | Should -Be 'AzureChinaCloud'
+        $e.Arm | Should -Be 'https://management.chinacloudapi.cn'
+        $e.LogAnalytics | Should -Be 'https://api.loganalytics.azure.cn/v1'
+        $e.LogAnalyticsResource | Should -Be 'https://api.loganalytics.azure.cn'
+        $e.Graph | Should -Be 'https://microsoftgraph.chinacloudapi.cn'
+        $e.GraphEnvironment | Should -Be 'China'
+    }
+
+    It 'falls back per value when an environment is missing fields' {
+        $partial = [PSCustomObject]@{ Name = ''; ResourceManagerUrl = 'https://arm.example/' }
+        $e = Resolve-LogHorizonEndpoints -Environment $partial
+        $e.Name | Should -Be 'AzureCloud'
+        $e.Arm | Should -Be 'https://arm.example'
+        $e.LogAnalytics | Should -Be 'https://api.loganalytics.io/v1'
+        $e.Graph | Should -Be 'https://graph.microsoft.com'
+        $e.GraphEnvironment | Should -Be 'Global'
+    }
+
+    It 'Get-LogHorizonEndpoint prefers the context Endpoints and otherwise resolves from the environment' {
+        $ctx = [PSCustomObject]@{ Endpoints = [PSCustomObject]@{ Arm = 'https://ctx.example'; Graph = '' } }
+        Get-LogHorizonEndpoint -Name Arm -Context $ctx | Should -Be 'https://ctx.example'
+
+        Mock Get-AzContext { $null }
+        Get-LogHorizonEndpoint -Name Graph -Context $ctx | Should -Be 'https://graph.microsoft.com'
+        Get-LogHorizonEndpoint -Name LogAnalytics -Context ([PSCustomObject]@{ ArmToken = 'x' }) | Should -Be 'https://api.loganalytics.io/v1'
+        Get-LogHorizonEndpoint -Name GraphEnvironment | Should -Be 'Global'
+    }
+}
+
+Describe 'Collector endpoints and API versions' {
+    BeforeAll {
+        $script:epCtx = [PSCustomObject]@{
+            ArmToken    = 'tok'
+            LaToken     = 'la'
+            WorkspaceId = 'ws-guid'
+            ResourceId  = '/subscriptions/s/resourceGroups/rg/providers/Microsoft.OperationalInsights/workspaces/ws'
+            Endpoints   = [PSCustomObject]@{ Arm = 'https://management.usgovcloudapi.net'; LogAnalytics = 'https://api.loganalytics.us/v1'; Graph = 'https://graph.microsoft.us'; GraphEnvironment = 'USGov' }
+        }
+    }
+
+    It 'Get-AnalyticsRules uses SecurityInsights 2025-09-01 on the environment ARM host' {
+        Mock Invoke-AzRestWithRetry { [PSCustomObject]@{ value = @() } }
+        $null = Get-AnalyticsRules -Context $script:epCtx
+        Should -Invoke Invoke-AzRestWithRetry -Times 1 -ParameterFilter { $Uri -eq 'https://management.usgovcloudapi.net/subscriptions/s/resourceGroups/rg/providers/Microsoft.OperationalInsights/workspaces/ws/providers/Microsoft.SecurityInsights/alertRules?api-version=2025-09-01' }
+    }
+
+    It 'Get-DataConnectors uses SecurityInsights 2025-09-01 on the environment ARM host' {
+        Mock Invoke-AzRestWithRetry { [PSCustomObject]@{ value = @() } }
+        $null = Get-DataConnectors -Context $script:epCtx
+        Should -Invoke Invoke-AzRestWithRetry -Times 1 -ParameterFilter { $Uri -eq 'https://management.usgovcloudapi.net/subscriptions/s/resourceGroups/rg/providers/Microsoft.OperationalInsights/workspaces/ws/providers/Microsoft.SecurityInsights/dataConnectors?api-version=2025-09-01' }
+    }
+
+    It 'Get-DataConnectors follows nextLink and derives IsConnected from dataTypes state' {
+        Mock Invoke-AzRestWithRetry {
+            if ($Uri -like '*page2*') {
+                return [PSCustomObject]@{ value = @(
+                    [PSCustomObject]@{ id = 'c3'; name = 'c3'; kind = 'GenericUI'; properties = [PSCustomObject]@{ connectorUiConfig = [PSCustomObject]@{ title = 'x' } } },
+                    [PSCustomObject]@{ id = 'c4'; name = 'c4'; kind = 'Other'; properties = [PSCustomObject]@{ displayName = 'no types' } }
+                ) }
+            }
+            [PSCustomObject]@{
+                value    = @(
+                    [PSCustomObject]@{ id = 'c1'; name = 'c1'; kind = 'AzureActiveDirectory'; properties = [PSCustomObject]@{ dataTypes = [PSCustomObject]@{ alerts = [PSCustomObject]@{ state = 'Enabled' } } } },
+                    [PSCustomObject]@{ id = 'c2'; name = 'c2'; kind = 'Office365'; properties = [PSCustomObject]@{ dataTypes = [PSCustomObject]@{ exchange = [PSCustomObject]@{ state = 'Disabled' } } } }
+                )
+                nextLink = 'https://management.usgovcloudapi.net/page2'
+            }
+        }
+        $r = @(Get-DataConnectors -Context $script:epCtx)
+        $r.Count | Should -Be 4
+        ($r | Where-Object Id -eq 'c1').IsConnected | Should -BeTrue
+        ($r | Where-Object Id -eq 'c2').IsConnected | Should -BeFalse
+        ($r | Where-Object Id -eq 'c3').IsConnected | Should -BeTrue
+        ($r | Where-Object Id -eq 'c4').IsConnected | Should -BeTrue
+        ($r | Where-Object Id -eq 'c1').ConnectorType | Should -Be 'AzureActiveDirectory'
+        Should -Invoke Invoke-AzRestWithRetry -Times 2
+    }
+
+    It 'Get-HuntingQueries uses OperationalInsights 2025-07-01 and keeps only Hunting Queries' {
+        Mock Invoke-AzRestWithRetry { [PSCustomObject]@{ value = @(
+            [PSCustomObject]@{ properties = [PSCustomObject]@{ category = 'Hunting Queries'; displayName = 'H1'; query = 'SigninLogs | take 1' } },
+            [PSCustomObject]@{ properties = [PSCustomObject]@{ category = 'General Exploration'; displayName = 'S1'; query = 'Heartbeat | take 1' } }
+        ) } }
+        $r = Get-HuntingQueries -Context $script:epCtx
+        @($r.Queries).Count | Should -Be 1
+        $r.TableCoverage['SigninLogs'] | Should -Be 1
+        Should -Invoke Invoke-AzRestWithRetry -Times 1 -ParameterFilter { $Uri -eq 'https://management.usgovcloudapi.net/subscriptions/s/resourceGroups/rg/providers/Microsoft.OperationalInsights/workspaces/ws/savedSearches?api-version=2025-07-01' }
+    }
+
+    It 'Get-SocOptimization uses recommendations 2025-10-01-preview and returns an empty list on failure' {
+        Mock Invoke-AzRestWithRetry { [PSCustomObject]@{ value = @([PSCustomObject]@{ id = 'r1'; properties = [PSCustomObject]@{ title = 'T'; state = 'Active'; recommendationTypeId = 'X'; suggestions = @([PSCustomObject]@{ title = 's'; action = 'a'; suggestionTypeId = 'st' }) } }) } }
+        $r = @(Get-SocOptimization -Context $script:epCtx)
+        $r.Count | Should -Be 1
+        $r[0].Suggestions[0].TypeId | Should -Be 'st'
+        Should -Invoke Invoke-AzRestWithRetry -Times 1 -ParameterFilter { $Uri -eq 'https://management.usgovcloudapi.net/subscriptions/s/resourceGroups/rg/providers/Microsoft.OperationalInsights/workspaces/ws/providers/Microsoft.SecurityInsights/recommendations?api-version=2025-10-01-preview' }
+
+        Mock Invoke-AzRestWithRetry { throw '403' }
+        @(Get-SocOptimization -Context $script:epCtx).Count | Should -Be 0
+    }
+
+    It 'Get-TableRetention uses OperationalInsights 2025-07-01 for the workspace and tables' {
+        Mock Invoke-AzRestWithRetry { if ($Uri -like '*/tables?*') { [PSCustomObject]@{ value = @() } } else { [PSCustomObject]@{ properties = [PSCustomObject]@{ retentionInDays = 30 } } } }
+        $null = Get-TableRetention -Context $script:epCtx
+        Should -Invoke Invoke-AzRestWithRetry -Times 1 -ParameterFilter { $Uri -eq 'https://management.usgovcloudapi.net/subscriptions/s/resourceGroups/rg/providers/Microsoft.OperationalInsights/workspaces/ws?api-version=2025-07-01' }
+        Should -Invoke Invoke-AzRestWithRetry -Times 1 -ParameterFilter { $Uri -eq 'https://management.usgovcloudapi.net/subscriptions/s/resourceGroups/rg/providers/Microsoft.OperationalInsights/workspaces/ws/tables?api-version=2025-07-01' }
+    }
+
+    It 'Get-TableUsage queries the environment Log Analytics endpoint' {
+        Mock Invoke-AzRestWithRetry { [PSCustomObject]@{ tables = @([PSCustomObject]@{ columns = @([PSCustomObject]@{ name = 'DataType' }, [PSCustomObject]@{ name = 'TotalGB' }); rows = @() }) } }
+        $null = Get-TableUsage -Context $script:epCtx -DaysBack 7
+        Should -Invoke Invoke-AzRestWithRetry -ParameterFilter { $Uri -eq 'https://api.loganalytics.us/v1/workspaces/ws-guid/query' }
     }
 }
 

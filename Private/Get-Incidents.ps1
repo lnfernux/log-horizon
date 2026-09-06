@@ -15,7 +15,7 @@ function Get-Incidents {
     $since = (Get-Date).ToUniversalTime().AddDays(-$DaysBack).ToString('o')
     $escapedSince = [System.Uri]::EscapeDataString("properties/createdTimeUtc ge $since")
     # $top max is 1000 per the Incidents List API
-    $uri = "https://management.azure.com$($Context.ResourceId)" +
+    $uri = "$(Get-LogHorizonEndpoint -Name Arm -Context $Context)$($Context.ResourceId)" +
            "/providers/Microsoft.SecurityInsights/incidents?api-version=2025-09-01&`$top=1000&`$filter=$escapedSince"
 
     $allIncidents = [System.Collections.Generic.List[object]]::new()
@@ -124,7 +124,7 @@ function Get-AutoCloseFromHealth {
         Authorization  = "Bearer $($Context.LaToken)"
         'Content-Type' = 'application/json'
     }
-    $baseUri = "https://api.loganalytics.io/v1/workspaces/$($Context.WorkspaceId)/query"
+    $baseUri = "$(Get-LogHorizonEndpoint -Name LogAnalytics -Context $Context)/workspaces/$($Context.WorkspaceId)/query"
 
     # Query automation rule run events
     $query = @"

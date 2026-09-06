@@ -11,7 +11,7 @@ function Get-HuntingQueries {
     )
 
     $headers = @{ Authorization = "Bearer $($Context.ArmToken)" }
-    $uri = "https://management.azure.com$($Context.ResourceId)/savedSearches?api-version=2020-08-01"
+    $uri = "$(Get-LogHorizonEndpoint -Name Arm -Context $Context)$($Context.ResourceId)/savedSearches?api-version=2025-07-01"
 
     $allSavedSearches = [System.Collections.Generic.List[object]]::new()
     $maxPages = 1000

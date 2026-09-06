@@ -4,7 +4,7 @@ function Connect-Sentinel {
         Authenticates to Azure and resolves the target Sentinel workspace.
     .OUTPUTS
         PSCustomObject with SubscriptionId, ResourceGroup, WorkspaceName,
-        WorkspaceId, ResourceId, and Token properties.
+        WorkspaceId, ResourceId, tokens, workspace facts and Endpoints.
     #>
     [CmdletBinding()]
     param(
@@ -25,17 +25,21 @@ function Connect-Sentinel {
         Write-Verbose "Already connected to subscription $SubscriptionId."
     }
 
+    # Endpoints for the signed-in cloud (public defaults when the environment does not supply them)
+    $endpoints = Resolve-LogHorizonEndpoints -Environment $ctx.Environment
+    Write-Verbose "Azure environment: $($endpoints.Name) (ARM $($endpoints.Arm))"
+
     # Acquire ARM token
-    $token = Resolve-AzToken -ResourceUrl 'https://management.azure.com'
+    $token = Resolve-AzToken -ResourceUrl $endpoints.Arm
 
     # Acquire Log Analytics token
-    $laToken = Resolve-AzToken -ResourceUrl 'https://api.loganalytics.io'
+    $laToken = Resolve-AzToken -ResourceUrl $endpoints.LogAnalyticsResource
 
     # Resolve workspace via REST (no Az.Resources dependency)
     $resourceId = "/subscriptions/$SubscriptionId/resourceGroups/$ResourceGroup" +
                   "/providers/Microsoft.OperationalInsights/workspaces/$WorkspaceName"
 
-    $wsUri = "https://management.azure.com${resourceId}?api-version=2023-09-01"
+    $wsUri = "$($endpoints.Arm)${resourceId}?api-version=2025-07-01"
     $ws = Invoke-AzRestWithRetry -Uri $wsUri -Headers @{ Authorization = "Bearer $token" }
     $resolvedWsId = $ws.properties.customerId   # Log Analytics workspace GUID
     if ([string]::IsNullOrWhiteSpace("$resolvedWsId")) {
@@ -58,6 +62,7 @@ function Connect-Sentinel {
         Region                              = $ws.location
         WorkspaceRetentionDays              = if ($null -ne $ws.properties.retentionInDays) { [int]$ws.properties.retentionInDays } else { $null }
         DefaultDataCollectionRuleResourceId = $ws.properties.defaultDataCollectionRuleResourceId
+        Endpoints                           = $endpoints
     }
 }
 

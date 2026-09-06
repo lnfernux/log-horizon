@@ -14,16 +14,17 @@ function Get-TableRetention {
     )
 
     $headers = @{ Authorization = "Bearer $($Context.ArmToken)" }
+    $arm = Get-LogHorizonEndpoint -Name Arm -Context $Context
 
     # Workspace-level default retention and the workspace transformation DCR (if any)
-    $wsUri = "https://management.azure.com$($Context.ResourceId)?api-version=2023-09-01"
+    $wsUri = "$arm$($Context.ResourceId)?api-version=2025-07-01"
     $wsResponse = Invoke-AzRestWithRetry -Uri $wsUri -Headers $headers
     $workspaceRetention = [int]$wsResponse.properties.retentionInDays
     $defaultDcrId = if ($wsResponse.properties.PSObject.Properties.Name -contains 'defaultDataCollectionRuleResourceId') { $wsResponse.properties.defaultDataCollectionRuleResourceId } else { $null }
 
     # Per-table retention and plan. retentionInDays / totalRetentionInDays are always the
     # effective values; the *AsDefault booleans say whether they are inherited.
-    $uri = "https://management.azure.com$($Context.ResourceId)/tables?api-version=2025-07-01"
+    $uri = "$arm$($Context.ResourceId)/tables?api-version=2025-07-01"
     $response = Invoke-AzRestWithRetry -Uri $uri -Headers $headers
 
     $tables = foreach ($table in $response.value) {

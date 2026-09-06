@@ -49,7 +49,7 @@ Usage
         'Content-Type' = 'application/json'
     }
 
-    $uri = "https://api.loganalytics.io/v1/workspaces/$($Context.WorkspaceId)/query"
+    $uri = "$(Get-LogHorizonEndpoint -Name LogAnalytics -Context $Context)/workspaces/$($Context.WorkspaceId)/query"
     $response = Invoke-AzRestWithRetry -Uri $uri -Method Post -Headers $headers -Body $body
 
     $rows = @($response.tables[0].rows)

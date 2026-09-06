@@ -11,8 +11,8 @@ function Get-SocOptimization {
     )
 
     $headers = @{ Authorization = "Bearer $($Context.ArmToken)" }
-    $uri = "https://management.azure.com$($Context.ResourceId)" +
-           "/providers/Microsoft.SecurityInsights/recommendations?api-version=2024-01-01-preview"
+    $uri = "$(Get-LogHorizonEndpoint -Name Arm -Context $Context)$($Context.ResourceId)" +
+           "/providers/Microsoft.SecurityInsights/recommendations?api-version=2025-10-01-preview"
 
     try {
         $response = Invoke-AzRestWithRetry -Uri $uri -Headers $headers

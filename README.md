@@ -61,6 +61,8 @@ I've had to answer *"what are we actually getting out of these logs?"* or *"what
 | Other modules | `PwshSpectreConsole` 2.6.3+ |
 | Optional | `Microsoft.Graph.Authentication` (for `-IncludeDefenderXDR` as a signed-in user) |
 
+Endpoints follow the Azure environment of the current `Connect-AzAccount` session, so Azure Government and Azure China workspaces work without extra parameters. The public cloud values are used when no environment is available.
+
 If you're not already logged into Azure, the module will fire up `Connect-AzAccount` for you. If you are, it'll just carry on.
 
 Permissions: Log Analytics Reader and Microsoft Sentinel Reader on the workspace cover the analysis. Transform discovery also needs `Microsoft.Insights/dataCollectionRules/read` (Monitoring Reader) on the subscription or resource group; without it the run continues and prints a warning naming the missing permission. `-IncludeDefenderXDR` uses Microsoft Graph with `CustomDetection.Read.All`, which for a signed-in user means the optional `Microsoft.Graph.Authentication` module.
@@ -491,6 +493,8 @@ Private/
   Get-AutomationRules.ps1    Automation rule inventory + close-logic attribution
   Get-SocOptimization.ps1    SOC improvement recommendations
   Get-TableRetention.ps1     Per-table retention, archive, and plan type
+  Get-CollectionCache.ps1    Collection cache (key, path, read, write)
+  Get-LogHorizonEndpoint.ps1 ARM / Log Analytics / Graph endpoints for the signed-in Azure environment
   Invoke-AzRestWithRetry.ps1 REST retry wrapper with exponential backoff for 429/5xx
   Invoke-Classification.ps1  Static DB + heuristic classification + _SPLT_CL detection
   Invoke-Analysis.ps1        Cost-value matrix + recommendations + split suggestions

@@ -29,9 +29,11 @@ function Get-DefenderXDR {
     # Prefer delegated user context via Microsoft Graph PowerShell for CustomDetection.Read.All.
     $customRules = [System.Collections.Generic.List[object]]::new()
     $fetched = $false
+    $graphBase = Get-LogHorizonEndpoint -Name Graph -Context $Context
+    $graphEnvironment = Get-LogHorizonEndpoint -Name GraphEnvironment -Context $Context
     $endpoints = @(
-        'https://graph.microsoft.com/beta/security/rules/detectionRules',
-        'https://graph.microsoft.com/v1.0/security/rules/detectionRules'
+        "$graphBase/beta/security/rules/detectionRules",
+        "$graphBase/v1.0/security/rules/detectionRules"
     )
 
     $mgCmd = Get-Command Invoke-MgGraphRequest -ErrorAction SilentlyContinue
@@ -53,6 +55,9 @@ function Get-DefenderXDR {
                 }
                 if ($Context.PSObject.Properties.Name -contains 'TenantId' -and -not [string]::IsNullOrWhiteSpace($Context.TenantId)) {
                     $connectParams.TenantId = $Context.TenantId
+                }
+                if ($graphEnvironment -and $graphEnvironment -ne 'Global') {
+                    $connectParams.Environment = $graphEnvironment
                 }
 
                 Connect-MgGraph @connectParams -ErrorAction Stop | Out-Null
@@ -102,7 +107,7 @@ function Get-DefenderXDR {
         $graphToken = $null
         try {
             $tenantId = if ($Context.PSObject.Properties.Name -contains 'TenantId' -and -not [string]::IsNullOrWhiteSpace($Context.TenantId)) { $Context.TenantId } else { $null }
-            $graphToken = Resolve-AzToken -ResourceUrl 'https://graph.microsoft.com' -TenantId $tenantId
+            $graphToken = Resolve-AzToken -ResourceUrl $graphBase -TenantId $tenantId
         }
         catch {
             Write-Warning 'Cannot acquire Microsoft Graph token. Defender XDR analysis will be skipped.'

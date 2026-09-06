@@ -11,8 +11,8 @@ function Get-DataConnectors {
     )
 
     $headers = @{ Authorization = "Bearer $($Context.ArmToken)" }
-    $uri = "https://management.azure.com$($Context.ResourceId)" +
-           "/providers/Microsoft.SecurityInsights/dataConnectors?api-version=2024-03-01"
+    $uri = "$(Get-LogHorizonEndpoint -Name Arm -Context $Context)$($Context.ResourceId)" +
+           "/providers/Microsoft.SecurityInsights/dataConnectors?api-version=2025-09-01"
 
     $allConnectors = [System.Collections.Generic.List[object]]::new()
     $maxPages = 1000

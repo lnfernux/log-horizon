@@ -367,7 +367,7 @@ function Invoke-TableRetentionApply {
             continue
         }
 
-        $uri = "https://management.azure.com$($Context.ResourceId)/tables/$($c.TableName)?api-version=$apiVersion"
+        $uri = "$(Get-LogHorizonEndpoint -Name Arm -Context $Context)$($Context.ResourceId)/tables/$($c.TableName)?api-version=$apiVersion"
 
         $combinedProps = [ordered]@{}
         if ($c.PlanChanged)      { $combinedProps['plan']                 = $c.TargetPlan }
