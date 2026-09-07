@@ -4791,6 +4791,54 @@ Describe 'Collection cache' {
 }
 
 Describe 'TUI layout helpers' {
+    It 'Sync-ConsoleSize pushes the live window size into the Spectre profile and every view calls it' {
+        $profile = [Spectre.Console.AnsiConsole]::Console.Profile
+        $before = $profile.Width
+        $raw = $Host.UI.RawUI
+        $bufBefore = $raw.BufferSize
+        try {
+            $profile.Width = 42
+            # conhost keeps the old buffer width after a resize; PwshSpectreConsole sizes tables from it
+            try { $b = $raw.BufferSize; $b.Width = $raw.WindowSize.Width + 40; $raw.BufferSize = $b } catch { Write-Verbose 'buffer not adjustable in this host' }
+            $r = Sync-ConsoleSize
+            $r.Width | Should -Be $raw.WindowSize.Width
+            $profile.Width | Should -Be $raw.WindowSize.Width
+            $raw.BufferSize.Width | Should -Be $raw.WindowSize.Width
+        }
+        finally {
+            $profile.Width = $before
+            try { $raw.BufferSize = $bufBefore } catch { Write-Verbose 'buffer not restorable in this host' }
+        }
+
+        $src = Get-Content (Join-Path $PSScriptRoot '..\Private\Write-Report.ps1') -Raw
+        $ast = [System.Management.Automation.Language.Parser]::ParseInput($src, [ref]$null, [ref]$null)
+        $views = @($ast.FindAll({ $args[0] -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $args[0].Name -match '^(Write-(?!Report$|LogHorizonBanner$|DefinitionTable$|InteractiveMenu$)|Show-|Invoke-(Export|Manage|LogHorizonManaged))' }, $true))
+        $views.Count | Should -BeGreaterOrEqual 20
+        foreach ($v in $views) {
+            $first = @($v.Body.EndBlock.Statements)[0]
+            "$($first.Extent.Text)" | Should -Match 'Sync-ConsoleSize' -Because "$($v.Name) must sync the console size before rendering"
+        }
+        # Prompts go through the wrapper so the size is re-synced after every pick
+        ([regex]::Matches($src, 'Read-SpectreSelection @splat|Read-SpectreSelection -')).Count | Should -Be 1
+        ([regex]::Matches($src, 'Read-LogHorizonSelection ')).Count | Should -BeGreaterOrEqual 25
+    }
+
+    It 'Read-LogHorizonSelection forwards to Read-SpectreSelection and re-syncs the size' {
+        $orig = if (Test-Path Function:\Read-SpectreSelection) { (Get-Item Function:\Read-SpectreSelection).ScriptBlock } else { $null }
+        try {
+            Set-Item -Path Function:\Read-SpectreSelection -Value { param([string]$Title, [object[]]$Choices, $Color, [switch]$EnableSearch) $script:wrapArgs = [PSCustomObject]@{ Title = $Title; Choices = $Choices; Search = [bool]$EnableSearch }; $Choices[1] }
+            Mock Sync-ConsoleSize { $script:synced = $true }
+            $script:synced = $false
+            $pick = Read-LogHorizonSelection -Title 't' -Choices @('Back', 'X') -EnableSearch
+            $pick | Should -Be 'X'
+            $script:wrapArgs.Search | Should -BeTrue
+            $script:synced | Should -BeTrue
+        }
+        finally {
+            if ($null -ne $orig) { Set-Item -Path Function:\Read-SpectreSelection -Value $orig } else { Remove-Item -Path Function:\Read-SpectreSelection -ErrorAction SilentlyContinue }
+        }
+    }
+
     It 'ConvertTo-TransposedMatrix pivots measures into rows and strips markup from the new headers' {
         $rows = @(
             [PSCustomObject]@{ Classification = '[green]Primary[/]'; 'High Value' = 3; 'Low Value' = '[dim]-[/]'; Total = 16 },
