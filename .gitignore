@@ -3,3 +3,10 @@ LogHorizon_Report_*
 .github/*
 FullControlEncounter*
 Tools/
+.review/
+# Local artifacts that must never ship
+.publish/
+*.clixml
+*.nupkg
+custom-classifications.json
+

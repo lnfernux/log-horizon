@@ -1,0 +1,147 @@
+{
+  "description": "Terms Log Horizon uses when it classifies, scores and recommends. Shown by the Dictionary menu in the TUI. Keep the wording aligned with the README 'Under the hood' section; the Pester suite checks that recommendation types, assessments, tiers, coverage sources, plans, statuses and transform operations match the code.",
+  "sections": [
+    {
+      "name": "Classification",
+      "description": "How a table is graded before any cost or coverage is considered.",
+      "terms": [
+        { "term": "primary", "definition": "Security-value data you build detections on: sign-in logs, security alerts, threat intel, audit trails, vulnerability findings, firewall hits, EDR telemetry." },
+        { "term": "secondary", "definition": "Supporting telemetry: performance metrics, infrastructure diagnostics, network flow volumes, inventory snapshots, configuration baselines, health checks." },
+        { "term": "unknown", "definition": "Not in the classification database and no heuristic matched (no security token in the name, no rules, no Microsoft prefix, not a generic *Logs name, not high volume)." },
+        { "term": "database", "definition": "Classification source: direct lookup in Data/log-classifications.json (481 entries), including custom overrides supplied with -CustomClassificationPath." },
+        { "term": "heuristic", "definition": "Classification source: name tokens (Alert, Incident, Threat, Signin, Logon, Audit, Risk, Detection = primary; Flow, Metric, Diagnostic, Perf, Heartbeat, Health, Inventory, Usage = secondary), then analytics rules present, Microsoft first-party prefix, generic *Logs name, high volume with no detections." },
+        { "term": "split-detection", "definition": "Classification source: a _SPLT_CL table is the Data Lake copy of a parent table created by a Sentinel split transform; it inherits the parent connector and retention recommendation and is classified secondary." },
+        { "term": "recommendedTier", "definition": "analytics (hot tier) or datalake (Auxiliary / Data Lake candidate) from the database entry." },
+        { "term": "recommendedRetentionDays", "definition": "Minimum recommended total retention for the table: 90, 180 or 365 days, drawn from regulatory and industry guidance (CISA M-21-31, NIST SP 800-92, NCSC-UK, ASD ACSC, NSA)." }
+      ]
+    },
+    {
+      "name": "Cost tier",
+      "description": "Monthly ingestion volume bands. Cost uses billing GB (1000 MB) and the price of the plan observed in the Usage table.",
+      "terms": [
+        { "term": "Free", "definition": "Usage.IsBillable is false for every row (or, when Usage carries no flag, the database marks the table free). Cost is 0." },
+        { "term": "Low", "definition": "Less than 1 GB per month." },
+        { "term": "Medium", "definition": "1 to 10 GB per month." },
+        { "term": "High", "definition": "10 to 50 GB per month." },
+        { "term": "Very High", "definition": "50 GB per month or more." }
+      ]
+    },
+    {
+      "name": "Detection tier",
+      "description": "Effective coverage: enabled analytics rules + hunting queries + enabled Defender custom detections + implicit consumers that reference the table.",
+      "terms": [
+        { "term": "None", "definition": "Nothing references the table." },
+        { "term": "Low", "definition": "1 or 2 references." },
+        { "term": "Medium", "definition": "3 to 9 references." },
+        { "term": "High", "definition": "10 or more references." }
+      ]
+    },
+    {
+      "name": "Assessment",
+      "description": "Combined verdict from classification, cost tier and detection tier.",
+      "terms": [
+        { "term": "High Value", "definition": "Primary with Medium or High detection tier." },
+        { "term": "Good Value", "definition": "Primary with Low detection tier and Low or Medium cost." },
+        { "term": "Missing Coverage", "definition": "Primary with no detections. Write analytics rules to get value from the data." },
+        { "term": "Optimize", "definition": "Primary with Low detection tier and High or Very High cost. Review filtering or splitting." },
+        { "term": "Low Value", "definition": "Secondary with no detections and High or Very High cost. Add rules, filter, or move to Data Lake." },
+        { "term": "Underutilized", "definition": "Secondary with little or no detection use at Low or Medium cost." },
+        { "term": "Free Tier", "definition": "Ingested at no charge; cost analysis does not apply." },
+        { "term": "Platform", "definition": "Consumed by Sentinel itself (SecurityIncident, SentinelHealth, Watchlist, Usage ...). Never flagged as missing coverage." }
+      ]
+    },
+    {
+      "name": "Coverage source",
+      "description": "Where a table's coverage signal comes from (first match wins for display).",
+      "terms": [
+        { "term": "kql", "definition": "An enabled analytics rule or hunting query references the table by name in KQL." },
+        { "term": "xdr", "definition": "An enabled Defender XDR custom detection references the table." },
+        { "term": "implicit", "definition": "A rule kind with no KQL consumes the table: Threat Intelligence matching (ThreatIntelIndicators, ThreatIntelObjects), Fusion (SecurityAlert, Anomalies), UEBA (BehaviorAnalytics, UserPeerAnalytics, IdentityInfo), Microsoft incident creation (SecurityAlert). Mapped in Data/implicit-consumers.json." },
+        { "term": "platform", "definition": "A platform table Sentinel writes for itself; no rule coverage is expected." },
+        { "term": "none", "definition": "No coverage signal." }
+      ]
+    },
+    {
+      "name": "Recommendation types",
+      "description": "Sorted High > Medium > Low, then by estimated savings. Savings are current cost minus the same volume at the target rate, never a percentage guess.",
+      "terms": [
+        { "term": "DataLake", "definition": "Secondary + High/Very High cost + None/Low detections. Move to the Auxiliary / Data Lake plan when the table supports it; falls back to a Basic plan suggestion when only Basic is supported; nothing when neither." },
+        { "term": "LowValue", "definition": "High/Very High cost with zero detections. Add rules, filter, or move to Data Lake." },
+        { "term": "XDROptimize", "definition": "Streamed from Defender XDR, no Sentinel rules, but XDR custom detections exist. Stop streaming and use the unified XDR portal." },
+        { "term": "MissingCoverage", "definition": "Primary, paid, not a platform table, zero detections. Write analytics rules." },
+        { "term": "Filter", "definition": "Primary, 20 GB/mo or more, 1 to 3 detections. Apply an ingest-time transformation to cut volume." },
+        { "term": "SplitCandidate", "definition": "Primary, 10 GB/mo or more, at least one detection, no existing transform. Split so detection-relevant rows stay on Analytics and the rest goes to Data Lake." },
+        { "term": "PlanUsage", "definition": "Usage rows show more than one plan in the period, or the configured plan differs from what Usage observed. Confirm the transition was expected." },
+        { "term": "DeprecatedSource", "definition": "A table marked deprecated or legacy in the database is still ingesting. Migrate detections to the replacement tables, then retire the old connector. Informational: no savings are claimed because the ingestion moves rather than disappears." },
+        { "term": "RetentionShortfall", "definition": "Workspace default or a table's total retention is below the 90-day baseline. Increase retention." },
+        { "term": "RetentionImprovement", "definition": "Paid, non-platform table meets 90 days but sits below its category recommendation (180 or 365). Consider longer total retention." },
+        { "term": "RetentionInteractiveBelowBaseline", "definition": "Analytics table whose interactive (hot) retention is under the 90 days Sentinel includes. Raise it unless the short hot window is deliberate." },
+        { "term": "XDRChecker", "definition": "A finding from the XDR Checker (see XDR states): a known XDR table not streamed, streamed without coverage, not forwarded to Data Lake, or below the one-year advisory." },
+        { "term": "DetectionAnalyzer", "definition": "A rule scored 70 or higher with at least 5 incidents. Tune or disable the noisy rule." }
+      ]
+    },
+    {
+      "name": "Detection Analyzer",
+      "description": "Per-rule noisiness scoring from incidents and automation rules (-IncludeDetectionAnalyzer).",
+      "terms": [
+        { "term": "Incidents total", "definition": "Incidents linked to the rule by analytic rule id, then rule name, then a title match." },
+        { "term": "AutoClose ratio", "definition": "Incidents closed by automation divided by total incidents. Primary source: SentinelHealth automation rule runs by enabled close-incident or playbook rules. Fallback: automation rule conditions (analytic rule id, title and severity, ANDed like Sentinel does). Rules whose conditions are only status, tactics or entities are treated as applying to every incident." },
+        { "term": "FalsePositive ratio", "definition": "Incidents classified FalsePositive divided by total incidents." },
+        { "term": "Noisiness score", "definition": "(Volume percentile x 0.35) + (AutoClose percentile x 0.40) + (FalsePositive percentile x 0.25), each percentile ranked across rules that have incidents." },
+        { "term": "Noisy", "definition": "Score 70 or higher. The rule likely needs tuning or disabling." },
+        { "term": "Watch", "definition": "Score 50 to 69. Early signs of noisiness." },
+        { "term": "Healthy", "definition": "Score below 50." },
+        { "term": "Scored", "definition": "ScoreStatus: the rule has incidents and at least 3 rules have incidents, so percentiles carry meaning." },
+        { "term": "InsufficientSample", "definition": "ScoreStatus: the rule has incidents but fewer than 3 rules do, so there is nothing to rank against. Score shows N/A." },
+        { "term": "NoIncidents", "definition": "ScoreStatus: no incidents correlate to the rule. Listed only." }
+      ]
+    },
+    {
+      "name": "Table plans",
+      "description": "Log Analytics table plans as reported by the Tables API and priced from Usage.Plan.",
+      "terms": [
+        { "term": "Analytics", "definition": "Full-featured hot tier. Default price 5.59 USD/GB (-PricePerGB). Interactive retention is included for 90 days." },
+        { "term": "Basic", "definition": "Reduced-cost plan for troubleshooting data. Default 1.15 USD/GB (-BasicPricePerGB). Interactive retention fixed at 30 days. Only tables in Data/basic-plan-tables.json and DCR-based custom tables support it." },
+        { "term": "Auxiliary", "definition": "Data Lake plan for high-volume verbose logs. Default 0.20 USD/GB (-LakePricePerGB, ingestion + processing). Only tables in Data/auxiliary-plan-tables.json and DCR-based custom tables support it; Classic custom tables do not. Plan switching to or from Auxiliary is not supported by the Tables API." },
+        { "term": "SupportsAuxiliaryPlan", "definition": "Whether the table can live on the Auxiliary plan, from the feature matrix and the custom-table rules above." },
+        { "term": "RetentionInDaysAsDefault", "definition": "The table inherits its interactive retention from the workspace default rather than an explicit value." },
+        { "term": "TotalRetentionInDaysAsDefault", "definition": "The table has no explicit long-term retention; total equals interactive." }
+      ]
+    },
+    {
+      "name": "Lifecycle status",
+      "description": "Optional status on a database entry, shown as a badge in the TUI and reports.",
+      "terms": [
+        { "term": "deprecated", "definition": "The connector is retired or ingestion has stopped (for example ThreatIntelligenceIndicator after 2025-07-31, Azure Functions connectors replaced by codeless connectors)." },
+        { "term": "legacy", "definition": "An older collection path with a documented successor (for example Log Analytics agent tables such as DnsEvents, or V1 connectors with a V2 table)." },
+        { "term": "replacedBy", "definition": "The table names to migrate detections to. Present whenever a status is set; may be empty when nothing replaces the table." },
+        { "term": "xdrStreamable", "definition": "Defender tables only. true for the 21 tables the Defender XDR connector streams; false for portal-only and Vulnerability Management tables, which the XDR Checker never treats as streaming candidates." },
+        { "term": "platform", "definition": "true for tables Sentinel consumes itself; they receive the Platform assessment and are never flagged as missing coverage." }
+      ]
+    },
+    {
+      "name": "XDR states",
+      "description": "Defender XDR connector streaming state per known XDR table, and the XDR Checker finding types.",
+      "terms": [
+        { "term": "NotStreaming", "definition": "Known XDR table with no workspace copy. Data is only in XDR Advanced Hunting with 30-day retention." },
+        { "term": "Analytics / Basic / Auxiliary", "definition": "XDRState of a streamed XDR table: the plan of its workspace copy." },
+        { "term": "StreamingNoCoverage", "definition": "Streamed from XDR but no Sentinel rule or Defender custom detection references it." },
+        { "term": "NotForwardedToDataLake", "definition": "Streamed on Analytics with no archive or Data Lake retention configured." },
+        { "term": "AdvisoryRetentionGap", "definition": "Streamed XDR table whose total retention is under the one-year advisory for XDR telemetry." }
+      ]
+    },
+    {
+      "name": "Transform types",
+      "description": "Operations found in a DCR transformKql, in order of first appearance; multi-operation transforms are joined with '+', anything unrecognised is Custom.",
+      "terms": [
+        { "term": "Filter", "definition": "| where: drops rows before ingestion." },
+        { "term": "ColumnRemoval", "definition": "| project-away: removes named columns." },
+        { "term": "Projection", "definition": "| project: keeps only the listed columns." },
+        { "term": "Enrichment", "definition": "| extend: adds computed columns." },
+        { "term": "Aggregation", "definition": "| summarize: aggregates rows." },
+        { "term": "Custom", "definition": "No recognised operation; inspect the KQL." },
+        { "term": "Split transform", "definition": "A Sentinel condition-only filter (the portal prepends 'source | where') that routes matching rows to Analytics and the rest to a _SPLT_CL Data Lake copy." }
+      ]
+    }
+  ]
+}

@@ -3,43 +3,127 @@ function Get-DataTransforms {
     .SYNOPSIS
         Discovers Data Collection Rules (DCRs) with ingest-time transforms,
         filters, or split configurations targeting the workspace.
+    .DESCRIPTION
+        Discovery order (results are de-duplicated on DCR id):
+        1. List DCRs at subscription scope and keep those whose Log Analytics
+           destination is this workspace. Falls back to the resource-group scope
+           when the subscription list is not permitted.
+        2. The workspace transformation DCR referenced by the workspace's
+           defaultDataCollectionRuleResourceId (when supplied).
+        3. Data collection rule associations on the workspace resource, each
+           dereferenced to its DCR.
+        Failures are reported through Write-Warning and in DiscoveryStatus so a
+        least-privilege identity does not silently produce "no transforms".
     .OUTPUTS
-        PSCustomObject with Transforms (array of per-table transform info)
-        and RawDCRs (array of all relevant DCRs).
+        PSCustomObject with Transforms (array of per-table transform info),
+        TableLookup, RelevantDCRs, TotalDCRs and DiscoveryStatus.
     #>
     [CmdletBinding()]
     param(
-        [Parameter(Mandatory)][PSCustomObject]$Context
+        [Parameter(Mandatory)][PSCustomObject]$Context,
+        [string]$WorkspaceDefaultDcrId,
+        [string]$ApiVersion = '2024-03-11'
     )
 
     $headers = @{ Authorization = "Bearer $($Context.ArmToken)" }
+    $arm = Get-LogHorizonEndpoint -Name Arm -Context $Context
+    $workspaceId = "$($Context.ResourceId)"
 
-    # List all DCRs in the resource group
-    $dcrUri = "https://management.azure.com/subscriptions/$($Context.SubscriptionId)" +
-              "/resourceGroups/$($Context.ResourceGroup)" +
-              "/providers/Microsoft.Insights/dataCollectionRules?api-version=2023-03-11"
-
-    $dcrs = @()
-    try {
-        $response = Invoke-AzRestWithRetry -Uri $dcrUri -Headers $headers
-        $dcrs = @($response.value)
-    }
-    catch {
-        Write-Verbose "Could not list DCRs: $_"
+    $dcrById = [System.Collections.Generic.Dictionary[string, object]]::new([StringComparer]::OrdinalIgnoreCase)
+    $status = [ordered]@{
+        SubscriptionList  = 'NotAttempted'
+        ResourceGroupList = 'NotAttempted'
+        DefaultDcr        = 'NotAttempted'
+        Associations      = 'NotAttempted'
+        Errors            = [System.Collections.Generic.List[string]]::new()
     }
 
-    # Also check workspace-level transformation DCR
-    $wsDcrUri = "https://management.azure.com$($Context.ResourceId)" +
-                "/providers/Microsoft.Insights/dataCollectionRules?api-version=2023-03-11"
-    try {
-        $wsResponse = Invoke-RestMethod -Uri $wsDcrUri -Headers $headers -ErrorAction SilentlyContinue
-        if ($wsResponse.value) {
-            $dcrs += @($wsResponse.value)
+    $addDcr = {
+        param($dcr)
+        if ($dcr -and $dcr.id -and -not $dcrById.ContainsKey("$($dcr.id)")) { $dcrById["$($dcr.id)"] = $dcr }
+    }
+
+    # 1. Subscription scope, filtered on destination workspace; resource group scope as fallback
+    $listed = $false
+    foreach ($scope in 'Subscription', 'ResourceGroup') {
+        $listUri = if ($scope -eq 'Subscription') {
+            "$arm/subscriptions/$($Context.SubscriptionId)/providers/Microsoft.Insights/dataCollectionRules?api-version=$ApiVersion"
+        } else {
+            "$arm/subscriptions/$($Context.SubscriptionId)/resourceGroups/$($Context.ResourceGroup)/providers/Microsoft.Insights/dataCollectionRules?api-version=$ApiVersion"
+        }
+        try {
+            $count = 0
+            foreach ($dcr in (Get-ArmListPage -Uri $listUri -Headers $headers)) {
+                if (Test-DcrTargetsWorkspace -Dcr $dcr -WorkspaceResourceId $workspaceId) {
+                    & $addDcr $dcr
+                    $count++
+                }
+            }
+            $status["${scope}List"] = "Succeeded ($count matching)"
+            $listed = $true
+            break
+        }
+        catch {
+            $status["${scope}List"] = 'Failed'
+            $status.Errors.Add("${scope} DCR list: $(Get-ArmErrorSummary -ErrorRecord $_)")
+            Write-Verbose "Could not list DCRs at $scope scope: $($_.Exception.Message)"
         }
     }
-    catch { 
-        Write-Verbose "Could not check workspace-level DCRs."
+
+    # 2. Workspace transformation DCR
+    if (-not [string]::IsNullOrWhiteSpace($WorkspaceDefaultDcrId)) {
+        try {
+            $dcr = Invoke-AzRestWithRetry -Uri "$arm$WorkspaceDefaultDcrId`?api-version=$ApiVersion" -Headers $headers
+            & $addDcr $dcr
+            $status.DefaultDcr = 'Succeeded'
+        }
+        catch {
+            $status.DefaultDcr = 'Failed'
+            $status.Errors.Add("Default DCR: $(Get-ArmErrorSummary -ErrorRecord $_)")
+            Write-Warning "The workspace has a transformation DCR ($WorkspaceDefaultDcrId) but it could not be read ($(Get-ArmErrorSummary -ErrorRecord $_)). Workspace-level transforms will be missing from the analysis."
+        }
     }
+    else {
+        $status.DefaultDcr = 'NotConfigured'
+    }
+
+    # 3. Associations on the workspace resource
+    $assocUri = "$arm$workspaceId/providers/Microsoft.Insights/dataCollectionRuleAssociations?api-version=$ApiVersion"
+    try {
+        $assocIds = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+        foreach ($assoc in (Get-ArmListPage -Uri $assocUri -Headers $headers)) {
+            $id = $assoc.properties.dataCollectionRuleId
+            if (-not [string]::IsNullOrWhiteSpace($id)) { [void]$assocIds.Add("$id") }
+        }
+        $fetched = 0
+        foreach ($id in $assocIds) {
+            if ($dcrById.ContainsKey($id)) { continue }
+            try {
+                $dcr = Invoke-AzRestWithRetry -Uri "$arm$id`?api-version=$ApiVersion" -Headers $headers
+                & $addDcr $dcr
+                $fetched++
+            }
+            catch {
+                $status.Errors.Add("Associated DCR ${id}: $(Get-ArmErrorSummary -ErrorRecord $_)")
+                Write-Verbose "Could not read associated DCR ${id}: $($_.Exception.Message)"
+            }
+        }
+        $status.Associations = "Succeeded ($($assocIds.Count) association(s), $fetched fetched)"
+    }
+    catch {
+        $status.Associations = 'Failed'
+        $status.Errors.Add("Associations: $(Get-ArmErrorSummary -ErrorRecord $_)")
+        Write-Verbose "Could not list DCR associations: $($_.Exception.Message)"
+    }
+
+    if (-not $listed -and $status.Associations -eq 'Failed') {
+        Write-Warning "DCR discovery failed on every route. Grant Microsoft.Insights/dataCollectionRules/read (Monitoring Reader) on the subscription or resource group to enable transform analysis. $($status.Errors -join ' | ')"
+    }
+    elseif (-not $listed) {
+        Write-Warning 'DCR listing was denied; only DCRs associated directly with the workspace were discovered. Grant Microsoft.Insights/dataCollectionRules/read on the subscription for full transform coverage.'
+    }
+
+    $dcrs = @($dcrById.Values)
 
     # Parse transforms from DCR dataFlows
     $transforms = [System.Collections.Generic.List[PSCustomObject]]::new()
@@ -52,33 +136,37 @@ function Get-DataTransforms {
         $dcrHasTransform = $false
 
         foreach ($flow in $props.dataFlows) {
-            $kql = $flow.transformKql
-            if (-not $kql -or $kql -eq 'source') { continue }
+            $kql = Resolve-DcrFlowTransformKql -Flow $flow -Properties $props
+            if (-not $kql -or $kql.Trim() -eq 'source') { continue }
 
             $dcrHasTransform = $true
 
-            # Determine output table from outputStream (format: "Microsoft-TableName" or "Custom-TableName_CL")
+            # Output table: outputStream ("Microsoft-X", "Custom-X_CL"), or the first stream for
+            # workspace transformation DCRs whose streams are "Microsoft-Table-X" and have no outputStream
             $outputTable = $null
             if ($flow.outputStream) {
-                $outputTable = $flow.outputStream -replace '^(Microsoft|Custom)-', ''
+                $outputTable = ConvertTo-DcrTableName -Stream $flow.outputStream
+            }
+            elseif ($flow.streams) {
+                $outputTable = ConvertTo-DcrTableName -Stream (@($flow.streams)[0])
             }
 
-            # Determine input streams
             $inputStreams = @()
             if ($flow.streams) {
-                $inputStreams = @($flow.streams | ForEach-Object { $_ -replace '^(Microsoft|Custom)-', '' })
+                $inputStreams = @($flow.streams | ForEach-Object { ConvertTo-DcrTableName -Stream $_ })
             }
 
-            # Classify transform type
             $transformType = Get-TransformType -KQL $kql
 
             $transforms.Add([PSCustomObject]@{
                 DCRName         = $dcr.name
                 DCRId           = $dcr.id
+                DCRKind         = $dcr.kind
                 OutputTable     = $outputTable
                 InputStreams    = $inputStreams
                 TransformKql    = $kql
                 TransformType   = $transformType
+                Operations      = @(Get-TransformOperation -KQL $kql)
                 Destination     = if ($flow.destinations) { $flow.destinations -join ', ' } else { '' }
             })
         }
@@ -88,7 +176,7 @@ function Get-DataTransforms {
                 Name     = $dcr.name
                 Id       = $dcr.id
                 Location = $dcr.location
-                Kind     = $props.description
+                Kind     = if ($dcr.kind) { $dcr.kind } else { $props.description }
             })
         }
     }
@@ -105,49 +193,161 @@ function Get-DataTransforms {
     }
 
     [PSCustomObject]@{
-        Transforms   = @($transforms)
-        TableLookup  = $tableLookup
-        RelevantDCRs = @($relevantDCRs)
-        TotalDCRs    = $dcrs.Count
+        Transforms      = @($transforms)
+        TableLookup     = $tableLookup
+        RelevantDCRs    = @($relevantDCRs)
+        TotalDCRs       = $dcrs.Count
+        DiscoveryStatus = [PSCustomObject]$status
     }
+}
+
+function Get-ArmListPage {
+    <#
+    .SYNOPSIS
+        Enumerates an ARM list endpoint, following nextLink.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$Uri,
+        [Parameter(Mandatory)][hashtable]$Headers,
+        [int]$MaxPages = 1000
+    )
+
+    $page = 0
+    do {
+        $page++
+        $response = Invoke-AzRestWithRetry -Uri $Uri -Headers $Headers
+        foreach ($item in @($response.value)) { $item }
+        $Uri = $response.nextLink
+        if ($page -ge $MaxPages) {
+            Write-Warning "Pagination limit reached for $Uri. Stopping to avoid infinite loop."
+            break
+        }
+    } while ($Uri)
+}
+
+function Get-ArmErrorSummary {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)][System.Management.Automation.ErrorRecord]$ErrorRecord)
+
+    $code = $null
+    if ($ErrorRecord.Exception.Response) { try { $code = [int]$ErrorRecord.Exception.Response.StatusCode } catch { $code = $null } }
+    $detail = "$($ErrorRecord.ErrorDetails.Message)"
+    if ($detail -match '"code"\s*:\s*"([^"]+)"') { $detail = $Matches[1] }
+    elseif ([string]::IsNullOrWhiteSpace($detail)) { $detail = $ErrorRecord.Exception.Message }
+    if ($detail.Length -gt 120) { $detail = $detail.Substring(0, 120) }
+    if ($code) { "HTTP $code $detail" } else { $detail }
+}
+
+function Test-DcrTargetsWorkspace {
+    <#
+    .SYNOPSIS
+        True when any Log Analytics destination of the DCR is the given workspace.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][object]$Dcr,
+        [Parameter(Mandatory)][string]$WorkspaceResourceId
+    )
+
+    $dests = $Dcr.properties.destinations
+    if (-not $dests -or -not $dests.logAnalytics) { return $false }
+    foreach ($la in @($dests.logAnalytics)) {
+        if ("$($la.workspaceResourceId)" -ieq $WorkspaceResourceId) { return $true }
+    }
+    $false
+}
+
+function ConvertTo-DcrTableName {
+    <#
+    .SYNOPSIS
+        Strips DCR stream prefixes: Microsoft-Table-X, Microsoft-X, Custom-X.
+    #>
+    [CmdletBinding()]
+    param([string]$Stream)
+
+    if ([string]::IsNullOrWhiteSpace($Stream)) { return $null }
+    $Stream -replace '^(Microsoft-Table-|Microsoft-|Custom-)', ''
+}
+
+function Resolve-DcrFlowTransformKql {
+    <#
+    .SYNOPSIS
+        Returns the transform KQL for a data flow: inline transformKql, or the KQL
+        processors of the named multi-stage transformation it references.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][object]$Flow,
+        [object]$Properties
+    )
+
+    if ($Flow.transformKql) { return [string]$Flow.transformKql }
+
+    $name = $Flow.transform
+    if ([string]::IsNullOrWhiteSpace("$name") -or -not $Properties -or -not $Properties.transformations) { return $null }
+
+    $tr = @($Properties.transformations | Where-Object { "$($_.name)" -eq "$name" }) | Select-Object -First 1
+    if (-not $tr) { return $null }
+
+    $parts = [System.Collections.Generic.List[string]]::new()
+    foreach ($p in @($tr.processors)) {
+        if (-not $p) { continue }
+        $kind = "$($p.processor)"
+        $cfg = $p.configuration
+        $expr = $null
+        if ($cfg) {
+            if ($cfg.PSObject.Properties.Name -contains 'expression') { $expr = $cfg.expression }
+            elseif ($cfg.PSObject.Properties.Name -contains 'transformKql') { $expr = $cfg.transformKql }
+        }
+        if ($kind -match '(?i)kql' -and -not [string]::IsNullOrWhiteSpace("$expr")) { $parts.Add(("$expr").Trim()) }
+    }
+    if ($parts.Count -eq 0) { return $null }
+    $parts -join "`n"
+}
+
+function Get-TransformOperation {
+    <#
+    .SYNOPSIS
+        Lists every operation a transform KQL performs, in order of first appearance:
+        Filter, ColumnRemoval, Projection, Enrichment, Aggregation. Empty when none match.
+    #>
+    [CmdletBinding()]
+    param([string]$KQL)
+
+    $ops = [System.Collections.Generic.List[string]]::new()
+    if ([string]::IsNullOrWhiteSpace($KQL)) { return @() }
+    $kqlLower = $KQL.ToLower()
+
+    $patterns = [ordered]@{
+        Filter        = '\|\s*where\s+'
+        ColumnRemoval = '\|\s*project-away\s+'
+        Projection    = '\|\s*project\s+'
+        Enrichment    = '\|\s*extend\s+'
+        Aggregation   = '\|\s*summarize\s+'
+    }
+    $found = foreach ($k in $patterns.Keys) {
+        $m = [regex]::Match($kqlLower, $patterns[$k])
+        if ($m.Success) { [PSCustomObject]@{ Op = $k; Index = $m.Index } }
+    }
+    foreach ($f in @($found | Sort-Object Index)) { $ops.Add($f.Op) }
+    @($ops)
 }
 
 function Get-TransformType {
     <#
     .SYNOPSIS
-        Classifies a transform KQL expression into a category.
+        Classifies a transform KQL expression. Single-operation transforms return
+        that label (Filter, ColumnRemoval, Projection, Enrichment, Aggregation);
+        multi-operation transforms return the labels joined with '+', in order of
+        appearance; anything else is Custom.
     #>
     [CmdletBinding()]
     param([string]$KQL)
 
-    $kqlLower = $KQL.ToLower().Trim()
-
-    # Filter: where clause that drops records
-    if ($kqlLower -match '^\s*source\s*\|\s*where\s+' -and $kqlLower -notmatch '\|\s*project') {
-        return 'Filter'
-    }
-
-    # Column removal: project-away
-    if ($kqlLower -match 'project-away') {
-        return 'ColumnRemoval'
-    }
-
-    # Enrichment: extend adds columns
-    if ($kqlLower -match '\|\s*extend\s+') {
-        return 'Enrichment'
-    }
-
-    # Projection: project selects columns
-    if ($kqlLower -match '\|\s*project\s+') {
-        return 'Projection'
-    }
-
-    # Aggregation: summarize
-    if ($kqlLower -match '\|\s*summarize\s+') {
-        return 'Aggregation'
-    }
-
-    'Custom'
+    $ops = @(Get-TransformOperation -KQL $KQL)
+    if ($ops.Count -eq 0) { return 'Custom' }
+    $ops -join '+'
 }
 
 function Get-LiveTuningAnalysis {
@@ -171,6 +371,8 @@ function Get-LiveTuningAnalysis {
     $tableFieldMap = @{}      # TableName -> HashSet of field names
     $tableConditionMap = @{}  # TableName -> List of WHERE conditions
     $tableRuleMap = @{}       # TableName -> List of rule objects (for field-by-rule matrix)
+    $tableEntryMap = @{}
+    foreach ($te in @($TableAnalysis)) { if ($te.TableName -and -not $tableEntryMap.ContainsKey($te.TableName)) { $tableEntryMap[$te.TableName] = $te } }
 
     $allSources = @($Rules) + @($HuntingQueries | Where-Object { $_.Query })
     foreach ($rule in $allSources) {
@@ -187,13 +389,8 @@ function Get-LiveTuningAnalysis {
             $fields = Get-FieldsFromKql -Kql $rule.Query
             foreach ($f in $fields) { [void]$tableFieldMap[$tableName].Add($f) }
 
-            # Extract WHERE conditions
-            $whereMatches = [regex]::Matches($rule.Query, '(?i)\|\s*where\s+(.+?)(?:\||$)')
-            foreach ($wm in $whereMatches) {
-                $condition = $wm.Groups[1].Value.Trim()
-                if ($condition.Length -gt 5 -and $condition.Length -lt 200) {
-                    $tableConditionMap[$tableName].Add($condition)
-                }
+            foreach ($condition in (Get-KqlWhereCondition -Kql $rule.Query)) {
+                $tableConditionMap[$tableName].Add($condition)
             }
 
             $ruleName = if ($rule.RuleName) { $rule.RuleName } elseif ($rule.QueryName) { $rule.QueryName } elseif ($rule.DisplayName) { $rule.DisplayName } else { 'Unknown' }
@@ -220,6 +417,14 @@ function Get-LiveTuningAnalysis {
             $schemaColumns = @($SchemaLookup[$tableName])
         }
 
+        # Fields referenced by rules but absent from the live schema (joined-table columns, renamed fields)
+        $droppedFields = @()
+        if ($schemaColumns.Count -gt 0) {
+            $schemaSet = [System.Collections.Generic.HashSet[string]]::new([string[]]$schemaColumns, [StringComparer]::OrdinalIgnoreCase)
+            $droppedFields = @($usedFields | Where-Object { $_ -ne 'TimeGenerated' -and -not $schemaSet.Contains($_) } | Sort-Object)
+            foreach ($d in $droppedFields) { [void]$usedFields.Remove($d) }
+        }
+
         # Compute unused fields (schema - used)
         $unusedFields = @()
         if ($schemaColumns.Count -gt 0) {
@@ -227,14 +432,21 @@ function Get-LiveTuningAnalysis {
         }
 
         # Lookup table analysis entry for cost data
-        $tableEntry = $TableAnalysis | Where-Object { $_.TableName -eq $tableName } | Select-Object -First 1
+        $tableEntry = if ($tableEntryMap.ContainsKey($tableName)) { $tableEntryMap[$tableName] } else { $null }
         $monthlyGB = if ($tableEntry) { $tableEntry.MonthlyGB } else { 0 }
         $monthlyCost = if ($tableEntry) { $tableEntry.EstMonthlyCostUSD } else { 0 }
 
-        # Generate filter KQL (condition-only for portal)
+        # Generate filter KQL (condition-only for portal); predicates on columns the table does not have are dropped
         $filterKql = $null
-        if ($conditions.Count -gt 0) {
-            $uniqueConditions = @($conditions | Select-Object -Unique | Select-Object -First 10)
+        $droppedConditions = @()
+        $usableConditions = @($conditions | Select-Object -Unique)
+        if ($schemaColumns.Count -gt 0) {
+            $split = Select-KqlConditionInSchema -Conditions $usableConditions -SchemaColumns $schemaColumns
+            $usableConditions = @($split.Kept)
+            $droppedConditions = @($split.Dropped)
+        }
+        if ($usableConditions.Count -gt 0) {
+            $uniqueConditions = @($usableConditions | Select-Object -First 10)
             $filterKql = ($uniqueConditions | ForEach-Object { "($($_))" }) -join "`n    or "
         }
 
@@ -271,12 +483,14 @@ function Get-LiveTuningAnalysis {
             EstMonthlyCostUSD  = $monthlyCost
             UsedFields         = @($sortedUsed)
             UnusedFields       = $unusedFields
+            DroppedFields      = $droppedFields
             SchemaColumns      = $schemaColumns
             FieldCount         = $usedFields.Count
             SchemaColumnCount  = $schemaColumns.Count
             UnusedFieldCount   = $unusedFields.Count
             RuleCount          = $ruleDetails.Count
-            ConditionCount     = $conditions.Count
+            ConditionCount     = $usableConditions.Count
+            DroppedConditions  = $droppedConditions
             FilterKql          = $filterKql
             ProjectKql         = $projectKql
             CombinedKql        = $combinedKql
@@ -306,7 +520,7 @@ function Get-SplitKql {
         double-apply the prefix and cause a KQL syntax error.
     .OUTPUTS
         PSCustomObject with SplitKql (condition-only), ProjectKql, RuleFields,
-        HighValueFields, and Source.
+        HighValueFields, DroppedFields (candidates not in the live schema) and Source.
     #>
     [CmdletBinding()]
     param(
@@ -314,26 +528,24 @@ function Get-SplitKql {
         [array]$Rules,
         [hashtable]$HighValueFieldsDB,
         [hashtable]$FieldFrequencyStats,
-        [string]$TableCategory
+        [string]$TableCategory,
+        [string[]]$SchemaColumns = @()
     )
 
     # 1. Extract fields from rules targeting this table
     $ruleFields = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
     $ruleConditions = [System.Collections.Generic.List[string]]::new()
 
+    $tableRulesAll = @()
     if ($Rules) {
-        $tableRules = @($Rules | Where-Object { $_.Enabled -and $_.Tables -contains $TableName -and $_.Query })
+        $tableRulesAll = @($Rules | Where-Object { $_.Enabled -and $_.Tables -contains $TableName })
+        $tableRules = @($tableRulesAll | Where-Object { $_.Query })
         foreach ($rule in $tableRules) {
             $fields = Get-FieldsFromKql -Kql $rule.Query
             foreach ($f in $fields) { [void]$ruleFields.Add($f) }
 
-            # Extract where conditions specific to this table for split hints
-            $whereMatches = [regex]::Matches($rule.Query, '(?i)\|\s*where\s+(.+?)(?:\||$)')
-            foreach ($wm in $whereMatches) {
-                $condition = $wm.Groups[1].Value.Trim()
-                if ($condition.Length -gt 5 -and $condition.Length -lt 200) {
-                    $ruleConditions.Add($condition)
-                }
+            foreach ($condition in (Get-KqlWhereCondition -Kql $rule.Query)) {
+                $ruleConditions.Add($condition)
             }
         }
     }
@@ -375,37 +587,57 @@ function Get-SplitKql {
         }
     }
 
-    # 3. Merge field sets
+    # 3. Merge field sets, then keep only columns that exist in the live schema (when known)
     $allFields = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
     [void]$allFields.Add('TimeGenerated')  # Always include
     foreach ($f in $ruleFields)     { [void]$allFields.Add($f) }
     foreach ($f in $hvFields)       { [void]$allFields.Add($f) }
     foreach ($f in $fallbackFields) { [void]$allFields.Add($f) }
 
-    # 4. Generate KQL (condition-only — the Sentinel portal prepends "source | where" implicitly)
+    $droppedFields = @()
+    if ($SchemaColumns -and $SchemaColumns.Count -gt 0) {
+        $schemaSet = [System.Collections.Generic.HashSet[string]]::new([string[]]$SchemaColumns, [StringComparer]::OrdinalIgnoreCase)
+        $droppedFields = @($allFields | Where-Object { $_ -ne 'TimeGenerated' -and -not $schemaSet.Contains($_) } | Sort-Object)
+        foreach ($d in $droppedFields) { [void]$allFields.Remove($d) }
+    }
+
+    # 4. Generate KQL (condition-only - the Sentinel portal prepends "source | where" implicitly).
+    #    Predicates on columns the table does not have would fail in the portal, so they are dropped.
     $splitKql = $null
     $projectKql = $null
     $source = 'none'
+    $droppedConditions = @()
+    $usableConditions = @($ruleConditions | Select-Object -Unique)
+    if ($SchemaColumns -and $SchemaColumns.Count -gt 0) {
+        $split = Select-KqlConditionInSchema -Conditions $usableConditions -SchemaColumns $SchemaColumns
+        $usableConditions = @($split.Kept)
+        $droppedConditions = @($split.Dropped)
+    }
+    $uniqueConditions = @($usableConditions | Select-Object -First 10)
 
     # Prefer knowledge-base split hint if available (these are curated)
     if ($splitHint) {
         $splitKql = $splitHint.kql
         $source = 'knowledge-base'
 
-        # If we have rule conditions, append them to enhance the hint
-        if ($ruleConditions.Count -gt 0) {
+        # Rule conditions widen the hint so every row a deployed rule needs stays in Analytics
+        if ($uniqueConditions.Count -gt 0) {
+            $hintNorm = ("$splitKql" -replace '\s+', ' ').Trim()
+            $extra = @($uniqueConditions | Where-Object { (($_ -replace '\s+', ' ').Trim()) -ine $hintNorm })
+            if ($extra.Count -gt 0) {
+                $ruleClause = ($extra | ForEach-Object { "($($_))" }) -join "`n    or "
+                $splitKql = "($splitKql)`n    or $ruleClause"
+            }
             $source = 'combined'
         }
     }
-    elseif ($ruleConditions.Count -gt 0) {
-        # Build split KQL from rule conditions (OR them together — keep any row a rule cares about)
-        $uniqueConditions = @($ruleConditions | Select-Object -Unique | Select-Object -First 10)
-        $combined = ($uniqueConditions | ForEach-Object { "($($_))" }) -join "`n    or "
-        $splitKql = $combined
+    elseif ($uniqueConditions.Count -gt 0) {
+        # Build split KQL from rule conditions (OR them together - keep any row a rule cares about)
+        $splitKql = ($uniqueConditions | ForEach-Object { "($($_))" }) -join "`n    or "
         $source = 'rule-analysis'
     }
 
-    # Always generate a projection KQL (useful for column reduction transforms — these use full KQL syntax)
+    # Always generate a projection KQL (useful for column reduction transforms - these use full KQL syntax)
     if ($allFields.Count -gt 1) {
         $sortedFields = @($allFields | Sort-Object)
         $projectKql = "source`n| project $($sortedFields -join ', ')"
@@ -424,10 +656,70 @@ function Get-SplitKql {
         HighValueFields = $hvFields
         FallbackFields  = $fallbackFields
         AllFields       = @($allFields | Sort-Object)
-        RuleCount       = if ($Rules) { @($Rules | Where-Object { $_.Enabled -and $_.Tables -contains $TableName }).Count } else { 0 }
-        ConditionCount  = $ruleConditions.Count
+        DroppedFields   = $droppedFields
+        DroppedConditions = $droppedConditions
+        RuleCount       = $tableRulesAll.Count
+        ConditionCount  = $usableConditions.Count
         Source          = $source
         FallbackSource  = $fallbackSource
         Description     = if ($hvEntry) { $hvEntry.description } else { $null }
     }
+}
+
+function Select-KqlConditionInSchema {
+    <#
+    .SYNOPSIS
+        Splits where-predicates into Kept (every referenced column exists in the
+        table schema) and Dropped (at least one column is not in the schema, so the
+        predicate came from a joined table, a let variable or a renamed field).
+    #>
+    [CmdletBinding()]
+    param(
+        [string[]]$Conditions = @(),
+        [string[]]$SchemaColumns = @()
+    )
+
+    $kept = [System.Collections.Generic.List[string]]::new()
+    $dropped = [System.Collections.Generic.List[string]]::new()
+    if (-not $SchemaColumns -or $SchemaColumns.Count -eq 0) {
+        foreach ($c in $Conditions) { $kept.Add($c) }
+        return [PSCustomObject]@{ Kept = @($kept); Dropped = @($dropped) }
+    }
+
+    $schemaSet = [System.Collections.Generic.HashSet[string]]::new([string[]]$SchemaColumns, [StringComparer]::OrdinalIgnoreCase)
+    foreach ($c in $Conditions) {
+        if ([string]::IsNullOrWhiteSpace($c)) { continue }
+        $fields = @(Get-FieldsFromKql -Kql "source | where $c")
+        $missing = @($fields | Where-Object { -not $schemaSet.Contains($_) })
+        if ($missing.Count -eq 0) { $kept.Add($c) } else { $dropped.Add($c) }
+    }
+    [PSCustomObject]@{ Kept = @($kept); Dropped = @($dropped) }
+}
+
+function Get-KqlWhereCondition {
+    <#
+    .SYNOPSIS
+        Extracts the predicate of each "| where" clause (5-200 chars) with a regex timeout.
+        Multi-line predicates are collapsed to one line.
+    #>
+    [CmdletBinding()]
+    param(
+        [string]$Kql,
+        [int]$MinLength = 5,
+        [int]$MaxLength = 200
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Kql)) { return @() }
+    $results = [System.Collections.Generic.List[string]]::new()
+    try {
+        $rx = [regex]::new('(?is)\|\s*where\s+(.+?)(?=\||$)', [System.Text.RegularExpressions.RegexOptions]::None, [timespan]::FromSeconds(2))
+        foreach ($m in $rx.Matches($Kql)) {
+            $condition = ($m.Groups[1].Value -replace '\s+', ' ').Trim()
+            if ($condition.Length -gt $MinLength -and $condition.Length -lt $MaxLength) { $results.Add($condition) }
+        }
+    }
+    catch [System.Text.RegularExpressions.RegexMatchTimeoutException] {
+        Write-Warning 'Regex execution timed out while extracting where conditions from KQL.'
+    }
+    @($results)
 }

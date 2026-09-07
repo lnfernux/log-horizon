@@ -84,18 +84,22 @@ function ConvertTo-TableRetentionApiValue {
     return $Value
 }
 
-function Get-BasicPlanSupportedTableSet {
+function Get-PlanSupportedTableSet {
     <#
     .SYNOPSIS
-        Returns a cached set of built-in table names that Microsoft Learn lists
-        as supporting the Basic table plan.
+        Returns a cached set of built-in table names that the Azure Monitor
+        table feature matrix lists as supporting the given plan. Regenerate
+        the underlying files with Tools/Update-TablePlanSupport.ps1.
     #>
-    if ($script:BasicPlanSupportedTableNames) {
-        return $script:BasicPlanSupportedTableNames
-    }
+    [CmdletBinding()]
+    param([Parameter(Mandatory)][ValidateSet('Basic', 'Auxiliary')][string]$Plan)
+
+    if (-not $script:PlanSupportedTableNames) { $script:PlanSupportedTableNames = @{} }
+    if ($script:PlanSupportedTableNames.ContainsKey($Plan)) { return , $script:PlanSupportedTableNames[$Plan] }
 
     $lookup = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
-    $path = Join-Path $PSScriptRoot '..\Data\basic-plan-tables.json'
+    $file = if ($Plan -eq 'Basic') { 'basic-plan-tables.json' } else { 'auxiliary-plan-tables.json' }
+    $path = Join-Path $PSScriptRoot "..\Data\$file"
     if (Test-Path $path) {
         $data = Get-Content -LiteralPath $path -Raw | ConvertFrom-Json
         foreach ($name in @($data.tables)) {
@@ -105,8 +109,39 @@ function Get-BasicPlanSupportedTableSet {
         }
     }
 
-    $script:BasicPlanSupportedTableNames = $lookup
-    return $script:BasicPlanSupportedTableNames
+    $script:PlanSupportedTableNames[$Plan] = $lookup
+    return , $lookup
+}
+
+function Get-BasicPlanSupportedTableSet {
+    <#
+    .SYNOPSIS
+        Built-in tables that support the Basic plan.
+    #>
+    return , (Get-PlanSupportedTableSet -Plan Basic)
+}
+
+function Test-TableSupportsAuxiliaryPlan {
+    <#
+    .SYNOPSIS
+        Determines whether a table can live on the Auxiliary (Data Lake) plan.
+    .DESCRIPTION
+        Built-in tables come from the Azure Monitor feature matrix; DCR-based
+        custom tables support Auxiliary while Classic custom tables do not.
+        Tables already on Auxiliary return $true.
+    #>
+    [CmdletBinding()]
+    param([Parameter(Mandatory)][PSCustomObject]$Table)
+
+    $tableName = Get-TableRetentionSourceValue -Table $Table -Names @('TableName', 'Name')
+    $currentPlan = Get-TableRetentionSourceValue -Table $Table -Names @('Plan', 'TablePlan', 'XDRState')
+    $tableSubType = Get-TableRetentionSourceValue -Table $Table -Names @('TableSubType')
+
+    if ([string]::IsNullOrWhiteSpace($tableName)) { return $false }
+    if ($currentPlan -eq 'Auxiliary') { return $true }
+    if ($tableName -match '_CL$') { return ($tableSubType -eq 'DataCollectionRuleBased') }
+
+    return (Get-PlanSupportedTableSet -Plan Auxiliary).Contains([string]$tableName)
 }
 
 function Test-TableSupportsBasicPlan {
@@ -201,8 +236,15 @@ function Get-TableRetentionChangeSet {
         $status   = 'Pending'
         $reason   = $null
 
+        # Search-job and restore tables are managed by their parent operation, not by PATCH.
+        $tableType = Get-TableRetentionSourceValue -Table $t -Names @('TableType')
+        if ($tableType -in @('SearchResults', 'RestoredLogs')) {
+            $status = 'Invalid'
+            $reason = "Tables of type $tableType cannot have plan or retention changed."
+        }
+
         # Auxiliary tables cannot have their plan switched in or out.
-        if ($currentPlan -eq 'Auxiliary' -or $effectivePlan -eq 'Auxiliary') {
+        if ($status -eq 'Pending' -and ($currentPlan -eq 'Auxiliary' -or $effectivePlan -eq 'Auxiliary')) {
             if ($changePlan -and $currentPlan -ne $effectivePlan) {
                 $status = 'Invalid'
                 $reason = 'Plan switching to or from Auxiliary is not supported by the Tables API.'
@@ -233,10 +275,14 @@ function Get-TableRetentionChangeSet {
             $reason = "Effective TotalRetentionInDays ($newTotal) is less than RetentionInDays ($newRetention)."
         }
 
-        # No-op detection.
+        # No-op detection. Inherit (null) targets compare against the AsDefault flags, since the
+        # API always reports the effective value.
+        $retentionInherits = (Get-TableRetentionSourceValue -Table $t -Names @('RetentionInDaysAsDefault')) -eq $true
+        $totalInherits     = (Get-TableRetentionSourceValue -Table $t -Names @('TotalRetentionInDaysAsDefault')) -eq $true -or
+                             ($null -ne $currentTotal -and $null -ne $currentRetention -and $currentTotal -eq $currentRetention)
         $planChanged      = $changePlan      -and ($currentPlan -ne $effectivePlan)
-        $retentionChanged = $changeRetention -and ($currentRetention -ne $newRetention)
-        $totalChanged     = $changeTotal     -and ($currentTotal -ne $newTotal)
+        $retentionChanged = $changeRetention -and $(if ($null -eq $newRetention) { -not $retentionInherits } else { $currentRetention -ne $newRetention })
+        $totalChanged     = $changeTotal     -and $(if ($null -eq $newTotal) { -not $totalInherits } else { $currentTotal -ne $newTotal })
         if ($status -eq 'Pending' -and -not ($planChanged -or $retentionChanged -or $totalChanged)) {
             $status = 'Skipped'
             $reason = 'Target values match current configuration.'
@@ -356,7 +402,7 @@ function Invoke-TableRetentionApply {
             continue
         }
 
-        $uri = "https://management.azure.com$($Context.ResourceId)/tables/$($c.TableName)?api-version=$apiVersion"
+        $uri = "$(Get-LogHorizonEndpoint -Name Arm -Context $Context)$($Context.ResourceId)/tables/$($c.TableName)?api-version=$apiVersion"
 
         $combinedProps = [ordered]@{}
         if ($c.PlanChanged)      { $combinedProps['plan']                 = $c.TargetPlan }

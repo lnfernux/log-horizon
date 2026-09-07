@@ -33,7 +33,8 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": true,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "platform": true
   },
   {
     "tableName": "SentinelHealth",
@@ -51,7 +52,8 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": true,
-    "recommendedRetentionDays": 180
+    "recommendedRetentionDays": 180,
+    "platform": true
   },
   {
     "tableName": "SentinelAudit",
@@ -68,8 +70,9 @@
     ],
     "mitreSources": [],
     "recommendedTier": "analytics",
-    "isFree": true,
-    "recommendedRetentionDays": 180
+    "isFree": false,
+    "recommendedRetentionDays": 180,
+    "platform": true
   },
   {
     "tableName": "SecurityEvent",
@@ -210,7 +213,8 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "xdrStreamable": true
   },
   {
     "tableName": "IdentityQueryEvents",
@@ -232,7 +236,8 @@
     ],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "xdrStreamable": true
   },
   {
     "tableName": "IdentityDirectoryEvents",
@@ -255,11 +260,12 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "xdrStreamable": true
   },
   {
     "tableName": "AlertEvidence",
-    "connector": "Microsoft 365 Defender",
+    "connector": "Microsoft Defender XDR",
     "classification": "primary",
     "category": "Security Alerts",
     "description": "Evidence entities (files, IPs, users, processes) associated with Microsoft 365 Defender alerts",
@@ -274,11 +280,12 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "xdrStreamable": true
   },
   {
     "tableName": "AlertInfo",
-    "connector": "Microsoft 365 Defender",
+    "connector": "Microsoft Defender XDR",
     "classification": "primary",
     "category": "Security Alerts",
     "description": "Alert metadata from Microsoft 365 Defender including severity, category, and MITRE mapping",
@@ -293,7 +300,8 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "xdrStreamable": true
   },
   {
     "tableName": "DeviceEvents",
@@ -316,7 +324,8 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "xdrStreamable": true
   },
   {
     "tableName": "DeviceProcessEvents",
@@ -339,7 +348,8 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "xdrStreamable": true
   },
   {
     "tableName": "DeviceFileEvents",
@@ -363,7 +373,8 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "xdrStreamable": true
   },
   {
     "tableName": "DeviceRegistryEvents",
@@ -386,7 +397,8 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "xdrStreamable": true
   },
   {
     "tableName": "DeviceNetworkEvents",
@@ -408,7 +420,8 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "xdrStreamable": true
   },
   {
     "tableName": "DeviceNetworkInfo",
@@ -429,7 +442,8 @@
     "mitreSources": [],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "xdrStreamable": true
   },
   {
     "tableName": "DeviceLogonEvents",
@@ -453,7 +467,8 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "xdrStreamable": true
   },
   {
     "tableName": "DeviceImageLoadEvents",
@@ -476,7 +491,8 @@
     ],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "xdrStreamable": true
   },
   {
     "tableName": "EmailEvents",
@@ -498,7 +514,8 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "xdrStreamable": true
   },
   {
     "tableName": "EmailAttachmentInfo",
@@ -519,7 +536,8 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "xdrStreamable": true
   },
   {
     "tableName": "EmailUrlInfo",
@@ -540,7 +558,8 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "xdrStreamable": true
   },
   {
     "tableName": "EmailPostDeliveryEvents",
@@ -562,7 +581,8 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "xdrStreamable": true
   },
   {
     "tableName": "UrlClickEvents",
@@ -583,7 +603,8 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "xdrStreamable": true
   },
   {
     "tableName": "CloudAppEvents",
@@ -605,7 +626,8 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "xdrStreamable": true
   },
   {
     "tableName": "AzureActivity",
@@ -694,10 +716,10 @@
   },
   {
     "tableName": "DnsEvents",
-    "connector": "Windows DNS Server",
+    "connector": "Windows DNS Server (Log Analytics agent, legacy)",
     "classification": "primary",
     "category": "Network Security",
-    "description": "DNS query and response events from Windows DNS servers, critical for C2 and exfiltration detection",
+    "description": "DNS query and response events from Windows DNS servers, critical for C2 and exfiltration detection. Collected by the retired Log Analytics agent; use Windows DNS Events via AMA (ASimDnsActivityLogs)",
     "keywords": [
       "dns",
       "query",
@@ -712,14 +734,18 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "status": "legacy",
+    "replacedBy": [
+      "ASimDnsActivityLogs"
+    ]
   },
   {
     "tableName": "DnsInventory",
-    "connector": "Windows DNS Server",
+    "connector": "Windows DNS Server (Log Analytics agent, legacy)",
     "classification": "primary",
     "category": "Network Security",
-    "description": "Inventory of DNS zones and records from Windows DNS servers",
+    "description": "Inventory of DNS zones and records from Windows DNS servers. Collected by the retired Log Analytics agent; use Windows DNS Events via AMA (ASimDnsActivityLogs)",
     "keywords": [
       "dns",
       "inventory",
@@ -730,14 +756,18 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "status": "legacy",
+    "replacedBy": [
+      "ASimDnsActivityLogs"
+    ]
   },
   {
     "tableName": "ThreatIntelligenceIndicator",
-    "connector": "Threat Intelligence Platforms",
+    "connector": "Threat Intelligence Platforms (legacy)",
     "classification": "primary",
     "category": "Threat Intelligence",
-    "description": "Threat intelligence indicators (IOCs) imported from TIP feeds, TAXII, and Microsoft threat intel",
+    "description": "Threat intelligence indicators (IOCs) imported from TIP feeds, TAXII, and Microsoft threat intel. Sentinel stopped ingesting to this table after 2025-07-31; use ThreatIntelIndicators and ThreatIntelObjects",
     "keywords": [
       "threat",
       "intelligence",
@@ -750,14 +780,19 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "status": "deprecated",
+    "replacedBy": [
+      "ThreatIntelIndicators",
+      "ThreatIntelObjects"
+    ]
   },
   {
     "tableName": "ThreatIntelIndicators",
-    "connector": "Threat Intelligence Platforms",
+    "connector": "Threat Intelligence (Upload API, TAXII, Defender TI)",
     "classification": "primary",
     "category": "Threat Intelligence",
-    "description": "Threat intelligence indicators table (alternate name for ThreatIntelligenceIndicator in some workspaces)",
+    "description": "STIX 2.1 threat intelligence indicators ingested via the Upload Indicators API, TAXII, Microsoft Defender Threat Intelligence and partner TI connectors (successor to ThreatIntelligenceIndicator)",
     "keywords": [
       "threat",
       "intelligence",
@@ -774,7 +809,7 @@
   },
   {
     "tableName": "OfficeActivity",
-    "connector": "Office 365",
+    "connector": "Microsoft 365",
     "classification": "primary",
     "category": "Cloud Control Plane",
     "description": "Office 365 audit events covering Exchange, SharePoint, OneDrive, and Teams user and admin activities",
@@ -926,7 +961,7 @@
   },
   {
     "tableName": "ASimDnsActivityLogs",
-    "connector": "ASIM DNS (normalized)",
+    "connector": "Windows DNS Events via AMA / ASIM DNS (normalized)",
     "classification": "primary",
     "category": "Network Security",
     "description": "ASIM-normalized DNS activity logs from multiple sources for cross-source DNS analytics",
@@ -1461,10 +1496,10 @@
   },
   {
     "tableName": "AzureDiagnostics",
-    "connector": "Azure Diagnostic Settings",
+    "connector": "Azure Diagnostic Settings (legacy Azure Diagnostics mode)",
     "classification": "secondary",
     "category": "Infrastructure Diagnostics",
-    "description": "Consolidated diagnostic logs from Azure resources including Key Vault, SQL, App Gateway, and more",
+    "description": "Consolidated diagnostic logs from Azure resources including Key Vault, SQL, App Gateway, and more. Legacy collection mode with a 500-column cap; prefer resource-specific tables (AZFW*, AGW*, AKS*, AZKVAuditLogs) where the service offers them",
     "keywords": [
       "diagnostics",
       "azure",
@@ -1667,7 +1702,8 @@
     "mitreSources": [],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 180
+    "recommendedRetentionDays": 180,
+    "platform": true
   },
   {
     "tableName": "AppServiceHTTPLogs",
@@ -1815,10 +1851,10 @@
   },
   {
     "tableName": "ConfigurationData",
-    "connector": "Change Tracking",
+    "connector": "Change Tracking and Inventory (AMA)",
     "classification": "secondary",
     "category": "Configuration Management",
-    "description": "Inventory snapshots of installed software, services, registry, and files on tracked machines",
+    "description": "Inventory snapshots of installed software, services, registry, and files on tracked machines (AMA-based Change Tracking only; the Log Analytics agent version is retired)",
     "keywords": [
       "configuration",
       "inventory",
@@ -1833,10 +1869,10 @@
   },
   {
     "tableName": "ConfigurationChange",
-    "connector": "Change Tracking",
+    "connector": "Change Tracking and Inventory (AMA)",
     "classification": "secondary",
     "category": "Configuration Management",
-    "description": "Detected changes to software, services, registry, and files on tracked machines",
+    "description": "Detected changes to software, services, registry, and files on tracked machines (AMA-based Change Tracking only; the Log Analytics agent version is retired)",
     "keywords": [
       "configuration",
       "change",
@@ -1863,7 +1899,7 @@
     ],
     "mitreSources": [],
     "recommendedTier": "datalake",
-    "isFree": false,
+    "isFree": true,
     "recommendedRetentionDays": 90
   },
   {
@@ -1905,10 +1941,10 @@
   },
   {
     "tableName": "Update",
-    "connector": "Update Management",
+    "connector": "Update Management (retired)",
     "classification": "secondary",
     "category": "Configuration Management",
-    "description": "Available OS and software updates on monitored machines from Update Management",
+    "description": "Available OS and software updates on monitored machines from Update Management. Azure Automation Update Management retired 2024-08-31; Azure Update Manager does not write to this table",
     "keywords": [
       "update",
       "patch",
@@ -1918,14 +1954,16 @@
     "mitreSources": [],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "status": "deprecated",
+    "replacedBy": []
   },
   {
     "tableName": "UpdateSummary",
-    "connector": "Update Management",
+    "connector": "Update Management (retired)",
     "classification": "secondary",
     "category": "Configuration Management",
-    "description": "Summary of update compliance status per machine including missing critical and security patches",
+    "description": "Summary of update compliance status per machine including missing critical and security patches. Azure Automation Update Management retired 2024-08-31; Azure Update Manager does not write to this table",
     "keywords": [
       "update",
       "summary",
@@ -1936,7 +1974,9 @@
     "mitreSources": [],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "status": "deprecated",
+    "replacedBy": []
   },
   {
     "tableName": "InsightsMetrics",
@@ -2330,7 +2370,8 @@
     "mitreSources": [],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "xdrStreamable": true
   },
   {
     "tableName": "DeviceFileCertificateInfo",
@@ -2351,14 +2392,15 @@
     ],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "xdrStreamable": true
   },
   {
     "tableName": "DeviceTvmSoftwareInventory",
     "connector": "Microsoft Defender for Endpoint",
     "classification": "secondary",
     "category": "Vulnerability Management",
-    "description": "Software inventory from Defender TVM including installed applications and versions",
+    "description": "Software inventory from Defender TVM including installed applications and versions (not ingested by the Defender XDR connector; requires a custom ingestion path)",
     "keywords": [
       "tvm",
       "software",
@@ -2370,14 +2412,15 @@
     "mitreSources": [],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "xdrStreamable": false
   },
   {
     "tableName": "DeviceTvmSoftwareVulnerabilities",
     "connector": "Microsoft Defender for Endpoint",
     "classification": "primary",
     "category": "Vulnerability Management",
-    "description": "Known software vulnerabilities on devices from Defender TVM with CVE-level detail",
+    "description": "Known software vulnerabilities on devices from Defender TVM with CVE-level detail (not ingested by the Defender XDR connector; requires a custom ingestion path)",
     "keywords": [
       "tvm",
       "vulnerability",
@@ -2388,14 +2431,15 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "xdrStreamable": false
   },
   {
     "tableName": "DeviceTvmSecureConfigurationAssessment",
     "connector": "Microsoft Defender for Endpoint",
     "classification": "secondary",
     "category": "Posture Management",
-    "description": "Secure configuration assessment results from Defender TVM across managed endpoints",
+    "description": "Secure configuration assessment results from Defender TVM across managed endpoints (not ingested by the Defender XDR connector; requires a custom ingestion path)",
     "keywords": [
       "tvm",
       "configuration",
@@ -2407,14 +2451,15 @@
     "mitreSources": [],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "xdrStreamable": false
   },
   {
     "tableName": "DeviceTvmSecureConfigurationAssessmentKB",
     "connector": "Microsoft Defender for Endpoint",
     "classification": "secondary",
     "category": "Posture Management",
-    "description": "Knowledge base for TVM secure configuration checks including descriptions and remediation steps",
+    "description": "Knowledge base for TVM secure configuration checks including descriptions and remediation steps (not ingested by the Defender XDR connector; requires a custom ingestion path)",
     "keywords": [
       "tvm",
       "configuration",
@@ -2425,14 +2470,15 @@
     "mitreSources": [],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "xdrStreamable": false
   },
   {
     "tableName": "CloudAuditEvents",
     "connector": "Microsoft Defender for Cloud Apps",
     "classification": "primary",
     "category": "Cloud Security",
-    "description": "Cloud application audit events from Defender for Cloud Apps including admin actions and policy changes",
+    "description": "Cloud application audit events from Defender for Cloud Apps including admin actions and policy changes (not ingested by the Defender XDR connector; requires a custom ingestion path)",
     "keywords": [
       "cloud",
       "audit",
@@ -2445,7 +2491,8 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "xdrStreamable": false
   },
   {
     "tableName": "AWSCloudWatch",
@@ -3103,7 +3150,11 @@
     "mitreSources": [],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 180
+    "recommendedRetentionDays": 180,
+    "status": "legacy",
+    "replacedBy": [
+      "ElasticAgentLogsV2_CL"
+    ]
   },
   {
     "tableName": "ForescoutEvent",
@@ -3250,7 +3301,7 @@
   },
   {
     "tableName": "SentinelOne_CL",
-    "connector": "SentinelOne",
+    "connector": "SentinelOne (Azure Functions, deprecated)",
     "classification": "primary",
     "category": "Endpoint Detection",
     "description": "SentinelOne EDR consolidated events including threats, activities, and agent telemetry",
@@ -3266,7 +3317,16 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "status": "deprecated",
+    "replacedBy": [
+      "SentinelOneActivities_CL",
+      "SentinelOneAgents_CL",
+      "SentinelOneGroups_CL",
+      "SentinelOneThreats_CL",
+      "SentinelOneAlerts_CL",
+      "SentinelOneAlertsV2_CL"
+    ]
   },
   {
     "tableName": "SentinelOneActivities_CL",
@@ -3302,7 +3362,11 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "status": "legacy",
+    "replacedBy": [
+      "SentinelOneAlertsV2_CL"
+    ]
   },
   {
     "tableName": "SentinelOneThreats_CL",
@@ -3530,7 +3594,7 @@
   },
   {
     "tableName": "CarbonBlackAuditLogs_CL",
-    "connector": "VMware Carbon Black Cloud",
+    "connector": "VMware Carbon Black Cloud (Azure Functions, deprecated)",
     "classification": "secondary",
     "category": "Endpoint Telemetry",
     "description": "VMware Carbon Black Cloud console audit logs for admin actions and configuration changes",
@@ -3543,11 +3607,15 @@
     "mitreSources": [],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 180
+    "recommendedRetentionDays": 180,
+    "status": "deprecated",
+    "replacedBy": [
+      "CarbonBlack_Alerts_CL"
+    ]
   },
   {
     "tableName": "CarbonBlackEvents_CL",
-    "connector": "VMware Carbon Black Cloud",
+    "connector": "VMware Carbon Black Cloud (Azure Functions, deprecated)",
     "classification": "primary",
     "category": "Endpoint Detection",
     "description": "VMware Carbon Black Cloud endpoint telemetry events including process, network, and file activity",
@@ -3565,11 +3633,15 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "status": "deprecated",
+    "replacedBy": [
+      "CarbonBlack_Alerts_CL"
+    ]
   },
   {
     "tableName": "CarbonBlackNotifications_CL",
-    "connector": "VMware Carbon Black Cloud",
+    "connector": "VMware Carbon Black Cloud (Azure Functions, deprecated)",
     "classification": "primary",
     "category": "Security Alerts",
     "description": "VMware Carbon Black Cloud notification events for threat indicators and watchlist hits",
@@ -3583,11 +3655,15 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "status": "deprecated",
+    "replacedBy": [
+      "CarbonBlack_Alerts_CL"
+    ]
   },
   {
     "tableName": "SophosEP_CL",
-    "connector": "Sophos Endpoint Protection",
+    "connector": "Sophos Endpoint Protection (Azure Functions, deprecated)",
     "classification": "primary",
     "category": "Endpoint Detection",
     "description": "Sophos Endpoint Protection events including malware detections and policy enforcement",
@@ -3603,7 +3679,11 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "status": "deprecated",
+    "replacedBy": [
+      "SophosEPEvents_CL"
+    ]
   },
   {
     "tableName": "SophosEPEvents_CL",
@@ -3772,7 +3852,11 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "status": "legacy",
+    "replacedBy": [
+      "CiscoETDv2_CL"
+    ]
   },
   {
     "tableName": "CiscoSDWANNetflow_CL",
@@ -4135,7 +4219,11 @@
     "mitreSources": [],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "status": "legacy",
+    "replacedBy": [
+      "Audit_CL"
+    ]
   },
   {
     "tableName": "MimecastDLP_CL",
@@ -4153,7 +4241,11 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "status": "legacy",
+    "replacedBy": [
+      "Seg_Dlp_CL"
+    ]
   },
   {
     "tableName": "MimecastSIEM_CL",
@@ -4171,7 +4263,11 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "status": "legacy",
+    "replacedBy": [
+      "Seg_Cg_CL"
+    ]
   },
   {
     "tableName": "MimecastTTPUrl_CL",
@@ -4189,7 +4285,11 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "status": "legacy",
+    "replacedBy": [
+      "Ttp_Url_CL"
+    ]
   },
   {
     "tableName": "MimecastTTPAttachment_CL",
@@ -4207,7 +4307,11 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "status": "legacy",
+    "replacedBy": [
+      "Ttp_Attachment_CL"
+    ]
   },
   {
     "tableName": "MimecastTTPImpersonation_CL",
@@ -4225,11 +4329,15 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "status": "legacy",
+    "replacedBy": [
+      "Ttp_Impersonation_CL"
+    ]
   },
   {
     "tableName": "Okta_CL",
-    "connector": "Okta (Azure Functions)",
+    "connector": "Okta Single Sign-On (Azure Functions, deprecated)",
     "classification": "primary",
     "category": "Identity & Access",
     "description": "Okta system log events collected via Azure Functions including auth, admin, and lifecycle events",
@@ -4246,7 +4354,11 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "status": "deprecated",
+    "replacedBy": [
+      "OktaSSO"
+    ]
   },
   {
     "tableName": "OnePasswordEventLogs_CL",
@@ -4329,7 +4441,11 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "status": "legacy",
+    "replacedBy": [
+      "ImpervaWAFCloud"
+    ]
   },
   {
     "tableName": "LastPassNativePoller_CL",
@@ -4393,7 +4509,7 @@
   },
   {
     "tableName": "GitHubAuditLogPolling_CL",
-    "connector": "GitHub (Azure Functions)",
+    "connector": "GitHub Enterprise Audit Log (Azure Functions, deprecated)",
     "classification": "primary",
     "category": "Cloud Control Plane",
     "description": "GitHub organization audit log events including repo access, member changes, and security settings",
@@ -4409,7 +4525,11 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "status": "deprecated",
+    "replacedBy": [
+      "GitHubAuditLogsV2_CL"
+    ]
   },
   {
     "tableName": "GitHubAuditLogsV2_CL",
@@ -4473,7 +4593,7 @@
   },
   {
     "tableName": "Auth0AM_CL",
-    "connector": "Auth0 Access Management",
+    "connector": "Auth0 Logs (Azure Functions, deprecated)",
     "classification": "primary",
     "category": "Identity & Access",
     "description": "Auth0 access management events including authentication, authorization, and anomaly detections",
@@ -4489,7 +4609,11 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "status": "deprecated",
+    "replacedBy": [
+      "Auth0Logs_CL"
+    ]
   },
   {
     "tableName": "Auth0Logs_CL",
@@ -4546,7 +4670,11 @@
     "mitreSources": [],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "status": "legacy",
+    "replacedBy": [
+      "QualysKnowledgeBase"
+    ]
   },
   {
     "tableName": "Tenable_VM_Vuln_CL",
@@ -4640,7 +4768,7 @@
   },
   {
     "tableName": "darktrace_model_alerts_CL",
-    "connector": "Darktrace",
+    "connector": "Darktrace REST API (legacy)",
     "classification": "primary",
     "category": "Network Security",
     "description": "Darktrace AI-driven network detection model breach alerts for anomalous behavior",
@@ -4657,7 +4785,16 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "status": "legacy",
+    "replacedBy": [
+      "DarktraceModelAlerts_CL",
+      "DarktraceIncidents_CL",
+      "DarktraceASM_CL",
+      "DarktraceEMAIL_CL",
+      "DarktraceResponseActions_CL",
+      "DarktraceSystemStatusAlerts_CL"
+    ]
   },
   {
     "tableName": "ExtraHop_Detections_CL",
@@ -4948,7 +5085,7 @@
   },
   {
     "tableName": "Lookout_CL",
-    "connector": "Lookout Mobile Threat Defense",
+    "connector": "Lookout (Azure Functions, deprecated)",
     "classification": "primary",
     "category": "Endpoint Detection",
     "description": "Lookout mobile threat defense events including device risk, phishing, and app threats",
@@ -4962,11 +5099,15 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "status": "deprecated",
+    "replacedBy": [
+      "LookoutMtdV2_CL"
+    ]
   },
   {
     "tableName": "Island_Admin_CL",
-    "connector": "Island Enterprise Browser",
+    "connector": "Island Enterprise Browser (legacy)",
     "classification": "secondary",
     "category": "Cloud Control Plane",
     "description": "Island Enterprise Browser admin audit events for policy and configuration management",
@@ -4980,11 +5121,15 @@
     "mitreSources": [],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "status": "legacy",
+    "replacedBy": [
+      "Island_UserEvents_V2_CL"
+    ]
   },
   {
     "tableName": "Island_User_CL",
-    "connector": "Island Enterprise Browser",
+    "connector": "Island Enterprise Browser (legacy)",
     "classification": "primary",
     "category": "Cloud Security",
     "description": "Island Enterprise Browser user activity events including web access, downloads, and data handling",
@@ -5001,7 +5146,11 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "status": "legacy",
+    "replacedBy": [
+      "Island_UserEvents_V2_CL"
+    ]
   },
   {
     "tableName": "ZimperiumThreatLog_CL",
@@ -5038,7 +5187,11 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 180
+    "recommendedRetentionDays": 180,
+    "status": "legacy",
+    "replacedBy": [
+      "DynatraceAttacksV2_CL"
+    ]
   },
   {
     "tableName": "DynatraceProblems_CL",
@@ -5055,7 +5208,11 @@
     "mitreSources": [],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 180
+    "recommendedRetentionDays": 180,
+    "status": "legacy",
+    "replacedBy": [
+      "DynatraceProblemsV2_CL"
+    ]
   },
   {
     "tableName": "DynatraceSecurityProblems_CL",
@@ -5073,7 +5230,11 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "status": "legacy",
+    "replacedBy": [
+      "DynatraceSecurityProblemsV2_CL"
+    ]
   },
   {
     "tableName": "DynatraceAuditLogs_CL",
@@ -5090,7 +5251,11 @@
     "mitreSources": [],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 180
+    "recommendedRetentionDays": 180,
+    "status": "legacy",
+    "replacedBy": [
+      "DynatraceAuditLogsV2_CL"
+    ]
   },
   {
     "tableName": "F5Telemetry_ASM_CL",
@@ -5149,7 +5314,11 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "status": "legacy",
+    "replacedBy": [
+      "DigitalShadows_V2_CL"
+    ]
   },
   {
     "tableName": "SAPBTPAuditLog_CL",
@@ -5243,7 +5412,12 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "status": "legacy",
+    "replacedBy": [
+      "HalcyonEventsV2_CL",
+      "HalcyonAlertUpdatesV2_CL"
+    ]
   },
   {
     "tableName": "HalcyonNetworkSession_CL",
@@ -5262,7 +5436,12 @@
     ],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 180
+    "recommendedRetentionDays": 180,
+    "status": "legacy",
+    "replacedBy": [
+      "HalcyonEventsV2_CL",
+      "HalcyonAlertUpdatesV2_CL"
+    ]
   },
   {
     "tableName": "HalcyonFileActivity_CL",
@@ -5282,7 +5461,12 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "status": "legacy",
+    "replacedBy": [
+      "HalcyonEventsV2_CL",
+      "HalcyonAlertUpdatesV2_CL"
+    ]
   },
   {
     "tableName": "HalcyonDnsActivity_CL",
@@ -5302,7 +5486,12 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "status": "legacy",
+    "replacedBy": [
+      "HalcyonEventsV2_CL",
+      "HalcyonAlertUpdatesV2_CL"
+    ]
   },
   {
     "tableName": "HalcyonAuthenticationEvents_CL",
@@ -5321,7 +5510,12 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "status": "legacy",
+    "replacedBy": [
+      "HalcyonEventsV2_CL",
+      "HalcyonAlertUpdatesV2_CL"
+    ]
   },
   {
     "tableName": "meraki_CL",
@@ -5385,7 +5579,7 @@
   },
   {
     "tableName": "Zoom_CL",
-    "connector": "Zoom (Azure Functions)",
+    "connector": "Zoom Reports (Azure Functions, deprecated)",
     "classification": "secondary",
     "category": "Cloud Control Plane",
     "description": "Zoom meeting and admin audit events collected via Azure Functions",
@@ -5400,7 +5594,11 @@
     ],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "status": "deprecated",
+    "replacedBy": [
+      "ZoomV2_CL"
+    ]
   },
   {
     "tableName": "ZoomV2_CL",
@@ -5679,7 +5877,7 @@
     "connector": "Microsoft Sentinel",
     "classification": "secondary",
     "category": "Platform Health",
-    "description": "Microsoft Sentinel watchlist definitions for enrichment and correlation in analytics rules",
+    "description": "Microsoft Sentinel watchlist items for enrichment and correlation in analytics rules (free ingestion status not documented; Usage.IsBillable decides at runtime)",
     "keywords": [
       "watchlist",
       "sentinel",
@@ -5690,7 +5888,8 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": true,
-    "recommendedRetentionDays": 180
+    "recommendedRetentionDays": 180,
+    "platform": true
   },
   {
     "tableName": "SquidProxy_CL",
@@ -5830,7 +6029,11 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "status": "legacy",
+    "replacedBy": [
+      "Rapid7InsightVMCloudVulnerabilities"
+    ]
   },
   {
     "tableName": "NexposeInsightVMCloud_assets_CL",
@@ -5848,7 +6051,11 @@
     "mitreSources": [],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "status": "legacy",
+    "replacedBy": [
+      "Rapid7InsightVMCloudAssets"
+    ]
   },
   {
     "tableName": "DruvaSecurityEvents_CL",
@@ -5998,7 +6205,11 @@
     ],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "status": "legacy",
+    "replacedBy": [
+      "SalesforceServiceCloudV3_CL"
+    ]
   },
   {
     "tableName": "Workplace_Facebook_CL",
@@ -6054,7 +6265,11 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "status": "legacy",
+    "replacedBy": [
+      "MailRiskEventEmails_CL"
+    ]
   },
   {
     "tableName": "MessageTrackingLog_CL",
@@ -6444,20 +6659,20 @@
   },
   {
     "tableName": "WsSecurityEvents_CL",
-    "connector": "Windows Security Events (legacy)",
+    "connector": "WithSecure Elements",
     "classification": "primary",
     "category": "Endpoint Detection",
-    "description": "Windows Security Event Log entries collected via legacy Windows Security Events connector",
+    "description": "WithSecure Elements endpoint protection security events (detections, blocked items, device events) via the CCF connector",
     "keywords": [
-      "windows",
-      "security",
-      "event",
-      "logon",
-      "legacy"
+      "withsecure",
+      "elements",
+      "endpoint",
+      "protection",
+      "detection"
     ],
     "mitreSources": [
-      "User Account: Authentication",
-      "Process: Process Creation"
+      "Process: Process Creation",
+      "File: File Creation"
     ],
     "recommendedTier": "analytics",
     "isFree": false,
@@ -6750,8 +6965,8 @@
     "recommendedRetentionDays": 365
   },
   {
-    "tableName": "IlumioInsights",
-    "connector": "Illumio",
+    "tableName": "IllumioInsights_CL",
+    "connector": "Illumio Insights",
     "classification": "primary",
     "category": "Network Security",
     "description": "Illumio Insights network visibility events for microsegmentation and workload communication",
@@ -6785,7 +7000,12 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 180
+    "recommendedRetentionDays": 180,
+    "status": "legacy",
+    "replacedBy": [
+      "ContrastADRAttackEvents_CL",
+      "ContrastADRIncidents_CL"
+    ]
   },
   {
     "tableName": "CognniIncidents_CL",
@@ -7022,8 +7242,9 @@
     ],
     "mitreSources": [],
     "recommendedTier": "datalake",
-    "isFree": false,
-    "recommendedRetentionDays": 90
+    "isFree": true,
+    "recommendedRetentionDays": 90,
+    "platform": true
   },
   {
     "tableName": "NTATopologyDetails",
@@ -7184,5 +7405,2253 @@
     "recommendedTier": "analytics",
     "isFree": false,
     "recommendedRetentionDays": 365
+  },
+  {
+    "tableName": "ThreatIntelObjects",
+    "connector": "Threat Intelligence",
+    "classification": "primary",
+    "category": "Threat Intelligence",
+    "description": "Generic STIX 2.1 threat intelligence objects (attack patterns, threat actors, relationships, identities) ingested by Sentinel alongside ThreatIntelIndicators",
+    "keywords": [
+      "stix",
+      "threat",
+      "intelligence",
+      "actor",
+      "relationship",
+      "object"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "isFree": false,
+    "recommendedRetentionDays": 365
+  },
+  {
+    "tableName": "MicrosoftServicePrincipalSignInLogs",
+    "connector": "Microsoft Entra ID",
+    "classification": "primary",
+    "category": "Identity & Access",
+    "description": "Sign-in logs for Microsoft first-party application service principals authenticating in the tenant",
+    "keywords": [
+      "entra",
+      "service",
+      "principal",
+      "signin",
+      "microsoft",
+      "application"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "isFree": false,
+    "recommendedRetentionDays": 365
+  },
+  {
+    "tableName": "SecurityCaseEvent",
+    "connector": "Microsoft Sentinel",
+    "classification": "secondary",
+    "category": "Platform Health",
+    "description": "Audit trail of field-level changes to Defender case management entities (cases, tasks, comments, attachments, relations)",
+    "keywords": [
+      "case",
+      "management",
+      "audit",
+      "task",
+      "comment",
+      "sentinel"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "isFree": false,
+    "recommendedRetentionDays": 365,
+    "platform": true
+  },
+  {
+    "tableName": "AADGraphActivityLogs",
+    "connector": "Microsoft Entra ID",
+    "classification": "primary",
+    "category": "Identity & Access",
+    "description": "Legacy Azure AD Graph API request activity against tenant directory resources, useful for tracking deprecated API usage and enumeration",
+    "keywords": [
+      "entra",
+      "graph",
+      "legacy",
+      "api",
+      "activity",
+      "directory"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "isFree": false,
+    "recommendedRetentionDays": 365
+  },
+  {
+    "tableName": "GraphNotificationsActivityLogs",
+    "connector": "Microsoft Entra ID",
+    "classification": "secondary",
+    "category": "Platform Health",
+    "description": "Microsoft Graph change notification delivery logs for webhook subscriptions in the tenant",
+    "keywords": [
+      "graph",
+      "notification",
+      "webhook",
+      "subscription",
+      "delivery"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "datalake",
+    "isFree": false,
+    "recommendedRetentionDays": 90
+  },
+  {
+    "tableName": "AADRiskyAgents",
+    "connector": "Microsoft Entra ID Protection",
+    "classification": "primary",
+    "category": "Identity & Access",
+    "description": "Entra ID Protection risky agent identities (Agent ID) with risk level, risk state and remediation detail",
+    "keywords": [
+      "entra",
+      "agent",
+      "identity",
+      "risk",
+      "risky",
+      "protection"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "isFree": false,
+    "recommendedRetentionDays": 365
+  },
+  {
+    "tableName": "AADAgentRiskEvents",
+    "connector": "Microsoft Entra ID Protection",
+    "classification": "primary",
+    "category": "Identity & Access",
+    "description": "Entra ID Protection risk detections for agent identities such as unfamiliar resource access, sign-in spikes and failed access attempts",
+    "keywords": [
+      "entra",
+      "agent",
+      "risk",
+      "detection",
+      "event",
+      "protection"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "isFree": false,
+    "recommendedRetentionDays": 365
+  },
+  {
+    "tableName": "AADCustomSecurityAttributeAuditLogs",
+    "connector": "Microsoft Entra ID",
+    "classification": "primary",
+    "category": "Identity & Access",
+    "description": "Entra audit events for custom security attribute definition and assignment changes (add, update, delete)",
+    "keywords": [
+      "entra",
+      "custom",
+      "security",
+      "attribute",
+      "audit",
+      "assignment"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "isFree": false,
+    "recommendedRetentionDays": 365
+  },
+  {
+    "tableName": "RemoteNetworkHealthLogs",
+    "connector": "Global Secure Access",
+    "classification": "secondary",
+    "category": "Platform Health",
+    "description": "Global Secure Access remote network tunnel and BGP health status per branch site",
+    "keywords": [
+      "global",
+      "secure",
+      "access",
+      "remote",
+      "network",
+      "tunnel",
+      "bgp"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "datalake",
+    "isFree": false,
+    "recommendedRetentionDays": 90
+  },
+  {
+    "tableName": "NetworkAccessAlerts",
+    "connector": "Global Secure Access",
+    "classification": "primary",
+    "category": "Security Alerts",
+    "description": "Global Secure Access security alerts with severity, MITRE techniques and related entities",
+    "keywords": [
+      "global",
+      "secure",
+      "access",
+      "alert",
+      "network",
+      "sse"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "isFree": false,
+    "recommendedRetentionDays": 365
+  },
+  {
+    "tableName": "NetworkAccessConnectionEvents",
+    "connector": "Global Secure Access",
+    "classification": "primary",
+    "category": "Network Security",
+    "description": "Global Secure Access per-connection events with source user, device, destination, policy and rule outcome",
+    "keywords": [
+      "global",
+      "secure",
+      "access",
+      "connection",
+      "policy",
+      "device"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "isFree": false,
+    "recommendedRetentionDays": 180
+  },
+  {
+    "tableName": "EnrichedMicrosoft365AuditLogs",
+    "connector": "Global Secure Access",
+    "classification": "primary",
+    "category": "Cloud Security",
+    "description": "Microsoft 365 audit records enriched by Global Secure Access with device and source network context",
+    "keywords": [
+      "global",
+      "secure",
+      "access",
+      "m365",
+      "audit",
+      "enriched"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "isFree": false,
+    "recommendedRetentionDays": 365
+  },
+  {
+    "tableName": "ThreatIntelExportOperation",
+    "connector": "Threat Intelligence",
+    "classification": "secondary",
+    "category": "Platform Health",
+    "description": "Audit of Sentinel threat intelligence export operations to external destinations such as TAXII",
+    "keywords": [
+      "threat",
+      "intelligence",
+      "export",
+      "taxii",
+      "operation",
+      "audit"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "datalake",
+    "isFree": false,
+    "recommendedRetentionDays": 90,
+    "platform": true
+  },
+  {
+    "tableName": "SentinelBehaviorEntities",
+    "connector": "Microsoft Sentinel",
+    "classification": "primary",
+    "category": "Security Alerts",
+    "description": "Entities (file, process, device, user) involved in Sentinel behaviors and observations including detected threats",
+    "keywords": [
+      "sentinel",
+      "behavior",
+      "entity",
+      "observation",
+      "threat"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "isFree": false,
+    "recommendedRetentionDays": 365
+  },
+  {
+    "tableName": "SentinelBehaviorInfo",
+    "connector": "Microsoft Sentinel",
+    "classification": "primary",
+    "category": "Security Alerts",
+    "description": "Sentinel behaviors, conclusions or insights derived from one or more raw events, providing investigation context",
+    "keywords": [
+      "sentinel",
+      "behavior",
+      "insight",
+      "investigation",
+      "context"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "isFree": false,
+    "recommendedRetentionDays": 365
+  },
+  {
+    "tableName": "ConfidentialWatchlist",
+    "connector": "Microsoft Sentinel",
+    "classification": "secondary",
+    "category": "Platform Health",
+    "description": "Microsoft Sentinel confidential watchlist items imported from CSV for join and filter enrichment in analytics rules",
+    "keywords": [
+      "watchlist",
+      "confidential",
+      "sentinel",
+      "enrichment",
+      "lookup"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "isFree": true,
+    "recommendedRetentionDays": 180,
+    "platform": true
+  },
+  {
+    "tableName": "ExposureGraphNodes",
+    "connector": "Microsoft Defender XDR",
+    "classification": "secondary",
+    "category": "Posture Management",
+    "description": "Security Exposure Management graph nodes describing organizational entities and their properties (Defender portal only, not ingested by the Defender XDR connector)",
+    "keywords": [
+      "exposure",
+      "management",
+      "graph",
+      "node",
+      "entity",
+      "posture"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "isFree": false,
+    "recommendedRetentionDays": 180,
+    "xdrStreamable": false
+  },
+  {
+    "tableName": "ExposureGraphEdges",
+    "connector": "Microsoft Defender XDR",
+    "classification": "secondary",
+    "category": "Posture Management",
+    "description": "Security Exposure Management graph edges describing relationships between entities and assets (Defender portal only, not ingested by the Defender XDR connector)",
+    "keywords": [
+      "exposure",
+      "management",
+      "graph",
+      "edge",
+      "relationship",
+      "attack",
+      "path"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "isFree": false,
+    "recommendedRetentionDays": 180,
+    "xdrStreamable": false
+  },
+  {
+    "tableName": "DeviceBaselineComplianceAssessment",
+    "connector": "Microsoft Defender XDR",
+    "classification": "secondary",
+    "category": "Posture Management",
+    "description": "Defender Vulnerability Management baseline compliance snapshot showing security configuration status per device against baseline profiles (Defender portal only, not ingested by the Defender XDR connector)",
+    "keywords": [
+      "baseline",
+      "compliance",
+      "assessment",
+      "device",
+      "configuration",
+      "tvm"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "isFree": false,
+    "recommendedRetentionDays": 180,
+    "xdrStreamable": false
+  },
+  {
+    "tableName": "DeviceBaselineComplianceProfiles",
+    "connector": "Microsoft Defender XDR",
+    "classification": "secondary",
+    "category": "Posture Management",
+    "description": "Baseline profiles used by Defender Vulnerability Management to monitor device baseline compliance (Defender portal only, not ingested by the Defender XDR connector)",
+    "keywords": [
+      "baseline",
+      "compliance",
+      "profile",
+      "benchmark",
+      "tvm"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "isFree": false,
+    "recommendedRetentionDays": 180,
+    "xdrStreamable": false
+  },
+  {
+    "tableName": "DeviceBaselineComplianceAssessmentKB",
+    "connector": "Microsoft Defender XDR",
+    "classification": "secondary",
+    "category": "Posture Management",
+    "description": "Knowledge base of security configurations used by baseline compliance to assess devices (Defender portal only, not ingested by the Defender XDR connector)",
+    "keywords": [
+      "baseline",
+      "compliance",
+      "knowledge",
+      "base",
+      "configuration",
+      "tvm"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "isFree": false,
+    "recommendedRetentionDays": 180,
+    "xdrStreamable": false
+  },
+  {
+    "tableName": "DeviceTvmBrowserExtensions",
+    "connector": "Microsoft Defender XDR",
+    "classification": "secondary",
+    "category": "Vulnerability Management",
+    "description": "Browser extension installations found on devices by Defender Vulnerability Management (Defender portal only, not ingested by the Defender XDR connector)",
+    "keywords": [
+      "browser",
+      "extension",
+      "inventory",
+      "device",
+      "tvm",
+      "vulnerability"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "isFree": false,
+    "recommendedRetentionDays": 180,
+    "xdrStreamable": false
+  },
+  {
+    "tableName": "DeviceTvmBrowserExtensionsKB",
+    "connector": "Microsoft Defender XDR",
+    "classification": "secondary",
+    "category": "Vulnerability Management",
+    "description": "Browser extension details and permission metadata used by Defender Vulnerability Management (Defender portal only, not ingested by the Defender XDR connector)",
+    "keywords": [
+      "browser",
+      "extension",
+      "permission",
+      "knowledge",
+      "base",
+      "tvm"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "isFree": false,
+    "recommendedRetentionDays": 180,
+    "xdrStreamable": false
+  },
+  {
+    "tableName": "DeviceTvmCertificateInfo",
+    "connector": "Microsoft Defender XDR",
+    "classification": "secondary",
+    "category": "Vulnerability Management",
+    "description": "Certificate inventory for devices collected by Defender Vulnerability Management, including expiry and signature algorithm (Defender portal only, not ingested by the Defender XDR connector)",
+    "keywords": [
+      "certificate",
+      "inventory",
+      "expiry",
+      "device",
+      "tvm"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "isFree": false,
+    "recommendedRetentionDays": 180,
+    "xdrStreamable": false
+  },
+  {
+    "tableName": "DeviceTvmHardwareFirmware",
+    "connector": "Microsoft Defender XDR",
+    "classification": "secondary",
+    "category": "Vulnerability Management",
+    "description": "Hardware and firmware inventory of devices (BIOS, TPM, processor) as checked by Defender Vulnerability Management (Defender portal only, not ingested by the Defender XDR connector)",
+    "keywords": [
+      "hardware",
+      "firmware",
+      "bios",
+      "tpm",
+      "device",
+      "tvm"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "isFree": false,
+    "recommendedRetentionDays": 180,
+    "xdrStreamable": false
+  },
+  {
+    "tableName": "DeviceTvmInfoGatheringKB",
+    "connector": "Microsoft Defender XDR",
+    "classification": "secondary",
+    "category": "Vulnerability Management",
+    "description": "Metadata for the assessment events collected in DeviceTvmInfoGathering (Defender portal only, not ingested by the Defender XDR connector)",
+    "keywords": [
+      "tvm",
+      "info",
+      "gathering",
+      "knowledge",
+      "base",
+      "assessment"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "isFree": false,
+    "recommendedRetentionDays": 180,
+    "xdrStreamable": false
+  },
+  {
+    "tableName": "DeviceTvmSoftwareEvidenceBeta",
+    "connector": "Microsoft Defender XDR",
+    "classification": "secondary",
+    "category": "Vulnerability Management",
+    "description": "Evidence of where specific software was detected on a device (file path, registry key) (Defender portal only, not ingested by the Defender XDR connector)",
+    "keywords": [
+      "software",
+      "evidence",
+      "inventory",
+      "device",
+      "tvm",
+      "beta"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "isFree": false,
+    "recommendedRetentionDays": 180,
+    "xdrStreamable": false
+  },
+  {
+    "tableName": "DeviceTvmSoftwareVulnerabilitiesKB",
+    "connector": "Microsoft Defender XDR",
+    "classification": "secondary",
+    "category": "Vulnerability Management",
+    "description": "Knowledge base of publicly disclosed vulnerabilities including CVSS and whether exploit code is publicly available (not part of the Defender XDR connector streaming set; requires its own ingestion path)",
+    "keywords": [
+      "cve",
+      "vulnerability",
+      "knowledge",
+      "base",
+      "exploit",
+      "tvm"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "isFree": false,
+    "recommendedRetentionDays": 180,
+    "xdrStreamable": false
+  },
+  {
+    "tableName": "CloudProcessEvents",
+    "connector": "Microsoft Defender XDR",
+    "classification": "primary",
+    "category": "Container & Kubernetes",
+    "description": "Process events from cloud platforms protected by Defender for Containers, including pod and container context (not part of the Defender XDR connector streaming set; requires its own ingestion path)",
+    "keywords": [
+      "container",
+      "kubernetes",
+      "process",
+      "cloud",
+      "defender",
+      "pod"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "isFree": false,
+    "recommendedRetentionDays": 180,
+    "xdrStreamable": false
+  },
+  {
+    "tableName": "CloudStorageAggregatedEvents",
+    "connector": "Microsoft Defender XDR",
+    "classification": "primary",
+    "category": "Storage Access",
+    "description": "Aggregated cloud storage activity events from Defender for Storage (not part of the Defender XDR connector streaming set; requires its own ingestion path)",
+    "keywords": [
+      "storage",
+      "blob",
+      "aggregated",
+      "cloud",
+      "defender",
+      "access"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "isFree": false,
+    "recommendedRetentionDays": 180,
+    "xdrStreamable": false
+  },
+  {
+    "tableName": "DataSecurityBehaviors",
+    "connector": "Microsoft Defender XDR",
+    "classification": "primary",
+    "category": "Data Security",
+    "description": "Purview insights about potentially suspicious user behaviors that violate DLP, insider risk or other data security policies (Defender portal only, not ingested by the Defender XDR connector)",
+    "keywords": [
+      "purview",
+      "data",
+      "security",
+      "behavior",
+      "dlp",
+      "insider"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "isFree": false,
+    "recommendedRetentionDays": 365,
+    "xdrStreamable": false
+  },
+  {
+    "tableName": "DataSecurityEvents",
+    "connector": "Microsoft Defender XDR",
+    "classification": "primary",
+    "category": "Data Security",
+    "description": "Purview user activities that violate user-defined or default data security policies (Defender portal only, not ingested by the Defender XDR connector)",
+    "keywords": [
+      "purview",
+      "data",
+      "security",
+      "event",
+      "dlp",
+      "policy"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "isFree": false,
+    "recommendedRetentionDays": 365,
+    "xdrStreamable": false
+  },
+  {
+    "tableName": "DisruptionAndResponseEvents",
+    "connector": "Microsoft Defender XDR",
+    "classification": "primary",
+    "category": "Security Alerts",
+    "description": "Defender XDR automatic attack disruption events (contain user, contain device, disable account) (not part of the Defender XDR connector streaming set; requires its own ingestion path)",
+    "keywords": [
+      "attack",
+      "disruption",
+      "response",
+      "contain",
+      "automatic",
+      "xdr"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "isFree": false,
+    "recommendedRetentionDays": 365,
+    "xdrStreamable": false
+  },
+  {
+    "tableName": "IdentityEvents",
+    "connector": "Microsoft Defender XDR",
+    "classification": "primary",
+    "category": "Identity & Access",
+    "description": "Identity events from third-party cloud identity providers (Okta and others) surfaced through Defender for Identity (not part of the Defender XDR connector streaming set; requires its own ingestion path)",
+    "keywords": [
+      "identity",
+      "okta",
+      "third",
+      "party",
+      "idp",
+      "defender"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "isFree": false,
+    "recommendedRetentionDays": 365,
+    "xdrStreamable": false
+  },
+  {
+    "tableName": "OAuthAppInfo",
+    "connector": "Microsoft Defender XDR",
+    "classification": "secondary",
+    "category": "Cloud Security",
+    "description": "Microsoft 365 connected OAuth applications registered in Entra ID with app governance risk and permission metadata (not part of the Defender XDR connector streaming set; requires its own ingestion path)",
+    "keywords": [
+      "oauth",
+      "app",
+      "governance",
+      "permission",
+      "entra",
+      "consent"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "isFree": false,
+    "recommendedRetentionDays": 180,
+    "xdrStreamable": false
+  },
+  {
+    "tableName": "GraphAPIAuditEvents",
+    "connector": "Microsoft Defender XDR",
+    "classification": "primary",
+    "category": "Identity & Access",
+    "description": "Microsoft Graph API requests made against tenant resources, the XDR counterpart of MicrosoftGraphActivityLogs (Defender portal only, not ingested by the Defender XDR connector)",
+    "keywords": [
+      "graph",
+      "api",
+      "audit",
+      "request",
+      "entra",
+      "xdr"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "isFree": false,
+    "recommendedRetentionDays": 365,
+    "xdrStreamable": false
+  },
+  {
+    "tableName": "CampaignInfo",
+    "connector": "Microsoft Defender XDR",
+    "classification": "primary",
+    "category": "Email Security",
+    "description": "Email campaigns identified by Defender for Office 365 with campaign type, targeted mailboxes and sender infrastructure (not part of the Defender XDR connector streaming set; requires its own ingestion path)",
+    "keywords": [
+      "email",
+      "campaign",
+      "phishing",
+      "defender",
+      "office365"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "isFree": false,
+    "recommendedRetentionDays": 180,
+    "xdrStreamable": false
+  },
+  {
+    "tableName": "SecurityNestedRecommendation",
+    "connector": "Microsoft Defender for Cloud",
+    "classification": "secondary",
+    "category": "Posture Management",
+    "description": "Defender for Cloud sub-assessment findings grouped under a parent recommendation, such as individual SQL or container vulnerability findings",
+    "keywords": [
+      "defender",
+      "cloud",
+      "recommendation",
+      "nested",
+      "sub",
+      "assessment",
+      "vulnerability"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "isFree": false,
+    "recommendedRetentionDays": 180
+  },
+  {
+    "tableName": "SecurityBaseline",
+    "connector": "Microsoft Defender for Cloud",
+    "classification": "secondary",
+    "category": "Posture Management",
+    "description": "Legacy Defender for Cloud (Security Center) OS baseline rule assessment results per computer with expected vs actual configuration",
+    "keywords": [
+      "baseline",
+      "security",
+      "center",
+      "rule",
+      "assessment",
+      "legacy"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "datalake",
+    "isFree": false,
+    "recommendedRetentionDays": 90
+  },
+  {
+    "tableName": "SecurityBaselineSummary",
+    "connector": "Microsoft Defender for Cloud",
+    "classification": "secondary",
+    "category": "Posture Management",
+    "description": "Legacy Defender for Cloud OS baseline summary per computer with passed and failed rule counts by severity",
+    "keywords": [
+      "baseline",
+      "summary",
+      "security",
+      "center",
+      "compliance",
+      "legacy"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "datalake",
+    "isFree": false,
+    "recommendedRetentionDays": 90
+  },
+  {
+    "tableName": "AgentsInfo",
+    "connector": "Microsoft Defender XDR",
+    "classification": "secondary",
+    "category": "Cloud Security",
+    "description": "Inventory of AI agents across platforms with owners, permissions, tools, MCP servers, model and lifecycle status (not part of the Defender XDR connector streaming set; requires its own ingestion path)",
+    "keywords": [
+      "ai",
+      "agent",
+      "inventory",
+      "mcp",
+      "copilot",
+      "studio",
+      "permission"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "isFree": false,
+    "recommendedRetentionDays": 180,
+    "xdrStreamable": false
+  },
+  {
+    "tableName": "AIAgentsInfo",
+    "connector": "Microsoft Defender XDR",
+    "classification": "secondary",
+    "category": "Cloud Security",
+    "description": "Inventory of AI agents built with Microsoft Copilot Studio including configuration and ownership (Defender portal only, not ingested by the Defender XDR connector)",
+    "keywords": [
+      "ai",
+      "agent",
+      "copilot",
+      "studio",
+      "inventory",
+      "ownership"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "isFree": false,
+    "recommendedRetentionDays": 180,
+    "xdrStreamable": false
+  },
+  {
+    "tableName": "PowerPlatformConnectorActivity",
+    "connector": "Microsoft Power Platform",
+    "classification": "primary",
+    "category": "Cloud Security",
+    "description": "Power Platform connector audit events covering custom connector, connection and gateway lifecycle actions",
+    "keywords": [
+      "power",
+      "platform",
+      "connector",
+      "gateway",
+      "audit",
+      "custom"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "isFree": false,
+    "recommendedRetentionDays": 180
+  },
+  {
+    "tableName": "PowerPlatformDlpActivity",
+    "connector": "Microsoft Power Platform",
+    "classification": "primary",
+    "category": "Data Security",
+    "description": "Power Platform data loss prevention policy admin activity including policy create, update and delete",
+    "keywords": [
+      "power",
+      "platform",
+      "dlp",
+      "policy",
+      "audit",
+      "admin"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "isFree": false,
+    "recommendedRetentionDays": 365
+  },
+  {
+    "tableName": "PowerAppsActivity",
+    "connector": "Microsoft Power Platform",
+    "classification": "primary",
+    "category": "Cloud Security",
+    "description": "Power Apps activity events covering app creation, deletion, updates, permission changes and launches",
+    "keywords": [
+      "power",
+      "apps",
+      "activity",
+      "permission",
+      "launch",
+      "audit"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "isFree": false,
+    "recommendedRetentionDays": 180
+  },
+  {
+    "tableName": "AKSAudit",
+    "connector": "Azure Kubernetes Service",
+    "classification": "primary",
+    "category": "Container & Kubernetes",
+    "description": "AKS Kubernetes API server audit log, every API request including get and list calls",
+    "keywords": [
+      "aks",
+      "kubernetes",
+      "audit",
+      "api",
+      "server",
+      "cluster"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "datalake",
+    "isFree": false,
+    "recommendedRetentionDays": 90
+  },
+  {
+    "tableName": "AKSAuditAdmin",
+    "connector": "Azure Kubernetes Service",
+    "classification": "primary",
+    "category": "Container & Kubernetes",
+    "description": "AKS Kubernetes API server audit log filtered to admin operations, excluding get and list requests",
+    "keywords": [
+      "aks",
+      "kubernetes",
+      "audit",
+      "admin",
+      "api",
+      "server"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "isFree": false,
+    "recommendedRetentionDays": 180
+  },
+  {
+    "tableName": "AKSControlPlane",
+    "connector": "Azure Kubernetes Service",
+    "classification": "secondary",
+    "category": "Container & Kubernetes",
+    "description": "AKS control plane component logs (kube-apiserver, kube-controller-manager, kube-scheduler, cluster-autoscaler, cloud-controller-manager)",
+    "keywords": [
+      "aks",
+      "kubernetes",
+      "control",
+      "plane",
+      "apiserver",
+      "scheduler"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "datalake",
+    "isFree": false,
+    "recommendedRetentionDays": 90
+  },
+  {
+    "tableName": "AZFWNatRuleAggregation",
+    "connector": "Azure Firewall",
+    "classification": "secondary",
+    "category": "Network Security",
+    "description": "Azure Firewall aggregated DNAT rule hit counts per source, destination and rule",
+    "keywords": [
+      "azure",
+      "firewall",
+      "nat",
+      "dnat",
+      "aggregation",
+      "rule"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "datalake",
+    "isFree": false,
+    "recommendedRetentionDays": 90
+  },
+  {
+    "tableName": "AGWPerformanceLogs",
+    "connector": "Azure Application Gateway",
+    "classification": "secondary",
+    "category": "Infrastructure Diagnostics",
+    "description": "Application Gateway performance metrics per instance including throughput, healthy and unhealthy backend host counts",
+    "keywords": [
+      "application",
+      "gateway",
+      "performance",
+      "throughput",
+      "backend",
+      "health"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "datalake",
+    "isFree": false,
+    "recommendedRetentionDays": 90
+  },
+  {
+    "tableName": "NSPAccessLogs",
+    "connector": "Azure Network Security Perimeter",
+    "classification": "primary",
+    "category": "Network Security",
+    "description": "Network Security Perimeter inbound and outbound access evaluations for PaaS resources with matched rule and approved or denied result",
+    "keywords": [
+      "network",
+      "security",
+      "perimeter",
+      "nsp",
+      "paas",
+      "access",
+      "denied"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "isFree": false,
+    "recommendedRetentionDays": 180
+  },
+  {
+    "tableName": "NTANetAnalytics",
+    "connector": "Azure Network Watcher",
+    "classification": "secondary",
+    "category": "Network Flow",
+    "description": "Network Watcher traffic analytics enriched VNet flow log records with geo, threat and topology context",
+    "keywords": [
+      "network",
+      "watcher",
+      "traffic",
+      "analytics",
+      "flow",
+      "vnet",
+      "nsg"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "datalake",
+    "isFree": false,
+    "recommendedRetentionDays": 90
+  },
+  {
+    "tableName": "NTAIpDetails",
+    "connector": "Azure Network Watcher",
+    "classification": "secondary",
+    "category": "Network Flow",
+    "description": "Network Watcher traffic analytics IP enrichment details (public IP location, malicious flag, DNS domain)",
+    "keywords": [
+      "network",
+      "watcher",
+      "traffic",
+      "analytics",
+      "ip",
+      "geo",
+      "malicious"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "datalake",
+    "isFree": false,
+    "recommendedRetentionDays": 90
+  },
+  {
+    "tableName": "AZKVAuditLogs",
+    "connector": "Azure Key Vault",
+    "classification": "primary",
+    "category": "Cloud Control Plane",
+    "description": "Azure Key Vault data plane audit events for secret, key and certificate operations with caller identity and result",
+    "keywords": [
+      "key",
+      "vault",
+      "secret",
+      "certificate",
+      "audit",
+      "access"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "isFree": false,
+    "recommendedRetentionDays": 365
+  },
+  {
+    "tableName": "AppServiceAuditLogs",
+    "connector": "Azure App Service",
+    "classification": "primary",
+    "category": "Application Logs",
+    "description": "App Service publishing credential logins via FTP and Kudu with user and client IP",
+    "keywords": [
+      "app",
+      "service",
+      "audit",
+      "ftp",
+      "kudu",
+      "publish",
+      "login"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "isFree": false,
+    "recommendedRetentionDays": 180
+  },
+  {
+    "tableName": "AppServiceIPSecAuditLogs",
+    "connector": "Azure App Service",
+    "classification": "primary",
+    "category": "Application Logs",
+    "description": "App Service access restriction (IP security) allow and deny decisions per request with client IP and service endpoint flag",
+    "keywords": [
+      "app",
+      "service",
+      "ip",
+      "restriction",
+      "access",
+      "denied"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "isFree": false,
+    "recommendedRetentionDays": 180
+  },
+  {
+    "tableName": "AppServiceAuthenticationLogs",
+    "connector": "Azure App Service",
+    "classification": "secondary",
+    "category": "Application Logs",
+    "description": "App Service built-in authentication (Easy Auth) module events with status codes and task names",
+    "keywords": [
+      "app",
+      "service",
+      "authentication",
+      "easy",
+      "auth",
+      "login"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "isFree": false,
+    "recommendedRetentionDays": 180
+  },
+  {
+    "tableName": "AVNMNetworkGroupMembershipChange",
+    "connector": "Azure Virtual Network Manager",
+    "classification": "secondary",
+    "category": "Configuration Management",
+    "description": "Azure Virtual Network Manager network group membership changes for virtual networks",
+    "keywords": [
+      "virtual",
+      "network",
+      "manager",
+      "avnm",
+      "group",
+      "membership"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "isFree": false,
+    "recommendedRetentionDays": 180
+  },
+  {
+    "tableName": "AVNMRuleCollectionChange",
+    "connector": "Azure Virtual Network Manager",
+    "classification": "secondary",
+    "category": "Configuration Management",
+    "description": "Azure Virtual Network Manager security admin rule collection application and removal on virtual networks and subnets",
+    "keywords": [
+      "virtual",
+      "network",
+      "manager",
+      "avnm",
+      "rule",
+      "collection",
+      "security"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "isFree": false,
+    "recommendedRetentionDays": 180
+  },
+  {
+    "tableName": "CDBControlPlaneRequests",
+    "connector": "Azure Cosmos DB",
+    "classification": "primary",
+    "category": "Data Platform",
+    "description": "Cosmos DB account control plane operations including IAM role assignments, firewall and VNet rules, private links, failover and backup policy changes",
+    "keywords": [
+      "cosmos",
+      "db",
+      "control",
+      "plane",
+      "rbac",
+      "firewall",
+      "audit"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "isFree": false,
+    "recommendedRetentionDays": 180
+  },
+  {
+    "tableName": "SQLSecurityAuditEvents",
+    "connector": "Azure SQL Database",
+    "classification": "primary",
+    "category": "Data Platform",
+    "description": "Azure SQL Database and Managed Instance auditing events with statement, principal, client IP and success flag",
+    "keywords": [
+      "sql",
+      "database",
+      "audit",
+      "statement",
+      "login",
+      "principal"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "isFree": false,
+    "recommendedRetentionDays": 180
+  },
+  {
+    "tableName": "WVDConnections",
+    "connector": "Azure Virtual Desktop",
+    "classification": "primary",
+    "category": "Identity & Access",
+    "description": "Azure Virtual Desktop user connection lifecycle events (started, connected, completed) with user, client OS and gateway region",
+    "keywords": [
+      "avd",
+      "virtual",
+      "desktop",
+      "connection",
+      "session",
+      "user"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "isFree": false,
+    "recommendedRetentionDays": 180
+  },
+  {
+    "tableName": "WVDManagement",
+    "connector": "Azure Virtual Desktop",
+    "classification": "secondary",
+    "category": "Cloud Control Plane",
+    "description": "Azure Virtual Desktop management plane operations on host pools, application groups and workspaces",
+    "keywords": [
+      "avd",
+      "virtual",
+      "desktop",
+      "management",
+      "hostpool",
+      "audit"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "isFree": false,
+    "recommendedRetentionDays": 180
+  },
+  {
+    "tableName": "ContainerAppConsoleLogs",
+    "connector": "Azure Container Apps",
+    "classification": "secondary",
+    "category": "Application Logs",
+    "description": "Azure Container Apps stdout and stderr console output from application containers",
+    "keywords": [
+      "container",
+      "apps",
+      "console",
+      "stdout",
+      "stderr",
+      "application"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "datalake",
+    "isFree": false,
+    "recommendedRetentionDays": 90
+  },
+  {
+    "tableName": "ContainerAppSystemLogs",
+    "connector": "Azure Container Apps",
+    "classification": "secondary",
+    "category": "Infrastructure Diagnostics",
+    "description": "Azure Container Apps system and platform events for revisions, replicas, scaling and ingress",
+    "keywords": [
+      "container",
+      "apps",
+      "system",
+      "revision",
+      "replica",
+      "scaling"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "datalake",
+    "isFree": false,
+    "recommendedRetentionDays": 90
+  },
+  {
+    "tableName": "ContainerAppHTTPLogs",
+    "connector": "Azure Container Apps",
+    "classification": "secondary",
+    "category": "Application Logs",
+    "description": "Azure Container Apps ingress HTTP access logs with client IP, method, path, status and latency",
+    "keywords": [
+      "container",
+      "apps",
+      "http",
+      "ingress",
+      "access",
+      "request"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "datalake",
+    "isFree": false,
+    "recommendedRetentionDays": 90
+  },
+  {
+    "tableName": "Windows365ConnectionLogs",
+    "connector": "Windows 365",
+    "classification": "primary",
+    "category": "Identity & Access",
+    "description": "Windows 365 Cloud PC connection events with user, client and result",
+    "keywords": [
+      "windows365",
+      "cloud",
+      "pc",
+      "connection",
+      "session",
+      "user"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "isFree": false,
+    "recommendedRetentionDays": 180
+  },
+  {
+    "tableName": "Windows365CheckpointLogs",
+    "connector": "Windows 365",
+    "classification": "secondary",
+    "category": "Endpoint Telemetry",
+    "description": "Windows 365 Cloud PC connection checkpoint events for troubleshooting connection stages",
+    "keywords": [
+      "windows365",
+      "cloud",
+      "pc",
+      "checkpoint",
+      "connection",
+      "diagnostic"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "datalake",
+    "isFree": false,
+    "recommendedRetentionDays": 90
+  },
+  {
+    "tableName": "Windows365ConnectionErrorLogs",
+    "connector": "Windows 365",
+    "classification": "secondary",
+    "category": "Endpoint Telemetry",
+    "description": "Windows 365 Cloud PC connection failure events with error codes and source",
+    "keywords": [
+      "windows365",
+      "cloud",
+      "pc",
+      "connection",
+      "error",
+      "failure"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "datalake",
+    "isFree": false,
+    "recommendedRetentionDays": 90
+  },
+  {
+    "tableName": "Windows365NetworkLogs",
+    "connector": "Windows 365",
+    "classification": "secondary",
+    "category": "Endpoint Telemetry",
+    "description": "Windows 365 Cloud PC connection network performance metrics (bandwidth, round trip time)",
+    "keywords": [
+      "windows365",
+      "cloud",
+      "pc",
+      "network",
+      "bandwidth",
+      "latency"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "datalake",
+    "isFree": false,
+    "recommendedRetentionDays": 90
+  },
+  {
+    "tableName": "AWSNetworkFirewallAlert",
+    "connector": "Amazon Web Services",
+    "classification": "primary",
+    "category": "Network Security",
+    "description": "AWS Network Firewall Suricata alert events with signature, severity, verdict action and flow context",
+    "keywords": [
+      "aws",
+      "network",
+      "firewall",
+      "alert",
+      "suricata",
+      "ids"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "isFree": false,
+    "recommendedRetentionDays": 180
+  },
+  {
+    "tableName": "AWSNetworkFirewallTls",
+    "connector": "Amazon Web Services",
+    "classification": "secondary",
+    "category": "Network Security",
+    "description": "AWS Network Firewall TLS inspection events with SNI, certificate details and inspection outcome",
+    "keywords": [
+      "aws",
+      "network",
+      "firewall",
+      "tls",
+      "inspection",
+      "sni"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "datalake",
+    "isFree": false,
+    "recommendedRetentionDays": 90
+  },
+  {
+    "tableName": "GCPFirewallLogs",
+    "connector": "Google Cloud Platform",
+    "classification": "primary",
+    "category": "Network Security",
+    "description": "GCP VPC firewall rule logs for inbound and outbound connections with action, disposition and instance context",
+    "keywords": [
+      "gcp",
+      "google",
+      "firewall",
+      "vpc",
+      "rule",
+      "network"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "datalake",
+    "isFree": false,
+    "recommendedRetentionDays": 90
+  },
+  {
+    "tableName": "ASimUserManagementActivityLogs",
+    "connector": "ASIM",
+    "classification": "primary",
+    "category": "Identity & Access",
+    "description": "ASIM normalized user management events (user and group create, delete, modify, password reset) from any source",
+    "keywords": [
+      "asim",
+      "normalized",
+      "user",
+      "management",
+      "group",
+      "password"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "isFree": false,
+    "recommendedRetentionDays": 365
+  },
+  {
+    "tableName": "ASimDhcpEventLogs",
+    "connector": "ASIM",
+    "classification": "secondary",
+    "category": "Network Flow",
+    "description": "ASIM normalized DHCP lease events mapping IP addresses to MAC addresses and hostnames",
+    "keywords": [
+      "asim",
+      "normalized",
+      "dhcp",
+      "lease",
+      "ip",
+      "mac"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "datalake",
+    "isFree": false,
+    "recommendedRetentionDays": 90
+  },
+  {
+    "tableName": "DNSQueryLogs",
+    "connector": "Azure DNS Private Resolver",
+    "classification": "primary",
+    "category": "Network Security",
+    "description": "Azure DNS Private Resolver query logs with query name, response code, resolution path and DNS security policy rule action",
+    "keywords": [
+      "azure",
+      "dns",
+      "private",
+      "resolver",
+      "query",
+      "policy"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "datalake",
+    "isFree": false,
+    "recommendedRetentionDays": 90
+  },
+  {
+    "tableName": "WindowsFirewall",
+    "connector": "Windows Firewall",
+    "classification": "secondary",
+    "category": "Network Security",
+    "description": "Legacy Windows Firewall solution log records with action, direction, ports and malicious IP enrichment",
+    "keywords": [
+      "windows",
+      "firewall",
+      "legacy",
+      "solution",
+      "blocked",
+      "connection"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "datalake",
+    "isFree": false,
+    "recommendedRetentionDays": 90
+  },
+  {
+    "tableName": "CrowdStrikeAuditEvents",
+    "connector": "CrowdStrike Falcon",
+    "classification": "primary",
+    "category": "Endpoint Detection",
+    "description": "CrowdStrike Falcon audit and detection events ingested via the CrowdStrike Falcon Data Replicator or Event Stream connector",
+    "keywords": [
+      "crowdstrike",
+      "falcon",
+      "audit",
+      "detection",
+      "endpoint",
+      "edr"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "isFree": false,
+    "recommendedRetentionDays": 365
+  },
+  {
+    "tableName": "ZTSGraph",
+    "connector": "Azure Zero Trust Segmentation",
+    "classification": "secondary",
+    "category": "Network Flow",
+    "description": "Zero Trust Segmentation hourly communication graph between workload nodes with bytes, packets and connection counts per port",
+    "keywords": [
+      "zero",
+      "trust",
+      "segmentation",
+      "graph",
+      "flow",
+      "microsegmentation"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "datalake",
+    "isFree": false,
+    "recommendedRetentionDays": 90
+  },
+  {
+    "tableName": "ZTSMetadata",
+    "connector": "Azure Zero Trust Segmentation",
+    "classification": "secondary",
+    "category": "Posture Management",
+    "description": "Zero Trust Segmentation node metadata, segment labels and control messages for VMs and scale sets",
+    "keywords": [
+      "zero",
+      "trust",
+      "segmentation",
+      "metadata",
+      "label",
+      "node"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "datalake",
+    "isFree": false,
+    "recommendedRetentionDays": 90
+  },
+  {
+    "tableName": "DeviceTvmInfoGathering",
+    "connector": "Microsoft Defender XDR",
+    "classification": "secondary",
+    "category": "Vulnerability Management",
+    "description": "Defender Vulnerability Management assessment events including configuration and attack surface reduction status per device (TVM data is not ingested by the Defender XDR connector)",
+    "keywords": [
+      "tvm",
+      "info",
+      "gathering",
+      "assessment",
+      "device",
+      "vulnerability"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "datalake",
+    "isFree": false,
+    "recommendedRetentionDays": 180,
+    "xdrStreamable": false
+  },
+  {
+    "tableName": "Usage",
+    "connector": "Azure Monitor / Log Analytics",
+    "classification": "secondary",
+    "category": "Platform Health",
+    "description": "Hourly per-table ingestion volume and billing records for the workspace; the source Log Horizon uses for cost analysis",
+    "keywords": [
+      "usage",
+      "billing",
+      "ingestion",
+      "volume",
+      "quantity",
+      "workspace"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "isFree": true,
+    "recommendedRetentionDays": 90,
+    "platform": true
+  },
+  {
+    "tableName": "SentinelOneAlertsV2_CL",
+    "connector": "SentinelOne V2 (via CCF)",
+    "classification": "primary",
+    "category": "Security Alerts",
+    "description": "SentinelOne alerts from the V2 codeless connector (Alerts API v2) including detections, threat classification and mitigation status",
+    "keywords": [
+      "sentinelone",
+      "alert",
+      "malware",
+      "detection",
+      "threat"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "isFree": false,
+    "recommendedRetentionDays": 365
+  },
+  {
+    "tableName": "LookoutMtdV2_CL",
+    "connector": "Lookout Mobile Threat Detection (via CCF)",
+    "classification": "primary",
+    "category": "Endpoint Detection",
+    "description": "Lookout mobile threat detection events (device risk, phishing, app threats) from the codeless connector",
+    "keywords": [
+      "lookout",
+      "mobile",
+      "threat",
+      "phishing",
+      "device"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "isFree": false,
+    "recommendedRetentionDays": 365
+  },
+  {
+    "tableName": "DarktraceModelAlerts_CL",
+    "connector": "Darktrace ActiveAI Security Platform (CCF)",
+    "classification": "primary",
+    "category": "Network Security",
+    "description": "Darktrace model breach alerts from the ActiveAI Security Platform push connector",
+    "keywords": [
+      "darktrace",
+      "ai",
+      "ndr",
+      "anomaly",
+      "model breach",
+      "network"
+    ],
+    "mitreSources": [
+      "Network Traffic: Network Traffic Flow"
+    ],
+    "recommendedTier": "analytics",
+    "isFree": false,
+    "recommendedRetentionDays": 365
+  },
+  {
+    "tableName": "DarktraceIncidents_CL",
+    "connector": "Darktrace ActiveAI Security Platform (CCF)",
+    "classification": "primary",
+    "category": "Network Security",
+    "description": "Darktrace AI Analyst incidents correlating related model breaches into investigations",
+    "keywords": [
+      "darktrace",
+      "ai",
+      "ndr",
+      "anomaly",
+      "model breach",
+      "network"
+    ],
+    "mitreSources": [
+      "Network Traffic: Network Traffic Flow"
+    ],
+    "recommendedTier": "analytics",
+    "isFree": false,
+    "recommendedRetentionDays": 365
+  },
+  {
+    "tableName": "DarktraceASM_CL",
+    "connector": "Darktrace ActiveAI Security Platform (CCF)",
+    "classification": "secondary",
+    "category": "Posture Management",
+    "description": "Darktrace Attack Surface Management findings for exposed assets and risks",
+    "keywords": [
+      "darktrace",
+      "ai",
+      "ndr",
+      "anomaly",
+      "model breach",
+      "network"
+    ],
+    "mitreSources": [
+      "Network Traffic: Network Traffic Flow"
+    ],
+    "recommendedTier": "datalake",
+    "isFree": false,
+    "recommendedRetentionDays": 365
+  },
+  {
+    "tableName": "DarktraceEMAIL_CL",
+    "connector": "Darktrace ActiveAI Security Platform (CCF)",
+    "classification": "primary",
+    "category": "Email Security",
+    "description": "Darktrace EMAIL threat detections and actions on inbound and outbound mail",
+    "keywords": [
+      "darktrace",
+      "ai",
+      "ndr",
+      "anomaly",
+      "model breach",
+      "network"
+    ],
+    "mitreSources": [
+      "Network Traffic: Network Traffic Flow"
+    ],
+    "recommendedTier": "analytics",
+    "isFree": false,
+    "recommendedRetentionDays": 365
+  },
+  {
+    "tableName": "DarktraceResponseActions_CL",
+    "connector": "Darktrace ActiveAI Security Platform (CCF)",
+    "classification": "primary",
+    "category": "Network Security",
+    "description": "Darktrace RESPOND autonomous and manual response actions taken against devices",
+    "keywords": [
+      "darktrace",
+      "ai",
+      "ndr",
+      "anomaly",
+      "model breach",
+      "network"
+    ],
+    "mitreSources": [
+      "Network Traffic: Network Traffic Flow"
+    ],
+    "recommendedTier": "analytics",
+    "isFree": false,
+    "recommendedRetentionDays": 365
+  },
+  {
+    "tableName": "DarktraceSystemStatusAlerts_CL",
+    "connector": "Darktrace ActiveAI Security Platform (CCF)",
+    "classification": "secondary",
+    "category": "Platform Health",
+    "description": "Darktrace appliance and probe system status alerts",
+    "keywords": [
+      "darktrace",
+      "ai",
+      "ndr",
+      "anomaly",
+      "model breach",
+      "network"
+    ],
+    "mitreSources": [
+      "Network Traffic: Network Traffic Flow"
+    ],
+    "recommendedTier": "datalake",
+    "isFree": false,
+    "recommendedRetentionDays": 90
+  },
+  {
+    "tableName": "Island_UserEvents_V2_CL",
+    "connector": "Island Enterprise Browser V2",
+    "classification": "primary",
+    "category": "Cloud Security",
+    "description": "Island Enterprise Browser user activity events (web access, downloads, data handling) from the V2 connector",
+    "keywords": [
+      "island",
+      "browser",
+      "user",
+      "web",
+      "download",
+      "dlp"
+    ],
+    "mitreSources": [
+      "Application Log: Application Log Content"
+    ],
+    "recommendedTier": "analytics",
+    "isFree": false,
+    "recommendedRetentionDays": 365
+  },
+  {
+    "tableName": "SalesforceServiceCloudV3_CL",
+    "connector": "Salesforce Service Cloud (via CCF)",
+    "classification": "secondary",
+    "category": "Cloud Control Plane",
+    "description": "Salesforce Service Cloud event log audit records (case access, data exports, logins) from solution version 3.2.0 and later",
+    "keywords": [
+      "salesforce",
+      "service cloud",
+      "audit",
+      "crm",
+      "login"
+    ],
+    "mitreSources": [
+      "Application Log: Application Log Content"
+    ],
+    "recommendedTier": "datalake",
+    "isFree": false,
+    "recommendedRetentionDays": 365
+  },
+  {
+    "tableName": "CiscoETDv2_CL",
+    "connector": "Cisco Email Threat Defense (CCF)",
+    "classification": "primary",
+    "category": "Email Security",
+    "description": "Cisco Email Threat Defense verdicts and message events (phishing, malware, BEC) from the codeless connector",
+    "keywords": [
+      "cisco",
+      "email",
+      "threat",
+      "phishing",
+      "malware"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "isFree": false,
+    "recommendedRetentionDays": 365
+  },
+  {
+    "tableName": "ImpervaWAFCloud",
+    "connector": "Imperva Cloud WAF (via CCF)",
+    "classification": "primary",
+    "category": "Network Security",
+    "description": "Imperva Cloud WAF security events (attack detections, bot mitigation, access violations) from the codeless connector",
+    "keywords": [
+      "imperva",
+      "waf",
+      "web application",
+      "firewall",
+      "attack"
+    ],
+    "mitreSources": [
+      "Network Traffic: Network Traffic Content"
+    ],
+    "recommendedTier": "analytics",
+    "isFree": false,
+    "recommendedRetentionDays": 365
+  },
+  {
+    "tableName": "QualysKnowledgeBase",
+    "connector": "Qualys Knowledge Base (via CCF)",
+    "classification": "secondary",
+    "category": "Vulnerability Management",
+    "description": "Qualys vulnerability knowledge base entries (CVE definitions, severity, remediation) from the codeless connector",
+    "keywords": [
+      "qualys",
+      "vulnerability",
+      "knowledge base",
+      "cve",
+      "remediation"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "datalake",
+    "isFree": false,
+    "recommendedRetentionDays": 365
+  },
+  {
+    "tableName": "Rapid7InsightVMCloudAssets",
+    "connector": "Rapid7 Insight Platform VM Reports (via CCF)",
+    "classification": "secondary",
+    "category": "Vulnerability Management",
+    "description": "Rapid7 InsightVM asset inventory with risk score and vulnerability counts from the codeless connector",
+    "keywords": [
+      "rapid7",
+      "insightvm",
+      "nexpose",
+      "asset",
+      "inventory"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "datalake",
+    "isFree": false,
+    "recommendedRetentionDays": 365
+  },
+  {
+    "tableName": "Rapid7InsightVMCloudVulnerabilities",
+    "connector": "Rapid7 Insight Platform VM Reports (via CCF)",
+    "classification": "primary",
+    "category": "Vulnerability Management",
+    "description": "Rapid7 InsightVM vulnerability findings with severity and remediation details from the codeless connector",
+    "keywords": [
+      "rapid7",
+      "insightvm",
+      "nexpose",
+      "vulnerability",
+      "cve"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "isFree": false,
+    "recommendedRetentionDays": 365
+  },
+  {
+    "tableName": "Audit_CL",
+    "connector": "Mimecast Audit",
+    "classification": "secondary",
+    "category": "Email Security",
+    "description": "Mimecast audit and authentication events (admin actions, logins) from the current Mimecast Audit connector",
+    "keywords": [
+      "mimecast",
+      "audit",
+      "authentication",
+      "admin",
+      "email"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "datalake",
+    "isFree": false,
+    "recommendedRetentionDays": 365
+  },
+  {
+    "tableName": "Seg_Cg_CL",
+    "connector": "Mimecast Secure Email Gateway",
+    "classification": "primary",
+    "category": "Email Security",
+    "description": "Mimecast Secure Email Gateway message tracking and security detections (receipt, process, delivery, URL protect)",
+    "keywords": [
+      "mimecast",
+      "gateway",
+      "email",
+      "security",
+      "siem"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "isFree": false,
+    "recommendedRetentionDays": 365
+  },
+  {
+    "tableName": "Seg_Dlp_CL",
+    "connector": "Mimecast Secure Email Gateway",
+    "classification": "primary",
+    "category": "Data Security",
+    "description": "Mimecast Secure Email Gateway data leak prevention policy hits",
+    "keywords": [
+      "mimecast",
+      "dlp",
+      "email",
+      "policy",
+      "data leak"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "isFree": false,
+    "recommendedRetentionDays": 365
+  },
+  {
+    "tableName": "Ttp_Url_CL",
+    "connector": "Mimecast Targeted Threat Protection",
+    "classification": "primary",
+    "category": "Email Security",
+    "description": "Mimecast Targeted Threat Protection URL click and rewrite events",
+    "keywords": [
+      "mimecast",
+      "ttp",
+      "url",
+      "click",
+      "email"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "isFree": false,
+    "recommendedRetentionDays": 365
+  },
+  {
+    "tableName": "Ttp_Attachment_CL",
+    "connector": "Mimecast Targeted Threat Protection",
+    "classification": "primary",
+    "category": "Email Security",
+    "description": "Mimecast Targeted Threat Protection attachment sandboxing and safe-file conversion events",
+    "keywords": [
+      "mimecast",
+      "ttp",
+      "attachment",
+      "sandbox",
+      "email"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "isFree": false,
+    "recommendedRetentionDays": 365
+  },
+  {
+    "tableName": "Ttp_Impersonation_CL",
+    "connector": "Mimecast Targeted Threat Protection",
+    "classification": "primary",
+    "category": "Email Security",
+    "description": "Mimecast Targeted Threat Protection impersonation detections (display name, domain similarity, reply-to mismatch)",
+    "keywords": [
+      "mimecast",
+      "ttp",
+      "impersonation",
+      "bec",
+      "email"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "isFree": false,
+    "recommendedRetentionDays": 365
+  },
+  {
+    "tableName": "DynatraceAttacksV2_CL",
+    "connector": "Dynatrace (V2)",
+    "classification": "primary",
+    "category": "Application Logs",
+    "description": "Dynatrace runtime application security attack detections including injection and code-level threats from the Dynatrace V2 connector",
+    "keywords": [
+      "dynatrace",
+      "attack",
+      "runtime",
+      "application",
+      "security"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "isFree": false,
+    "recommendedRetentionDays": 180
+  },
+  {
+    "tableName": "DynatraceAuditLogsV2_CL",
+    "connector": "Dynatrace (V2)",
+    "classification": "secondary",
+    "category": "Application Logs",
+    "description": "Dynatrace platform audit logs for configuration and access changes from the Dynatrace V2 connector",
+    "keywords": [
+      "dynatrace",
+      "audit",
+      "configuration",
+      "admin"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "datalake",
+    "isFree": false,
+    "recommendedRetentionDays": 180
+  },
+  {
+    "tableName": "DynatraceProblemsV2_CL",
+    "connector": "Dynatrace (V2)",
+    "classification": "secondary",
+    "category": "Application Logs",
+    "description": "Dynatrace problem notifications for performance and availability issues from the Dynatrace V2 connector",
+    "keywords": [
+      "dynatrace",
+      "problem",
+      "performance",
+      "availability"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "datalake",
+    "isFree": false,
+    "recommendedRetentionDays": 180
+  },
+  {
+    "tableName": "DynatraceSecurityProblemsV2_CL",
+    "connector": "Dynatrace (V2)",
+    "classification": "primary",
+    "category": "Vulnerability Management",
+    "description": "Dynatrace runtime vulnerability detections for deployed application libraries from the Dynatrace V2 connector",
+    "keywords": [
+      "dynatrace",
+      "security",
+      "vulnerability",
+      "runtime",
+      "library"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "isFree": false,
+    "recommendedRetentionDays": 365
+  },
+  {
+    "tableName": "ElasticAgentLogsV2_CL",
+    "connector": "Elastic Agent (via CCF)",
+    "classification": "secondary",
+    "category": "Endpoint Telemetry",
+    "description": "Elastic Agent endpoint telemetry forwarded through the codeless connector (replaces the Logstash output path)",
+    "keywords": [
+      "elastic",
+      "agent",
+      "endpoint",
+      "telemetry"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "datalake",
+    "isFree": false,
+    "recommendedRetentionDays": 180
+  },
+  {
+    "tableName": "DigitalShadows_V2_CL",
+    "connector": "Digital Shadows SearchLight (ReliaQuest)",
+    "classification": "primary",
+    "category": "Threat Intelligence",
+    "description": "Digital Shadows SearchLight dark web intelligence alerts and exposure findings from the DCR-based connector",
+    "keywords": [
+      "digital shadows",
+      "dark web",
+      "threat intelligence",
+      "exposure",
+      "brand"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "isFree": false,
+    "recommendedRetentionDays": 365
+  },
+  {
+    "tableName": "MailRiskEventEmails_CL",
+    "connector": "MailRisk by Secure Practice (CCF)",
+    "classification": "primary",
+    "category": "Email Security",
+    "description": "MailRisk reported email events with threat verdicts from the codeless connector",
+    "keywords": [
+      "mailrisk",
+      "email",
+      "threat",
+      "analysis",
+      "phishing"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "isFree": false,
+    "recommendedRetentionDays": 365
+  },
+  {
+    "tableName": "ContrastADRAttackEvents_CL",
+    "connector": "Contrast ADR Push Connector",
+    "classification": "primary",
+    "category": "Application Logs",
+    "description": "Contrast Security ADR runtime attack events observed inside protected applications",
+    "keywords": [
+      "contrast",
+      "adr",
+      "application",
+      "runtime",
+      "security"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "isFree": false,
+    "recommendedRetentionDays": 180
+  },
+  {
+    "tableName": "ContrastADRIncidents_CL",
+    "connector": "Contrast ADR Push Connector",
+    "classification": "primary",
+    "category": "Application Logs",
+    "description": "Contrast Security ADR incidents correlating related runtime attack events",
+    "keywords": [
+      "contrast",
+      "adr",
+      "application",
+      "runtime",
+      "security"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "isFree": false,
+    "recommendedRetentionDays": 180
+  },
+  {
+    "tableName": "HalcyonEventsV2_CL",
+    "connector": "Halcyon (v2)",
+    "classification": "primary",
+    "category": "Endpoint Detection",
+    "description": "Halcyon anti-ransomware endpoint events (process, network, file, DNS, authentication) from the v2 connector",
+    "keywords": [
+      "halcyon",
+      "ransomware",
+      "endpoint",
+      "event",
+      "detection"
+    ],
+    "mitreSources": [
+      "Process: Process Creation"
+    ],
+    "recommendedTier": "analytics",
+    "isFree": false,
+    "recommendedRetentionDays": 365
+  },
+  {
+    "tableName": "HalcyonAlertUpdatesV2_CL",
+    "connector": "Halcyon (v2)",
+    "classification": "primary",
+    "category": "Security Alerts",
+    "description": "Halcyon alert state updates (triage, resolution) from the v2 connector",
+    "keywords": [
+      "halcyon",
+      "ransomware",
+      "alert",
+      "update",
+      "endpoint"
+    ],
+    "mitreSources": [
+      "Process: Process Creation"
+    ],
+    "recommendedTier": "analytics",
+    "isFree": false,
+    "recommendedRetentionDays": 365
+  },
+  {
+    "tableName": "CiscoUmbrellaAdminAudit_CL",
+    "connector": "Cisco Umbrella (via CCF)",
+    "classification": "primary",
+    "category": "Cloud Control Plane",
+    "description": "Cisco Umbrella admin audit log of dashboard configuration and policy changes",
+    "keywords": [
+      "cisco",
+      "umbrella",
+      "admin",
+      "audit",
+      "policy",
+      "configuration"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "isFree": false,
+    "recommendedRetentionDays": 365
+  },
+  {
+    "tableName": "IllumioInsightsGraph",
+    "connector": "Illumio Insights",
+    "classification": "secondary",
+    "category": "Network Flow",
+    "description": "Illumio Insights workload communication graph edges for microsegmentation analysis",
+    "keywords": [
+      "illumio",
+      "insights",
+      "graph",
+      "microsegmentation",
+      "flow"
+    ],
+    "mitreSources": [
+      "Network Traffic: Network Traffic Flow"
+    ],
+    "recommendedTier": "datalake",
+    "isFree": false,
+    "recommendedRetentionDays": 90
+  },
+  {
+    "tableName": "IllumioInsightsSummary_CL",
+    "connector": "Illumio Insights",
+    "classification": "secondary",
+    "category": "Network Flow",
+    "description": "Illumio Insights aggregated traffic summaries per workload and port",
+    "keywords": [
+      "illumio",
+      "insights",
+      "summary",
+      "aggregated",
+      "traffic"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "datalake",
+    "isFree": false,
+    "recommendedRetentionDays": 90
   }
 ]

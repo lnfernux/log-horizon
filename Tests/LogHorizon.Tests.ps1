@@ -14,6 +14,13 @@ BeforeAll {
     . "$privatePath\Connect-Sentinel.ps1"
     . "$privatePath\Set-TableRetention.ps1"
     . "$privatePath\Invoke-AzRestWithRetry.ps1"
+    . "$privatePath\Get-DefenderXDR.ps1"
+    . "$privatePath\Get-CollectionCache.ps1"
+    . "$privatePath\Get-LogHorizonEndpoint.ps1"
+    . "$privatePath\Get-LogHorizonDictionary.ps1"
+    . "$privatePath\Get-HuntingQueries.ps1"
+    . "$privatePath\Get-DataConnectors.ps1"
+    . "$privatePath\Get-SocOptimization.ps1"
     . (Join-Path $PSScriptRoot '..\Public\Set-LogHorizonTableRetention.ps1')
 
     function New-MockAnalysis {
@@ -196,6 +203,36 @@ Describe 'Get-TableRetentionChangeSet' {
 
         $change[0].Status | Should -Be 'Invalid'
         $change[0].Reason | Should -Match 'Auxiliary'
+    }
+
+    It 'treats inherit (-1/null) as a no-op when the table already inherits per the AsDefault flags' {
+        $inheriting = [PSCustomObject]@{ TableName = 'SigninLogs'; Plan = 'Analytics'; RetentionInDays = 90; TotalRetentionInDays = 90; RetentionInDaysAsDefault = $true; TotalRetentionInDaysAsDefault = $true }
+        $explicit   = [PSCustomObject]@{ TableName = 'AuditLogs';  Plan = 'Analytics'; RetentionInDays = 90; TotalRetentionInDays = 365; RetentionInDaysAsDefault = $false; TotalRetentionInDaysAsDefault = $false }
+
+        $change = @(Get-TableRetentionChangeSet -Tables @($inheriting, $explicit) -RetentionInDays $null -TotalRetentionInDays $null)
+
+        $change[0].Status | Should -Be 'Skipped'
+        $change[1].Status | Should -Be 'Pending'
+        $change[1].RetentionChanged | Should -Be $true
+        $change[1].TotalChanged | Should -Be $true
+    }
+
+    It 'treats removing long-term retention as a no-op when total already equals interactive' {
+        $table = [PSCustomObject]@{ TableName = 'AuditLogs'; Plan = 'Analytics'; RetentionInDays = 120; TotalRetentionInDays = 120 }
+        $change = @(Get-TableRetentionChangeSet -Tables @($table) -TotalRetentionInDays $null)
+        $change[0].Status | Should -Be 'Skipped'
+    }
+
+    It 'rejects search-job and restore tables up front' {
+        $tables = @(
+            [PSCustomObject]@{ TableName = 'Hunt_SRCH'; Plan = 'Analytics'; RetentionInDays = 90; TotalRetentionInDays = 90; TableType = 'SearchResults' },
+            [PSCustomObject]@{ TableName = 'Old_RST';   Plan = 'Analytics'; RetentionInDays = 90; TotalRetentionInDays = 90; TableType = 'RestoredLogs' }
+        )
+        $change = @(Get-TableRetentionChangeSet -Tables $tables -TotalRetentionInDays 365)
+        $change[0].Status | Should -Be 'Invalid'
+        $change[0].Reason | Should -Match 'SearchResults'
+        $change[1].Status | Should -Be 'Invalid'
+        $change[1].Reason | Should -Match 'RestoredLogs'
     }
 
     It 'recognizes supported built-in tables from the Basic-plan allow-list' {
@@ -559,6 +596,23 @@ Describe 'Set-LogHorizonTableRetention' {
         $script:publicRetentionCall.RetentionInDays | Should -Be $null
         $script:publicRetentionCall.PreviewOnly | Should -Be $true
     }
+
+    It 'prints a readable preview under -WhatIf and still returns the engine result' {
+        $script:whatIfHost = [System.Collections.Generic.List[string]]::new()
+        Mock Write-Information { param($MessageData, $InformationAction) $script:whatIfHost.Add("$MessageData") }
+
+        $r = Set-LogHorizonTableRetention -SubscriptionId 'sub' -ResourceGroupName 'rg' -WorkspaceName 'ws' -TableName 'SigninLogs' -TotalRetentionInDays 730 -WhatIf
+
+        $r.ChangeSet.Count | Should -Be 1
+        $r.ChangeSet[0].Status | Should -Be 'Pending'
+        $r.Results.Count | Should -Be 0
+        $text = $script:whatIfHost -join "`n"
+        $text | Should -Match 'What if: preview'
+        $text | Should -Match 'SigninLogs'
+        $text | Should -Match '365 d -> 730 d'
+        $text | Should -Match 'Apply'
+        $text | Should -Not -Match '\[green\]'
+    }
 }
 
 Describe 'Get-TablesFromKql' {
@@ -683,32 +737,36 @@ Describe 'Get-Assessment' {
 
 Describe 'Get-TableUsage' {
     BeforeEach {
+        # Row shape: DataType, ObservedPlan, IsBillable, DataMB, UsageRows, FirstSeen, LastSeen
         Mock Invoke-AzRestWithRetry {
             [PSCustomObject]@{
                 tables = @(
                     [PSCustomObject]@{
                         rows = @(
-                            @('SigninLogs', 'Analytics', 10.0, 100),
-                            @('SigninLogs', 'Basic', 2.0, 20),
-                            @('AzureActivity', $null, 5.0, 50)
+                            @('SigninLogs', 'Analytics', $true, 10000.0, 100, '2026-08-01T00:00:00Z', '2026-08-31T00:00:00Z'),
+                            @('SigninLogs', 'Basic', $true, 2000.0, 20, '2026-08-01T00:00:00Z', '2026-08-31T00:00:00Z'),
+                            @('AzureActivity', $null, $false, 5000.0, 50, '2026-08-01T00:00:00Z', '2026-08-31T00:00:00Z'),
+                            @('GraphLogs', 'Auxiliary', $true, 1000.0, 10, '2026-08-01T00:00:00Z', '2026-08-31T00:00:00Z'),
+                            @('MixedTable', 'Analytics', $true, 3000.0, 30, '2026-08-01T00:00:00Z', '2026-08-31T00:00:00Z'),
+                            @('MixedTable', 'Analytics', $false, 1000.0, 10, '2026-08-01T00:00:00Z', '2026-08-31T00:00:00Z')
                         )
                     }
                 )
             }
         }
+        $script:ctx = [PSCustomObject]@{ LaToken = 'token'; WorkspaceId = 'workspace-id' }
     }
 
     It 'aggregates table-plan rows back to one table object while preserving observed plan breakdown' {
-        $context = [PSCustomObject]@{ LaToken = 'token'; WorkspaceId = 'workspace-id' }
+        $result = Get-TableUsage -Context $ctx -DaysBack 30 -PricePerGB 5.59
 
-        $result = Get-TableUsage -Context $context -DaysBack 30 -PricePerGB 5.59
-
-        $result.Count | Should -Be 2
+        $result.Count | Should -Be 4
 
         $signin = $result | Where-Object TableName -eq 'SigninLogs'
         $signin | Should -Not -BeNullOrEmpty
         $signin.DataGB | Should -Be 12
         $signin.MonthlyGB | Should -Be 12
+        $signin.UsageRowCount | Should -Be 120
         $signin.RecordCount | Should -Be 120
         $signin.ObservedPlanCount | Should -Be 2
         $signin.ObservedPlans | Should -Contain 'Analytics'
@@ -717,16 +775,141 @@ Describe 'Get-TableUsage' {
         (@($signin.ObservedPlanBreakdown | Where-Object Plan -eq 'Basic')[0]).MonthlyGB | Should -Be 2
     }
 
-    It 'marks free tables and normalizes missing plan values to Unknown' {
-        $context = [PSCustomObject]@{ LaToken = 'token'; WorkspaceId = 'workspace-id' }
+    It 'converts MB to GB using 1000 (billing GB) not 1024' {
+        $result = Get-TableUsage -Context $ctx -DaysBack 30
+        ($result | Where-Object TableName -eq 'GraphLogs').DataGB | Should -Be 1
+    }
 
-        $result = Get-TableUsage -Context $context -DaysBack 30 -PricePerGB 5.59
+    It 'prices each observed plan with its own rate' {
+        $result = Get-TableUsage -Context $ctx -DaysBack 30 -PricePerGB 5.59 -BasicPricePerGB 1.15 -LakePricePerGB 0.20
+
+        $signin = $result | Where-Object TableName -eq 'SigninLogs'
+        # 10 GB Analytics x 5.59 + 2 GB Basic x 1.15
+        $signin.EstMonthlyCostUSD | Should -Be 58.2
+        (@($signin.ObservedPlanBreakdown | Where-Object Plan -eq 'Basic')[0]).MonthlyCostUSD | Should -Be 2.3
+
+        $graph = $result | Where-Object TableName -eq 'GraphLogs'
+        $graph.EstMonthlyCostUSD | Should -Be 0.2
+    }
+
+    It 'derives IsFree from Usage.IsBillable and normalizes missing plan values to Unknown' {
+        $result = Get-TableUsage -Context $ctx -DaysBack 30 -PricePerGB 5.59
 
         $activity = $result | Where-Object TableName -eq 'AzureActivity'
         $activity | Should -Not -BeNullOrEmpty
         $activity.IsFree | Should -Be $true
+        $activity.IsFreeSource | Should -Be 'usage'
         $activity.EstMonthlyCostUSD | Should -Be 0
         $activity.ObservedPlans | Should -Contain 'Unknown'
+    }
+
+    It 'only charges the billable share when a table has billable and non-billable rows' {
+        $result = Get-TableUsage -Context $ctx -DaysBack 30 -PricePerGB 5.59
+
+        $mixed = $result | Where-Object TableName -eq 'MixedTable'
+        $mixed.DataGB | Should -Be 4
+        $mixed.BillableGB | Should -Be 3
+        $mixed.IsFree | Should -Be $false
+        $mixed.EstMonthlyCostUSD | Should -Be ([math]::Round(3 * 5.59, 2))
+    }
+
+    It 'extrapolates from the observed span, not DaysBack, when the data covers fewer days' {
+        # Rows span 30 days; asking for 365 must not divide by 365
+        $result = Get-TableUsage -Context $ctx -DaysBack 365 -PricePerGB 5.59
+        $signin = $result | Where-Object TableName -eq 'SigninLogs'
+        $signin.ObservedDays | Should -Be 30
+        $signin.MonthlyGB | Should -Be 12
+    }
+
+    It 'falls back to the classification database when Usage rows have no IsBillable flag' {
+        Mock Invoke-AzRestWithRetry {
+            [PSCustomObject]@{
+                tables = @(
+                    [PSCustomObject]@{
+                        rows = @(
+                            @('AzureActivity', 'Analytics', $null, 1000.0, 10),
+                            @('SigninLogs', 'Analytics', '', 1000.0, 10)
+                        )
+                    }
+                )
+            }
+        }
+        $result = Get-TableUsage -Context $ctx -DaysBack 30 -PricePerGB 5.59
+
+        $activity = $result | Where-Object TableName -eq 'AzureActivity'
+        $activity.IsFree | Should -Be $true
+        $activity.IsFreeSource | Should -Be 'database'
+        $activity.EstMonthlyCostUSD | Should -Be 0
+
+        $signin = $result | Where-Object TableName -eq 'SigninLogs'
+        $signin.IsFree | Should -Be $false
+        $signin.IsFreeSource | Should -Be 'database'
+        $signin.ObservedDays | Should -Be 30
+    }
+
+    It 'returns nothing for an empty Usage result' {
+        Mock Invoke-AzRestWithRetry { [PSCustomObject]@{ tables = @([PSCustomObject]@{ rows = @() }) } }
+        $result = @(Get-TableUsage -Context $ctx -DaysBack 30)
+        $result.Count | Should -Be 0
+    }
+
+    It 'prices an unrecognised plan name at the Analytics rate' {
+        Mock Invoke-AzRestWithRetry {
+            [PSCustomObject]@{ tables = @([PSCustomObject]@{ rows = @(, @('T', 'FuturePlan', $true, 1000.0, 1, '2026-08-01T00:00:00Z', '2026-08-31T00:00:00Z')) }) }
+        }
+        $result = Get-TableUsage -Context $ctx -DaysBack 30 -PricePerGB 4
+        $result.EstMonthlyCostUSD | Should -Be 4
+    }
+}
+
+Describe 'Get-UsageObservedDays' {
+    It 'returns DaysBack when rows carry no timestamps' {
+        $short = , @('T', 'Analytics', $true, 1, 1)
+        Get-UsageObservedDays -Rows $short -DaysBack 45 | Should -Be 45
+        Get-UsageObservedDays -Rows @() -DaysBack 45 | Should -Be 45
+    }
+
+    It 'uses the widest span across all rows, rounded up' {
+        $rows = @(
+            @('A', 'Analytics', $true, 1, 1, '2026-08-10T00:00:00Z', '2026-08-20T12:00:00Z'),
+            @('B', 'Analytics', $true, 1, 1, '2026-08-01T00:00:00Z', '2026-08-15T00:00:00Z')
+        )
+        Get-UsageObservedDays -Rows $rows -DaysBack 90 | Should -Be 20
+    }
+
+    It 'never returns less than 1 and never more than DaysBack' {
+        $same = , @('A', 'Analytics', $true, 1, 1, '2026-08-10T00:00:00Z', '2026-08-10T00:00:00Z')
+        Get-UsageObservedDays -Rows $same -DaysBack 90 | Should -Be 1
+
+        $wide = , @('A', 'Analytics', $true, 1, 1, '2026-01-01T00:00:00Z', '2026-08-10T00:00:00Z')
+        Get-UsageObservedDays -Rows $wide -DaysBack 90 | Should -Be 90
+    }
+
+    It 'skips rows whose timestamps do not parse' {
+        $rows = @(
+            @('A', 'Analytics', $true, 1, 1, 'not-a-date', '2026-08-20T00:00:00Z'),
+            @('B', 'Analytics', $true, 1, 1, '2026-08-01T00:00:00Z', 'garbage'),
+            @('C', 'Analytics', $true, 1, 1, '2026-08-05T00:00:00Z', '2026-08-07T00:00:00Z')
+        )
+        Get-UsageObservedDays -Rows $rows -DaysBack 90 | Should -Be 2
+    }
+}
+
+Describe 'ConvertTo-UsageBoolean' {
+    It 'passes booleans through' {
+        ConvertTo-UsageBoolean -Value $true | Should -Be $true
+        ConvertTo-UsageBoolean -Value $false | Should -Be $false
+    }
+
+    It 'parses string booleans case-insensitively' {
+        ConvertTo-UsageBoolean -Value 'True' | Should -Be $true
+        ConvertTo-UsageBoolean -Value ' false ' | Should -Be $false
+    }
+
+    It 'returns null for null, empty or unparseable input' {
+        ConvertTo-UsageBoolean -Value $null | Should -BeNullOrEmpty
+        ConvertTo-UsageBoolean -Value '' | Should -BeNullOrEmpty
+        ConvertTo-UsageBoolean -Value 'maybe' | Should -BeNullOrEmpty
     }
 }
 
@@ -1079,22 +1262,164 @@ Describe 'Invoke-Analysis DataLake recommendation edge cases' {
     }
 }
 
+Describe 'Invoke-Analysis plan-aware pricing' {
+    BeforeAll {
+        $script:pricingRules = [PSCustomObject]@{ Rules = @(); TableCoverage = @{}; TotalRules = 0; EnabledRules = 0; DontCorrCount = 0; IncCorrCount = 0 }
+        $script:pricingHunting = [PSCustomObject]@{ Queries = @(); TableCoverage = @{}; TotalQueries = 0 }
+    }
+
+    It 'computes DataLake savings as current cost minus the lake rate for the same volume' {
+        $tableUsage = @(
+            [PSCustomObject]@{ TableName = 'Syslog'; DataGB = 300; MonthlyGB = 100; UsageRowCount = 1; EstMonthlyCostUSD = 559.00; IsFree = $false; IsFreeSource = 'usage'; ObservedPlans = @('Analytics'); ObservedPlanCount = 1; ObservedPlanBreakdown = @() }
+        )
+        $classifications = [PSCustomObject]@{
+            Classifications = @{ 'Syslog' = [PSCustomObject]@{ Classification = 'secondary'; Category = 'Infra'; RecommendedTier = 'datalake'; IsFree = $false; RecommendedRetentionDays = 90 } }
+            KeywordGaps = @(); DatabaseEntries = 1
+        }
+        $result = Invoke-Analysis -TableUsage $tableUsage -Classifications $classifications -RulesData $script:pricingRules -HuntingData $script:pricingHunting -PricePerGB 5.59 -LakePricePerGB 0.20
+
+        $rec = @($result.Recommendations | Where-Object Type -eq 'DataLake')[0]
+        $rec | Should -Not -BeNullOrEmpty
+        $rec.Title | Should -Match 'Data Lake tier'
+        # 559.00 - 100 GB x 0.20
+        $rec.EstSavingsUSD | Should -Be 539
+        ($result.TableAnalysis | Where-Object TableName -eq 'Syslog').SupportsAuxiliaryPlan | Should -BeTrue
+        $result.Summary.LakePricePerGB | Should -Be 0.20
+        $result.Summary.BasicPricePerGB | Should -Be 1.15
+    }
+
+    It 'never reports negative DataLake savings' {
+        $tableUsage = @(
+            [PSCustomObject]@{ TableName = 'WindowsEvent'; DataGB = 300; MonthlyGB = 100; UsageRowCount = 1; EstMonthlyCostUSD = 5; IsFree = $false; IsFreeSource = 'usage'; ObservedPlans = @('Analytics'); ObservedPlanCount = 1; ObservedPlanBreakdown = @() }
+        )
+        $classifications = [PSCustomObject]@{
+            Classifications = @{ 'WindowsEvent' = [PSCustomObject]@{ Classification = 'secondary'; Category = 'Infra'; RecommendedTier = 'datalake'; IsFree = $false; RecommendedRetentionDays = 90 } }
+            KeywordGaps = @(); DatabaseEntries = 1
+        }
+        $result = Invoke-Analysis -TableUsage $tableUsage -Classifications $classifications -RulesData $script:pricingRules -HuntingData $script:pricingHunting -LakePricePerGB 0.20
+
+        # CostTier is High by volume (100 GB) so the DataLake rule fires; savings clamp at 0
+        @($result.Recommendations | Where-Object Type -eq 'DataLake')[0].EstSavingsUSD | Should -Be 0
+    }
+
+    It 'falls back to a Basic plan recommendation when the table supports Basic but not Auxiliary' {
+        $tableUsage = @(
+            [PSCustomObject]@{ TableName = 'Perf'; DataGB = 300; MonthlyGB = 100; UsageRowCount = 1; EstMonthlyCostUSD = 559.00; IsFree = $false; IsFreeSource = 'usage'; ObservedPlans = @('Analytics'); ObservedPlanCount = 1; ObservedPlanBreakdown = @() }
+        )
+        $classifications = [PSCustomObject]@{
+            Classifications = @{ 'Perf' = [PSCustomObject]@{ Classification = 'secondary'; Category = 'Infra'; RecommendedTier = 'datalake'; IsFree = $false; RecommendedRetentionDays = 90 } }
+            KeywordGaps = @(); DatabaseEntries = 1
+        }
+        $result = Invoke-Analysis -TableUsage $tableUsage -Classifications $classifications -RulesData $script:pricingRules -HuntingData $script:pricingHunting -BasicPricePerGB 1.15
+
+        $rec = @($result.Recommendations | Where-Object Type -eq 'DataLake')[0]
+        $rec.Title | Should -Be 'Move Perf to Basic plan'
+        $rec.Detail | Should -Match 'does not support the Auxiliary'
+        # 559.00 - 100 GB x 1.15
+        $rec.EstSavingsUSD | Should -Be 444
+        ($result.TableAnalysis | Where-Object TableName -eq 'Perf').SupportsAuxiliaryPlan | Should -BeFalse
+    }
+
+    It 'makes no tier recommendation when the table supports neither Auxiliary nor Basic' {
+        $tableUsage = @(
+            [PSCustomObject]@{ TableName = 'AzureDiagnostics'; DataGB = 300; MonthlyGB = 100; UsageRowCount = 1; EstMonthlyCostUSD = 559.00; IsFree = $false; IsFreeSource = 'usage'; ObservedPlans = @('Analytics'); ObservedPlanCount = 1; ObservedPlanBreakdown = @() }
+        )
+        $classifications = [PSCustomObject]@{
+            Classifications = @{ 'AzureDiagnostics' = [PSCustomObject]@{ Classification = 'secondary'; Category = 'Infra'; RecommendedTier = 'datalake'; IsFree = $false; RecommendedRetentionDays = 90 } }
+            KeywordGaps = @(); DatabaseEntries = 1
+        }
+        $result = Invoke-Analysis -TableUsage $tableUsage -Classifications $classifications -RulesData $script:pricingRules -HuntingData $script:pricingHunting
+
+        @($result.Recommendations | Where-Object Type -eq 'DataLake').Count | Should -Be 0
+        @($result.Recommendations | Where-Object Type -eq 'LowValue').Count | Should -Be 1
+    }
+
+    It 'recommends the lake tier for DCR-based custom tables and skips Classic custom tables' {
+        $tableUsage = @(
+            [PSCustomObject]@{ TableName = 'Dcr_CL'; DataGB = 300; MonthlyGB = 100; UsageRowCount = 1; EstMonthlyCostUSD = 559.00; IsFree = $false; IsFreeSource = 'usage'; ObservedPlans = @('Analytics'); ObservedPlanCount = 1; ObservedPlanBreakdown = @() },
+            [PSCustomObject]@{ TableName = 'Classic_CL'; DataGB = 300; MonthlyGB = 100; UsageRowCount = 1; EstMonthlyCostUSD = 559.00; IsFree = $false; IsFreeSource = 'usage'; ObservedPlans = @('Analytics'); ObservedPlanCount = 1; ObservedPlanBreakdown = @() }
+        )
+        $classifications = [PSCustomObject]@{
+            Classifications = @{
+                'Dcr_CL'     = [PSCustomObject]@{ Classification = 'secondary'; Category = 'Infra'; RecommendedTier = 'datalake'; IsFree = $false; RecommendedRetentionDays = 90 }
+                'Classic_CL' = [PSCustomObject]@{ Classification = 'secondary'; Category = 'Infra'; RecommendedTier = 'datalake'; IsFree = $false; RecommendedRetentionDays = 90 }
+            }
+            KeywordGaps = @(); DatabaseEntries = 2
+        }
+        $retention = @(
+            [PSCustomObject]@{ TableName = 'Dcr_CL'; Plan = 'Analytics'; RetentionInDays = 90; TotalRetentionInDays = 90; ArchiveRetentionInDays = 0; TableSubType = 'DataCollectionRuleBased' },
+            [PSCustomObject]@{ TableName = 'Classic_CL'; Plan = 'Analytics'; RetentionInDays = 90; TotalRetentionInDays = 90; ArchiveRetentionInDays = 0; TableSubType = 'Classic' }
+        )
+        $result = Invoke-Analysis -TableUsage $tableUsage -Classifications $classifications -RulesData $script:pricingRules -HuntingData $script:pricingHunting -TableRetention $retention
+
+        @($result.Recommendations | Where-Object { $_.Type -eq 'DataLake' -and $_.TableName -eq 'Dcr_CL' }).Count | Should -Be 1
+        @($result.Recommendations | Where-Object { $_.Type -eq 'DataLake' -and $_.TableName -eq 'Classic_CL' }).Count | Should -Be 0
+    }
+
+    It 'lets the classification database decide IsFree only when Usage had no billable flag' {
+        $tableUsage = @(
+            [PSCustomObject]@{ TableName = 'DbFree'; DataGB = 3; MonthlyGB = 1; UsageRowCount = 1; EstMonthlyCostUSD = 5.59; IsFree = $false; IsFreeSource = 'database'; ObservedPlans = @('Analytics'); ObservedPlanCount = 1; ObservedPlanBreakdown = @() },
+            [PSCustomObject]@{ TableName = 'UsagePaid'; DataGB = 3; MonthlyGB = 1; UsageRowCount = 1; EstMonthlyCostUSD = 5.59; IsFree = $false; IsFreeSource = 'usage'; ObservedPlans = @('Analytics'); ObservedPlanCount = 1; ObservedPlanBreakdown = @() }
+        )
+        $classifications = [PSCustomObject]@{
+            Classifications = @{
+                'DbFree'    = [PSCustomObject]@{ Classification = 'primary'; Category = 'Security Alerts'; RecommendedTier = 'analytics'; IsFree = $true; RecommendedRetentionDays = 90 }
+                'UsagePaid' = [PSCustomObject]@{ Classification = 'primary'; Category = 'Security Alerts'; RecommendedTier = 'analytics'; IsFree = $true; RecommendedRetentionDays = 90 }
+            }
+            KeywordGaps = @(); DatabaseEntries = 2
+        }
+        $result = Invoke-Analysis -TableUsage $tableUsage -Classifications $classifications -RulesData $script:pricingRules -HuntingData $script:pricingHunting
+
+        $dbFree = $result.TableAnalysis | Where-Object TableName -eq 'DbFree'
+        $dbFree.IsFree | Should -Be $true
+        $dbFree.EstMonthlyCostUSD | Should -Be 0
+        $dbFree.CostTier | Should -Be 'Free'
+        $dbFree.IsFreeSource | Should -Be 'database'
+
+        $usagePaid = $result.TableAnalysis | Where-Object TableName -eq 'UsagePaid'
+        $usagePaid.IsFree | Should -Be $false
+        $usagePaid.EstMonthlyCostUSD | Should -Be 5.59
+        $usagePaid.IsFreeSource | Should -Be 'usage'
+    }
+
+    It 'surfaces the observed Usage span in the summary' {
+        $tableUsage = @(
+            [PSCustomObject]@{ TableName = 'T'; DataGB = 1; MonthlyGB = 1; UsageRowCount = 1; EstMonthlyCostUSD = 5.59; IsFree = $false; IsFreeSource = 'usage'; ObservedDays = 42; ObservedPlans = @('Analytics'); ObservedPlanCount = 1; ObservedPlanBreakdown = @() }
+        )
+        $classifications = [PSCustomObject]@{ Classifications = @{}; KeywordGaps = @(); DatabaseEntries = 0 }
+        $result = Invoke-Analysis -TableUsage $tableUsage -Classifications $classifications -RulesData $script:pricingRules -HuntingData $script:pricingHunting
+        $result.Summary.UsageObservedDays | Should -Be 42
+    }
+}
+
 Describe 'Classification database integrity' {
     BeforeAll {
         $dbPath = Join-Path $PSScriptRoot '..\Data\log-classifications.json'
-        $script:db = Get-Content $dbPath -Raw | ConvertFrom-Json
+        $script:dbRaw = Get-Content $dbPath -Raw
+        $script:db = $script:dbRaw | ConvertFrom-Json
+        $script:dbNames = @($script:db.tableName)
+        $script:allowedCategories = @(
+            'Application Logs', 'Cloud Control Plane', 'Cloud Security', 'Configuration Management', 'Container & Kubernetes', 'Data Platform',
+            'Data Security', 'Email Security', 'Endpoint Detection', 'Endpoint Telemetry', 'Identity & Access', 'Infrastructure Diagnostics',
+            'IoT/OT Security', 'Network Flow', 'Network Security', 'Platform Health', 'Posture Management', 'SAP Security', 'Security Alerts',
+            'Storage Access', 'Threat Intelligence', 'Vulnerability Management'
+        )
     }
 
-    It 'has at least 100 entries' {
-        $script:db.Count | Should -BeGreaterOrEqual 100
+    It 'has at least 480 entries' {
+        $script:db.Count | Should -BeGreaterOrEqual 480
     }
 
-    It 'every entry has required fields' {
+    It 'every entry has required fields with allowed values' {
         foreach ($entry in $script:db) {
             $entry.tableName       | Should -Not -BeNullOrEmpty
+            $entry.connector       | Should -Not -BeNullOrEmpty -Because "$($entry.tableName) needs a connector"
+            $entry.description     | Should -Not -BeNullOrEmpty -Because "$($entry.tableName) needs a description"
             $entry.classification  | Should -BeIn @('primary', 'secondary')
-            $entry.category        | Should -Not -BeNullOrEmpty
+            $entry.category        | Should -BeIn $script:allowedCategories -Because "$($entry.tableName) category must be one of the known categories"
             $entry.recommendedTier | Should -BeIn @('analytics', 'datalake')
+            @($entry.keywords).Count | Should -BeGreaterThan 0 -Because "$($entry.tableName) needs keywords"
+            $entry.isFree | Should -BeOfType [bool]
         }
     }
 
@@ -1104,20 +1429,280 @@ Describe 'Classification database integrity' {
         }
     }
 
-    It 'free tables are correctly marked' {
-        $freeNames = @('SecurityAlert', 'SecurityIncident', 'AzureActivity', 'OfficeActivity', 'SentinelHealth', 'SentinelAudit')
+    It 'free tables are correctly marked and SentinelAudit is billable' {
+        $freeNames = @('SecurityAlert', 'SecurityIncident', 'AzureActivity', 'OfficeActivity', 'SentinelHealth', 'Heartbeat', 'Operation', 'Usage', 'Watchlist', 'ConfidentialWatchlist')
         foreach ($name in $freeNames) {
-            $entry = $script:db | Where-Object tableName -eq $name
-            if ($entry) {
-                $entry.isFree | Should -Be $true -Because "$name should be free"
-            }
+            ($script:db | Where-Object tableName -eq $name).isFree | Should -Be $true -Because "$name should be free"
         }
+        ($script:db | Where-Object tableName -eq 'SentinelAudit').isFree | Should -Be $false
     }
 
     It 'has no duplicate table names' {
-        $names = $script:db | ForEach-Object tableName
-        $dupes = $names | Group-Object | Where-Object Count -gt 1
+        $dupes = $script:dbNames | Group-Object | Where-Object Count -gt 1
         $dupes | Should -BeNullOrEmpty
+    }
+
+    It 'uses only deprecated or legacy for status and every replacedBy target exists' {
+        $withStatus = @($script:db | Where-Object { $_.PSObject.Properties.Name -contains 'status' })
+        $withStatus.Count | Should -BeGreaterOrEqual 40
+        foreach ($entry in $withStatus) {
+            $entry.status | Should -BeIn @('deprecated', 'legacy') -Because "$($entry.tableName)"
+            $entry.PSObject.Properties.Name | Should -Contain 'replacedBy' -Because "$($entry.tableName) with a status needs replacedBy (may be empty)"
+            foreach ($r in @($entry.replacedBy)) { $script:dbNames | Should -Contain $r -Because "$($entry.tableName) replacedBy '$r' must be a DB entry" }
+        }
+        foreach ($entry in ($script:db | Where-Object { $_.PSObject.Properties.Name -contains 'replacedBy' })) {
+            $entry.PSObject.Properties.Name | Should -Contain 'status' -Because "$($entry.tableName) has replacedBy without status"
+        }
+    }
+
+    It 'marks the documented deprecations' {
+        ($script:db | Where-Object tableName -eq 'ThreatIntelligenceIndicator').status | Should -Be 'deprecated'
+        ($script:db | Where-Object tableName -eq 'ThreatIntelligenceIndicator').replacedBy | Should -Be @('ThreatIntelIndicators', 'ThreatIntelObjects')
+        ($script:db | Where-Object tableName -eq 'DnsEvents').status | Should -Be 'legacy'
+        ($script:db | Where-Object tableName -eq 'DnsEvents').replacedBy | Should -Be @('ASimDnsActivityLogs')
+        ($script:db | Where-Object tableName -eq 'Okta_CL').replacedBy | Should -Be @('OktaSSO')
+        ($script:db | Where-Object tableName -eq 'Update').replacedBy | Should -BeNullOrEmpty
+        ($script:db | Where-Object tableName -eq 'darktrace_model_alerts_CL').replacedBy | Should -Contain 'DarktraceModelAlerts_CL'
+    }
+
+    It 'xdrStreamable true matches the Defender XDR connector streaming set used by Get-DefenderXDR' {
+        $streamable = @($script:db | Where-Object { $_.xdrStreamable -eq $true } | ForEach-Object tableName | Sort-Object)
+        $streamable | Should -Be @($script:KnownXDRTables | Sort-Object)
+        foreach ($n in 'DeviceTvmSoftwareInventory', 'DeviceTvmSoftwareVulnerabilities', 'DeviceTvmSecureConfigurationAssessment', 'DeviceTvmSecureConfigurationAssessmentKB', 'CloudAuditEvents', 'ExposureGraphNodes', 'GraphAPIAuditEvents', 'DeviceTvmInfoGathering') {
+            ($script:db | Where-Object tableName -eq $n).xdrStreamable | Should -Be $false -Because $n
+        }
+        foreach ($entry in ($script:db | Where-Object { $_.PSObject.Properties.Name -contains 'xdrStreamable' })) {
+            $entry.connector | Should -Match 'Defender' -Because "$($entry.tableName) xdrStreamable is only for Defender tables"
+        }
+    }
+
+    It 'platform flags match the implicit-consumers platform table list' {
+        $ic = Get-Content (Join-Path $PSScriptRoot '..\Data\implicit-consumers.json') -Raw | ConvertFrom-Json
+        $expected = @($ic.platformTables | Where-Object { $_ -in $script:dbNames } | Sort-Object)
+        $actual = @($script:db | Where-Object { $_.platform -eq $true } | ForEach-Object tableName | Sort-Object)
+        $actual | Should -Be $expected
+        $actual | Should -Contain 'Usage'
+    }
+
+    It 'contains the refreshed first-party and successor tables with corrected labels' {
+        foreach ($n in 'ThreatIntelObjects', 'MicrosoftServicePrincipalSignInLogs', 'SecurityCaseEvent', 'AKSAudit', 'AZKVAuditLogs', 'NSPAccessLogs', 'CrowdStrikeAuditEvents', 'ASimUserManagementActivityLogs', 'SentinelOneAlertsV2_CL', 'LookoutMtdV2_CL', 'SalesforceServiceCloudV3_CL', 'Rapid7InsightVMCloudVulnerabilities', 'Ttp_Url_CL', 'DynatraceAttacksV2_CL', 'HalcyonEventsV2_CL', 'CiscoUmbrellaAdminAudit_CL', 'IllumioInsights_CL', 'Usage') {
+            $script:dbNames | Should -Contain $n
+        }
+        $script:dbNames | Should -Not -Contain 'IlumioInsights'
+        ($script:db | Where-Object tableName -eq 'ThreatIntelObjects').classification | Should -Be 'primary'
+        ($script:db | Where-Object tableName -eq 'WsSecurityEvents_CL').connector | Should -Be 'WithSecure Elements'
+        ($script:db | Where-Object tableName -eq 'AlertInfo').connector | Should -Be 'Microsoft Defender XDR'
+        ($script:db | Where-Object tableName -eq 'OfficeActivity').connector | Should -Be 'Microsoft 365'
+        ($script:db | Where-Object tableName -eq 'ThreatIntelIndicators').connector | Should -Not -Be 'Threat Intelligence Platforms'
+    }
+
+    It 'contains no em dashes or escaped unicode' {
+        $script:dbRaw | Should -Not -Match ([char]0x2014)
+        $script:dbRaw | Should -Not -Match '\\u00'
+    }
+}
+
+Describe 'Table plan support data files' {
+    BeforeAll {
+        $script:basicDoc = Get-Content (Join-Path $PSScriptRoot '..\Data\basic-plan-tables.json') -Raw | ConvertFrom-Json
+        $script:auxDoc   = Get-Content (Join-Path $PSScriptRoot '..\Data\auxiliary-plan-tables.json') -Raw | ConvertFrom-Json
+    }
+
+    It 'both files carry source, generatedOn and a sorted unique table list' {
+        foreach ($doc in $script:basicDoc, $script:auxDoc) {
+            $doc.source | Should -Match '^https://learn\.microsoft\.com/.*tables-features$'
+            $doc.generatedOn | Should -Match '^\d{4}-\d{2}-\d{2}$'
+            @($doc.tables).Count | Should -BeGreaterOrEqual 450
+            @($doc.tables | Sort-Object -Unique).Count | Should -Be @($doc.tables).Count
+        }
+    }
+
+    It 'reflects the documented matrix (Basic-only, Auxiliary-only, both, neither)' {
+        $script:basicDoc.tables | Should -Contain 'Perf'
+        $script:auxDoc.tables | Should -Not -Contain 'Perf'
+        $script:auxDoc.tables | Should -Contain 'Syslog'
+        $script:basicDoc.tables | Should -Not -Contain 'Syslog'
+        $script:basicDoc.tables | Should -Contain 'AWSVPCFlow'
+        $script:auxDoc.tables | Should -Contain 'AWSVPCFlow'
+        $script:basicDoc.tables | Should -Not -Contain 'OGOAuditLogs'
+        $script:basicDoc.tables | Should -Contain 'Windows365ConnectionLogs'
+    }
+
+    It 'Get-PlanSupportedTableSet caches per plan and Test-TableSupportsAuxiliaryPlan applies the custom-table rules' {
+        $aux1 = Get-PlanSupportedTableSet -Plan Auxiliary
+        $aux2 = Get-PlanSupportedTableSet -Plan Auxiliary
+        [object]::ReferenceEquals($aux1, $aux2) | Should -BeTrue
+        ($aux1 -is [System.Collections.Generic.HashSet[string]]) | Should -BeTrue
+        $aux1.Contains('Syslog') | Should -BeTrue
+        $aux1.Contains('SYSLOG') | Should -BeTrue
+        (Get-PlanSupportedTableSet -Plan Basic).Contains('Perf') | Should -BeTrue
+        (Get-BasicPlanSupportedTableSet).Contains('Perf') | Should -BeTrue
+
+        (Test-TableSupportsAuxiliaryPlan -Table ([PSCustomObject]@{ TableName = 'Syslog'; Plan = 'Analytics' })) | Should -BeTrue
+        (Test-TableSupportsAuxiliaryPlan -Table ([PSCustomObject]@{ TableName = 'Perf'; Plan = 'Analytics' })) | Should -BeFalse
+        (Test-TableSupportsAuxiliaryPlan -Table ([PSCustomObject]@{ TableName = 'Perf'; Plan = 'Auxiliary' })) | Should -BeTrue
+        (Test-TableSupportsAuxiliaryPlan -Table ([PSCustomObject]@{ TableName = 'X_CL'; Plan = 'Analytics'; TableSubType = 'DataCollectionRuleBased' })) | Should -BeTrue
+        (Test-TableSupportsAuxiliaryPlan -Table ([PSCustomObject]@{ TableName = 'X_CL'; Plan = 'Analytics'; TableSubType = 'Classic' })) | Should -BeFalse
+        (Test-TableSupportsAuxiliaryPlan -Table ([PSCustomObject]@{ TableName = ''; Plan = 'Analytics' })) | Should -BeFalse
+    }
+}
+
+Describe 'Classification lifecycle keys' {
+    It 'Invoke-Classification surfaces Status, ReplacedBy, IsPlatform and XdrStreamable from the database' {
+        $usage = @(
+            [PSCustomObject]@{ TableName = 'ThreatIntelligenceIndicator'; MonthlyGB = 1 },
+            [PSCustomObject]@{ TableName = 'Usage'; MonthlyGB = 0.1 },
+            [PSCustomObject]@{ TableName = 'DeviceInfo'; MonthlyGB = 5 },
+            [PSCustomObject]@{ TableName = 'CloudAuditEvents'; MonthlyGB = 5 },
+            [PSCustomObject]@{ TableName = 'SecurityEvent'; MonthlyGB = 5 },
+            [PSCustomObject]@{ TableName = 'SecurityEvent_SPLT_CL'; MonthlyGB = 5 },
+            [PSCustomObject]@{ TableName = 'Zebra_CL'; MonthlyGB = 1 }
+        )
+        $r = Invoke-Classification -TableUsage $usage -RuleTableCoverage @{}
+        $c = $r.Classifications
+        $c['ThreatIntelligenceIndicator'].Status | Should -Be 'deprecated'
+        $c['ThreatIntelligenceIndicator'].ReplacedBy | Should -Be @('ThreatIntelIndicators', 'ThreatIntelObjects')
+        $c['Usage'].IsPlatform | Should -BeTrue
+        $c['Usage'].IsFree | Should -BeTrue
+        $c['DeviceInfo'].XdrStreamable | Should -BeTrue
+        $c['CloudAuditEvents'].XdrStreamable | Should -BeFalse
+        $c['SecurityEvent'].Status | Should -BeNullOrEmpty
+        $c['SecurityEvent'].XdrStreamable | Should -BeNullOrEmpty
+        $c['SecurityEvent'].IsPlatform | Should -BeFalse
+        $c['SecurityEvent_SPLT_CL'].Status | Should -BeNullOrEmpty
+        $c['SecurityEvent_SPLT_CL'].IsPlatform | Should -BeFalse
+        $c['Zebra_CL'].Status | Should -BeNullOrEmpty
+        @($c['Zebra_CL'].ReplacedBy).Count | Should -Be 0
+    }
+
+    It 'Get-ClassificationEntryStatus normalises and rejects unknown values' {
+        Get-ClassificationEntryStatus -Entry ([PSCustomObject]@{ status = ' Deprecated ' }) | Should -Be 'deprecated'
+        Get-ClassificationEntryStatus -Entry ([PSCustomObject]@{ status = 'legacy' }) | Should -Be 'legacy'
+        Get-ClassificationEntryStatus -Entry ([PSCustomObject]@{ status = 'retired' }) | Should -BeNullOrEmpty
+        Get-ClassificationEntryStatus -Entry ([PSCustomObject]@{ tableName = 'x' }) | Should -BeNullOrEmpty
+        Get-ClassificationEntryStatus -Entry $null | Should -BeNullOrEmpty
+    }
+
+    It 'defaults retention to 90 for a custom entry without recommendedRetentionDays and matches keywords in descriptions' {
+        $custom = Join-Path $TestDrive 'custom-lifecycle.json'
+        @(@{ tableName = 'NoRet_CL'; classification = 'secondary'; connector = 'Acme'; description = 'Acme widget telemetry'; keywords = @() }) | ConvertTo-Json | Set-Content $custom
+        $r = Invoke-Classification -TableUsage @([PSCustomObject]@{ TableName = 'NoRet_CL'; MonthlyGB = 1 }) -RuleTableCoverage @{} -CustomClassificationPath $custom -Keywords @('widget')
+        $r.Classifications['NoRet_CL'].RecommendedRetentionDays | Should -Be 90
+        $r.CustomEntries | Should -Be 1
+        (Test-ClassificationKeywordMatch -Entry ([PSCustomObject]@{ tableName = 'T'; connector = 'C'; description = 'Acme widget telemetry'; keywords = @() }) -Keyword 'widget') | Should -BeTrue
+        (Test-ClassificationKeywordMatch -Entry ([PSCustomObject]@{ tableName = 'T'; connector = 'Acme Cloud'; description = 'x'; keywords = @() }) -Keyword 'acme') | Should -BeTrue
+    }
+
+    It 'ConvertTo-ValidClassificationEntry passes valid lifecycle keys through and warns on a bad status' {
+        $ok = ConvertTo-ValidClassificationEntry -Entry ([PSCustomObject]@{ tableName = 'Old_CL'; classification = 'primary'; status = 'Legacy'; replacedBy = @('New_CL', ''); platform = 'true'; xdrStreamable = $false })
+        $ok.status | Should -Be 'legacy'
+        $ok.replacedBy | Should -Be @('New_CL')
+        $ok.platform | Should -BeTrue
+        $ok.xdrStreamable | Should -BeFalse
+
+        $plain = ConvertTo-ValidClassificationEntry -Entry ([PSCustomObject]@{ tableName = 'P_CL'; classification = 'primary' })
+        $plain.PSObject.Properties.Name | Should -Not -Contain 'status'
+        $plain.PSObject.Properties.Name | Should -Not -Contain 'replacedBy'
+        $plain.PSObject.Properties.Name | Should -Not -Contain 'platform'
+
+        $bad = ConvertTo-ValidClassificationEntry -Entry ([PSCustomObject]@{ tableName = 'B_CL'; classification = 'primary'; status = 'retired' }) -WarningVariable w -WarningAction SilentlyContinue
+        $bad.PSObject.Properties.Name | Should -Not -Contain 'status'
+        "$w" | Should -Match 'status must be deprecated or legacy'
+    }
+
+    It 'parses string booleans instead of casting them and normalises the tier' {
+        $e = ConvertTo-ValidClassificationEntry -Entry ([PSCustomObject]@{ tableName = 'S_CL'; classification = 'secondary'; isFree = 'false'; platform = 'False'; xdrStreamable = 'maybe'; recommendedTier = 'Auxiliary' })
+        $e.isFree | Should -BeFalse
+        $e.platform | Should -BeFalse
+        $e.PSObject.Properties.Name | Should -Not -Contain 'xdrStreamable'
+        $e.recommendedTier | Should -Be 'datalake'
+
+        $t = ConvertTo-ValidClassificationEntry -Entry ([PSCustomObject]@{ tableName = 'T_CL'; classification = 'secondary'; recommendedTier = 'hot' }) -WarningVariable w -WarningAction SilentlyContinue
+        $t.recommendedTier | Should -Be 'analytics'
+        "$w" | Should -Match 'recommendedTier must be analytics or datalake'
+
+        ConvertTo-ClassificationBoolean -Value $null | Should -BeNullOrEmpty
+        ConvertTo-ClassificationBoolean -Value $true | Should -BeTrue
+        ConvertTo-ClassificationBoolean -Value ' TRUE ' | Should -BeTrue
+        ConvertTo-ClassificationBoolean -Value 'no' | Should -BeNullOrEmpty
+    }
+
+    It 'Get-TableStatusLabel and Get-TableNameMarkup render the lifecycle badge' {
+        Get-TableStatusLabel -Table ([PSCustomObject]@{ TableName = 'T'; Status = 'deprecated'; ReplacedBy = @('A', 'B') }) | Should -Be 'deprecated, use A, B'
+        Get-TableStatusLabel -Table ([PSCustomObject]@{ TableName = 'T'; Status = 'legacy'; ReplacedBy = @() }) | Should -Be 'legacy'
+        Get-TableStatusLabel -Table ([PSCustomObject]@{ TableName = 'T'; Status = $null }) | Should -BeNullOrEmpty
+        Get-TableStatusLabel -Table ([PSCustomObject]@{ TableName = 'T' }) | Should -BeNullOrEmpty
+        Get-TableStatusLabel -Table $null | Should -BeNullOrEmpty
+
+        Get-TableNameMarkup -Table ([PSCustomObject]@{ TableName = 'Okta_CL'; Status = 'deprecated'; ReplacedBy = @('OktaSSO') }) | Should -Be 'Okta_CL [orange3](deprecated)[/]'
+        Get-TableNameMarkup -Table ([PSCustomObject]@{ TableName = 'Plain[1]' }) | Should -Be 'Plain[[1]]'
+    }
+}
+
+Describe 'Invoke-Analysis lifecycle and XDR streamability' {
+    BeforeAll {
+        $script:lcRules = [PSCustomObject]@{ Rules = @(); TableCoverage = @{}; TotalRules = 0; EnabledRules = 0; DontCorrCount = 0; IncCorrCount = 0 }
+        $script:lcHunting = [PSCustomObject]@{ Queries = @(); TableCoverage = @{}; TotalQueries = 0 }
+    }
+
+    It 'raises a DeprecatedSource recommendation for deprecated and legacy tables that still ingest' {
+        $usage = @(
+            [PSCustomObject]@{ TableName = 'ThreatIntelligenceIndicator'; DataGB = 3; MonthlyGB = 1; EstMonthlyCostUSD = 5.59; IsFree = $false; IsFreeSource = 'usage' },
+            [PSCustomObject]@{ TableName = 'Update'; DataGB = 3; MonthlyGB = 1; EstMonthlyCostUSD = 5.59; IsFree = $false; IsFreeSource = 'usage' },
+            [PSCustomObject]@{ TableName = 'Fine'; DataGB = 3; MonthlyGB = 1; EstMonthlyCostUSD = 5.59; IsFree = $false; IsFreeSource = 'usage' }
+        )
+        $cls = [PSCustomObject]@{ Classifications = @{
+            'ThreatIntelligenceIndicator' = [PSCustomObject]@{ Classification = 'primary'; Category = 'Threat Intelligence'; RecommendedTier = 'analytics'; IsFree = $false; RecommendedRetentionDays = 365; Status = 'deprecated'; ReplacedBy = @('ThreatIntelIndicators', 'ThreatIntelObjects') }
+            'Update' = [PSCustomObject]@{ Classification = 'secondary'; Category = 'Configuration Management'; RecommendedTier = 'datalake'; IsFree = $false; RecommendedRetentionDays = 365; Status = 'legacy'; ReplacedBy = @() }
+            'Fine' = [PSCustomObject]@{ Classification = 'primary'; Category = 'X'; RecommendedTier = 'analytics'; IsFree = $false; RecommendedRetentionDays = 90 }
+        }; KeywordGaps = @(); DatabaseEntries = 3 }
+        $r = Invoke-Analysis -TableUsage $usage -Classifications $cls -RulesData $script:lcRules -HuntingData $script:lcHunting
+
+        $recs = @($r.Recommendations | Where-Object Type -eq 'DeprecatedSource')
+        $recs.Count | Should -Be 2
+        $ti = $recs | Where-Object TableName -eq 'ThreatIntelligenceIndicator'
+        $ti.Priority | Should -Be 'Medium'
+        $ti.Title | Should -Be 'ThreatIntelligenceIndicator is deprecated'
+        $ti.Detail | Should -Match 'Replacement table\(s\): ThreatIntelIndicators, ThreatIntelObjects'
+        $ti.Detail | Should -Match '5\.59/mo'
+        $ti.EstSavingsUSD | Should -Be 0
+        $ti.CurrentCost | Should -Be 5.59
+        $up = $recs | Where-Object TableName -eq 'Update'
+        $up.Title | Should -Match 'legacy collection path'
+        $up.Detail | Should -Match 'No direct replacement table'
+        ($r.TableAnalysis | Where-Object TableName -eq 'ThreatIntelligenceIndicator').Status | Should -Be 'deprecated'
+        ($r.TableAnalysis | Where-Object TableName -eq 'Fine').Status | Should -BeNullOrEmpty
+        @($r.Recommendations | Where-Object { $_.Type -eq 'DeprecatedSource' -and $_.TableName -eq 'Fine' }).Count | Should -Be 0
+    }
+
+    It 'treats a table as platform when the classification says so even if the implicit map does not' {
+        $usage = @([PSCustomObject]@{ TableName = 'Usage'; DataGB = 0.3; MonthlyGB = 0.1; EstMonthlyCostUSD = 0.56; IsFree = $false; IsFreeSource = 'usage' })
+        $cls = [PSCustomObject]@{ Classifications = @{ 'Usage' = [PSCustomObject]@{ Classification = 'secondary'; Category = 'Platform Health'; RecommendedTier = 'analytics'; IsFree = $false; RecommendedRetentionDays = 90; IsPlatform = $true } }; KeywordGaps = @(); DatabaseEntries = 1 }
+        $r = Invoke-Analysis -TableUsage $usage -Classifications $cls -RulesData $script:lcRules -HuntingData $script:lcHunting
+        $row = $r.TableAnalysis | Where-Object TableName -eq 'Usage'
+        $row.IsPlatform | Should -BeTrue
+        $row.Assessment | Should -Be 'Platform'
+        $row.CoverageSource | Should -Be 'platform'
+    }
+
+    It 'drops xdrStreamable=false tables from the XDR streaming set so they are never flagged by the XDR Checker' {
+        $usage = @(
+            [PSCustomObject]@{ TableName = 'DeviceTvmSoftwareInventory'; DataGB = 3; MonthlyGB = 1; EstMonthlyCostUSD = 5.59; IsFree = $false; IsFreeSource = 'usage' },
+            [PSCustomObject]@{ TableName = 'DeviceInfo'; DataGB = 3; MonthlyGB = 1; EstMonthlyCostUSD = 5.59; IsFree = $false; IsFreeSource = 'usage' }
+        )
+        $cls = [PSCustomObject]@{ Classifications = @{
+            'DeviceTvmSoftwareInventory' = [PSCustomObject]@{ Classification = 'secondary'; Category = 'Vulnerability Management'; RecommendedTier = 'datalake'; IsFree = $false; RecommendedRetentionDays = 365; XdrStreamable = $false }
+            'DeviceInfo' = [PSCustomObject]@{ Classification = 'secondary'; Category = 'Endpoint Telemetry'; RecommendedTier = 'analytics'; IsFree = $false; RecommendedRetentionDays = 180; XdrStreamable = $true }
+        }; KeywordGaps = @(); DatabaseEntries = 2 }
+        $xdr = [PSCustomObject]@{ TotalXDRRules = 0; XDRTableCoverage = @{}; KnownXDRTables = @('DeviceTvmSoftwareInventory', 'DeviceInfo', 'EmailEvents'); CustomRules = @() }
+        $ret = @([PSCustomObject]@{ TableName = 'DeviceInfo'; Plan = 'Analytics'; RetentionInDays = 90; TotalRetentionInDays = 90; ArchiveRetentionInDays = 0 })
+        $r = Invoke-Analysis -TableUsage $usage -Classifications $cls -RulesData $script:lcRules -HuntingData $script:lcHunting -DefenderXDR $xdr -TableRetention $ret
+
+        ($r.TableAnalysis | Where-Object TableName -eq 'DeviceTvmSoftwareInventory').IsXDRStreaming | Should -BeFalse
+        ($r.TableAnalysis | Where-Object TableName -eq 'DeviceTvmSoftwareInventory').XDRState | Should -BeNullOrEmpty
+        ($r.TableAnalysis | Where-Object TableName -eq 'DeviceInfo').IsXDRStreaming | Should -BeTrue
+        @($r.XdrChecker.Findings | Where-Object TableName -eq 'DeviceTvmSoftwareInventory').Count | Should -Be 0
+        @($r.XdrChecker.Findings | Where-Object { $_.Type -eq 'NotStreaming' -and $_.TableName -eq 'EmailEvents' }).Count | Should -Be 1
     }
 }
 
@@ -1185,6 +1770,446 @@ Describe 'Get-TransformType' {
     It 'returns Custom for unrecognized transforms' {
         $result = Get-TransformType -KQL 'source | take 100'
         $result | Should -Be 'Custom'
+    }
+
+    It 'labels multi-operation transforms in order of appearance' {
+        Get-TransformType -KQL 'source | where EventID == 4624 | project-away RawData' | Should -Be 'Filter+ColumnRemoval'
+        Get-TransformType -KQL 'source | extend X = 1 | where X == 1' | Should -Be 'Enrichment+Filter'
+        Get-TransformType -KQL 'source | where A == 1 | project A, B' | Should -Be 'Filter+Projection'
+        Get-TransformType -KQL '' | Should -Be 'Custom'
+    }
+
+    It 'lists operations as an array' {
+        @(Get-TransformOperation -KQL 'source | where A == 1 | summarize count() by A') | Should -Be @('Filter', 'Aggregation')
+        @(Get-TransformOperation -KQL $null).Count | Should -Be 0
+    }
+}
+
+Describe 'Get-DataTransforms discovery' {
+    BeforeAll {
+        $script:dtCtx = [PSCustomObject]@{
+            ArmToken       = 'tok'
+            SubscriptionId = 'sub1'
+            ResourceGroup  = 'rg1'
+            ResourceId     = '/subscriptions/sub1/resourceGroups/rg1/providers/Microsoft.OperationalInsights/workspaces/ws1'
+        }
+        $script:wsId = $script:dtCtx.ResourceId
+
+        function New-Dcr {
+            param($Id, $Name, $Flows, $Kind = $null, $Transformations = $null, $WorkspaceResourceId = $script:wsId)
+            $props = [PSCustomObject]@{
+                dataFlows    = $Flows
+                destinations = [PSCustomObject]@{ logAnalytics = @([PSCustomObject]@{ name = 'la'; workspaceResourceId = $WorkspaceResourceId }) }
+            }
+            if ($Transformations) { $props | Add-Member -NotePropertyName transformations -NotePropertyValue $Transformations }
+            [PSCustomObject]@{ id = $Id; name = $Name; location = 'westeurope'; kind = $Kind; properties = $props }
+        }
+
+        $script:subDcr = New-Dcr -Id '/subscriptions/sub1/resourceGroups/other/providers/Microsoft.Insights/dataCollectionRules/agent-dcr' -Name 'agent-dcr' -Flows @(
+            [PSCustomObject]@{ streams = @('Microsoft-SecurityEvent'); destinations = @('la'); transformKql = 'source | where EventID != 4688'; outputStream = 'Microsoft-SecurityEvent' }
+        )
+        $script:otherWsDcr = New-Dcr -Id '/subscriptions/sub1/resourceGroups/other/providers/Microsoft.Insights/dataCollectionRules/elsewhere' -Name 'elsewhere' -WorkspaceResourceId '/subscriptions/sub1/resourceGroups/x/providers/Microsoft.OperationalInsights/workspaces/OTHER' -Flows @(
+            [PSCustomObject]@{ streams = @('Microsoft-Syslog'); destinations = @('la'); transformKql = 'source | where Facility == "auth"'; outputStream = 'Microsoft-Syslog' }
+        )
+        $script:wsTransformDcr = New-Dcr -Id '/subscriptions/sub1/resourceGroups/rg1/providers/Microsoft.Insights/dataCollectionRules/ws-transform' -Name 'ws-transform' -Kind 'WorkspaceTransforms' -Flows @(
+            [PSCustomObject]@{ streams = @('Microsoft-Table-SigninLogs'); destinations = @('la'); transformKql = 'source | project-away AuthenticationDetails' },
+            [PSCustomObject]@{ streams = @('Microsoft-Table-AuditLogs'); destinations = @('la'); transformKql = 'source' }
+        )
+        $script:multiStageDcr = New-Dcr -Id '/subscriptions/sub1/resourceGroups/rg1/providers/Microsoft.Insights/dataCollectionRules/multi' -Name 'multi' -Flows @(
+            [PSCustomObject]@{ streams = @('Custom-MyApp_CL'); destinations = @('la'); transform = 'stage1'; outputStream = 'Custom-MyApp_CL' }
+        ) -Transformations @(
+            [PSCustomObject]@{ name = 'stage1'; processors = @(
+                [PSCustomObject]@{ processor = 'transform.KQL'; configuration = [PSCustomObject]@{ expression = 'source | where Level != "Debug"' } },
+                [PSCustomObject]@{ processor = 'something.else'; configuration = [PSCustomObject]@{ foo = 1 } },
+                [PSCustomObject]@{ processor = 'transform.KQL'; configuration = [PSCustomObject]@{ transformKql = 'source | extend Env = "prod"' } }
+            ) }
+        )
+    }
+
+    It 'lists at subscription scope, filters on destination workspace, adds the default DCR and associations, and dedupes' {
+        Mock Invoke-AzRestWithRetry {
+            switch -Wildcard ($Uri) {
+                '*/subscriptions/sub1/providers/Microsoft.Insights/dataCollectionRules`?*' { return [PSCustomObject]@{ value = @($script:subDcr, $script:otherWsDcr) } }
+                '*/dataCollectionRules/ws-transform`?*' { return $script:wsTransformDcr }
+                '*/dataCollectionRuleAssociations`?*' { return [PSCustomObject]@{ value = @(
+                    [PSCustomObject]@{ properties = [PSCustomObject]@{ dataCollectionRuleId = $script:wsTransformDcr.id } },
+                    [PSCustomObject]@{ properties = [PSCustomObject]@{ dataCollectionRuleId = $script:multiStageDcr.id } }
+                ) } }
+                '*/dataCollectionRules/multi`?*' { return $script:multiStageDcr }
+                default { throw "unexpected $Uri" }
+            }
+        }
+
+        $result = Get-DataTransforms -Context $script:dtCtx -WorkspaceDefaultDcrId $script:wsTransformDcr.id
+
+        $result.TotalDCRs | Should -Be 3
+        $result.DiscoveryStatus.SubscriptionList | Should -Match 'Succeeded \(1 matching\)'
+        $result.DiscoveryStatus.ResourceGroupList | Should -Be 'NotAttempted'
+        $result.DiscoveryStatus.DefaultDcr | Should -Be 'Succeeded'
+        $result.DiscoveryStatus.Associations | Should -Match '2 association'
+        $result.DiscoveryStatus.Errors.Count | Should -Be 0
+        # ws-transform came from the default id, so associations only fetched multi
+        Should -Invoke Invoke-AzRestWithRetry -Times 1 -ParameterFilter { $Uri -like '*/dataCollectionRules/ws-transform`?*' }
+        $result.Transforms.Count | Should -Be 3
+        $result.TableLookup.Keys | Should -Contain 'SecurityEvent'
+        $result.TableLookup.Keys | Should -Contain 'SigninLogs'
+        $result.TableLookup.Keys | Should -Contain 'MyApp_CL'
+        $result.TableLookup.Keys | Should -Not -Contain 'Syslog'
+        $result.TableLookup.Keys | Should -Not -Contain 'AuditLogs'
+    }
+
+    It 'parses workspace transformation DCRs without outputStream and strips Microsoft-Table-' {
+        Mock Invoke-AzRestWithRetry {
+            switch -Wildcard ($Uri) {
+                '*/subscriptions/sub1/providers/Microsoft.Insights/dataCollectionRules`?*' { return [PSCustomObject]@{ value = @($script:wsTransformDcr) } }
+                '*/dataCollectionRuleAssociations`?*' { return [PSCustomObject]@{ value = @() } }
+                default { throw "unexpected $Uri" }
+            }
+        }
+        $result = Get-DataTransforms -Context $script:dtCtx
+        $t = $result.Transforms[0]
+        $t.OutputTable | Should -Be 'SigninLogs'
+        $t.InputStreams | Should -Be @('SigninLogs')
+        $t.TransformType | Should -Be 'ColumnRemoval'
+        $t.DCRKind | Should -Be 'WorkspaceTransforms'
+        $result.RelevantDCRs[0].Kind | Should -Be 'WorkspaceTransforms'
+        $result.DiscoveryStatus.DefaultDcr | Should -Be 'NotConfigured'
+    }
+
+    It 'resolves multi-stage transformations referenced by name' {
+        Mock Invoke-AzRestWithRetry {
+            switch -Wildcard ($Uri) {
+                '*/subscriptions/sub1/providers/Microsoft.Insights/dataCollectionRules`?*' { return [PSCustomObject]@{ value = @($script:multiStageDcr) } }
+                '*/dataCollectionRuleAssociations`?*' { return [PSCustomObject]@{ value = @() } }
+                default { throw "unexpected $Uri" }
+            }
+        }
+        $result = Get-DataTransforms -Context $script:dtCtx
+        $t = $result.Transforms[0]
+        $t.OutputTable | Should -Be 'MyApp_CL'
+        $t.TransformKql | Should -Match 'Level != "Debug"'
+        $t.TransformKql | Should -Match 'Env = "prod"'
+        $t.TransformType | Should -Be 'Filter+Enrichment'
+        $t.Operations | Should -Be @('Filter', 'Enrichment')
+    }
+
+    It 'falls back to resource-group scope when the subscription list is denied' {
+        Mock Invoke-AzRestWithRetry {
+            switch -Wildcard ($Uri) {
+                '*/subscriptions/sub1/providers/Microsoft.Insights/dataCollectionRules`?*' { throw 'Response status code does not indicate success: 403 (Forbidden).' }
+                '*/resourceGroups/rg1/providers/Microsoft.Insights/dataCollectionRules`?*' { return [PSCustomObject]@{ value = @($script:subDcr) } }
+                '*/dataCollectionRuleAssociations`?*' { return [PSCustomObject]@{ value = @() } }
+                default { throw "unexpected $Uri" }
+            }
+        }
+        $result = Get-DataTransforms -Context $script:dtCtx -WarningVariable w -WarningAction SilentlyContinue
+        $result.TotalDCRs | Should -Be 1
+        $result.DiscoveryStatus.SubscriptionList | Should -Be 'Failed'
+        $result.DiscoveryStatus.ResourceGroupList | Should -Match 'Succeeded'
+        $result.DiscoveryStatus.Errors.Count | Should -Be 1
+        @($w).Count | Should -Be 0
+    }
+
+    It 'warns but still returns association-discovered DCRs when every list is denied' {
+        Mock Invoke-AzRestWithRetry {
+            switch -Wildcard ($Uri) {
+                '*/dataCollectionRules`?*' { throw 'Response status code does not indicate success: 403 (Forbidden).' }
+                '*/dataCollectionRuleAssociations`?*' { return [PSCustomObject]@{ value = @([PSCustomObject]@{ properties = [PSCustomObject]@{ dataCollectionRuleId = $script:wsTransformDcr.id } }) } }
+                '*/dataCollectionRules/ws-transform`?*' { return $script:wsTransformDcr }
+                default { throw "unexpected $Uri" }
+            }
+        }
+        $result = Get-DataTransforms -Context $script:dtCtx -WarningVariable w -WarningAction SilentlyContinue
+        $result.TotalDCRs | Should -Be 1
+        "$w" | Should -Match 'DCR listing was denied'
+        $result.DiscoveryStatus.Errors.Count | Should -Be 2
+    }
+
+    It 'warns with the required permission when every route fails, and records per-DCR fetch errors' {
+        Mock Invoke-AzRestWithRetry {
+            switch -Wildcard ($Uri) {
+                '*/dataCollectionRules`?*' { throw 'Response status code does not indicate success: 403 (Forbidden).' }
+                '*/dataCollectionRules/ws-transform`?*' { throw 'Response status code does not indicate success: 404 (Not Found).' }
+                '*/dataCollectionRuleAssociations`?*' { throw 'Response status code does not indicate success: 400 (Bad Request).' }
+                default { throw "unexpected $Uri" }
+            }
+        }
+        $result = Get-DataTransforms -Context $script:dtCtx -WorkspaceDefaultDcrId $script:wsTransformDcr.id -WarningVariable w -WarningAction SilentlyContinue
+        $result.TotalDCRs | Should -Be 0
+        $result.Transforms.Count | Should -Be 0
+        $result.DiscoveryStatus.DefaultDcr | Should -Be 'Failed'
+        $result.DiscoveryStatus.Associations | Should -Be 'Failed'
+        "$w" | Should -Match 'Microsoft.Insights/dataCollectionRules/read'
+        "$w" | Should -Match 'transformation DCR'
+    }
+
+    It 'records an error for an associated DCR that cannot be read but keeps the others' {
+        Mock Invoke-AzRestWithRetry {
+            switch -Wildcard ($Uri) {
+                '*/subscriptions/sub1/providers/Microsoft.Insights/dataCollectionRules`?*' { return [PSCustomObject]@{ value = @() } }
+                '*/dataCollectionRuleAssociations`?*' { return [PSCustomObject]@{ value = @(
+                    [PSCustomObject]@{ properties = [PSCustomObject]@{ dataCollectionRuleId = $script:multiStageDcr.id } },
+                    [PSCustomObject]@{ properties = [PSCustomObject]@{ dataCollectionRuleId = '/subscriptions/sub1/resourceGroups/rg1/providers/Microsoft.Insights/dataCollectionRules/gone' } },
+                    [PSCustomObject]@{ properties = [PSCustomObject]@{ dataCollectionRuleId = '' } }
+                ) } }
+                '*/dataCollectionRules/multi`?*' { return $script:multiStageDcr }
+                '*/dataCollectionRules/gone`?*' { throw 'Response status code does not indicate success: 404 (Not Found).' }
+                default { throw "unexpected $Uri" }
+            }
+        }
+        $result = Get-DataTransforms -Context $script:dtCtx
+        $result.TotalDCRs | Should -Be 1
+        $result.DiscoveryStatus.Errors.Count | Should -Be 1
+        $result.DiscoveryStatus.Errors[0] | Should -Match 'gone'
+    }
+}
+
+Describe 'Get-DataTransforms helpers' {
+    It 'strips every stream prefix' {
+        ConvertTo-DcrTableName -Stream 'Microsoft-Table-SigninLogs' | Should -Be 'SigninLogs'
+        ConvertTo-DcrTableName -Stream 'Microsoft-SecurityEvent' | Should -Be 'SecurityEvent'
+        ConvertTo-DcrTableName -Stream 'Custom-MyApp_CL' | Should -Be 'MyApp_CL'
+        ConvertTo-DcrTableName -Stream 'Plain' | Should -Be 'Plain'
+        ConvertTo-DcrTableName -Stream '' | Should -BeNullOrEmpty
+    }
+
+    It 'matches the workspace destination case-insensitively and rejects others' {
+        $ws = '/subscriptions/S/resourceGroups/RG/providers/Microsoft.OperationalInsights/workspaces/WS'
+        $dcr = [PSCustomObject]@{ properties = [PSCustomObject]@{ destinations = [PSCustomObject]@{ logAnalytics = @([PSCustomObject]@{ workspaceResourceId = $ws.ToLower() }) } } }
+        Test-DcrTargetsWorkspace -Dcr $dcr -WorkspaceResourceId $ws | Should -Be $true
+        Test-DcrTargetsWorkspace -Dcr $dcr -WorkspaceResourceId "$ws-other" | Should -Be $false
+        Test-DcrTargetsWorkspace -Dcr ([PSCustomObject]@{ properties = [PSCustomObject]@{ destinations = $null } }) -WorkspaceResourceId $ws | Should -Be $false
+    }
+
+    It 'resolves flow KQL from inline, named multi-stage, or nothing' {
+        $props = [PSCustomObject]@{ transformations = @([PSCustomObject]@{ name = 's'; processors = @([PSCustomObject]@{ processor = 'transform.KQL'; configuration = [PSCustomObject]@{ expression = 'source | where A == 1' } }) }) }
+        Resolve-DcrFlowTransformKql -Flow ([PSCustomObject]@{ transformKql = 'source | take 1' }) -Properties $props | Should -Be 'source | take 1'
+        Resolve-DcrFlowTransformKql -Flow ([PSCustomObject]@{ transform = 's' }) -Properties $props | Should -Be 'source | where A == 1'
+        Resolve-DcrFlowTransformKql -Flow ([PSCustomObject]@{ transform = 'missing' }) -Properties $props | Should -BeNullOrEmpty
+        Resolve-DcrFlowTransformKql -Flow ([PSCustomObject]@{ streams = @('x') }) -Properties $props | Should -BeNullOrEmpty
+        Resolve-DcrFlowTransformKql -Flow ([PSCustomObject]@{ transform = 's' }) -Properties ([PSCustomObject]@{}) | Should -BeNullOrEmpty
+        $noKql = [PSCustomObject]@{ transformations = @([PSCustomObject]@{ name = 's'; processors = @([PSCustomObject]@{ processor = 'other'; configuration = $null }, $null) }) }
+        Resolve-DcrFlowTransformKql -Flow ([PSCustomObject]@{ transform = 's' }) -Properties $noKql | Should -BeNullOrEmpty
+    }
+
+    It 'summarises ARM errors with code or message' {
+        $er = $null
+        try { throw 'Response status code does not indicate success: 403 (Forbidden).' } catch { $er = $_ }
+        Get-ArmErrorSummary -ErrorRecord $er | Should -Match 'Forbidden'
+        $long = 'x' * 200
+        try { throw $long } catch { $er = $_ }
+        (Get-ArmErrorSummary -ErrorRecord $er).Length | Should -Be 120
+    }
+
+    It 'pages an ARM list until nextLink is exhausted' {
+        Mock Invoke-AzRestWithRetry {
+            if ($Uri -like '*page2*') { return [PSCustomObject]@{ value = @(3) } }
+            [PSCustomObject]@{ value = @(1, 2); nextLink = 'https://example/page2' }
+        }
+        @(Get-ArmListPage -Uri 'https://example/page1' -Headers @{}) | Should -Be @(1, 2, 3)
+    }
+
+    It 'stops paging at the cap with a warning' {
+        Mock Invoke-AzRestWithRetry { [PSCustomObject]@{ value = @(1); nextLink = 'https://example/again' } }
+        $items = @(Get-ArmListPage -Uri 'https://example/page1' -Headers @{} -MaxPages 3 -WarningVariable w -WarningAction SilentlyContinue)
+        $items.Count | Should -Be 3
+        "$w" | Should -Match 'Pagination limit'
+    }
+
+    It 'extracts where conditions across lines with a length window' {
+        $kql = "T`n| where A == 1`n   and B == 2`n| where short`n| project A"
+        $conds = @(Get-KqlWhereCondition -Kql $kql)
+        $conds | Should -Be @('A == 1 and B == 2')
+        @(Get-KqlWhereCondition -Kql '').Count | Should -Be 0
+    }
+}
+
+Describe 'Get-SplitKql schema intersection' {
+    BeforeAll {
+        $script:hvTI = @{
+            'ThreatIntelIndicators' = [PSCustomObject]@{
+                description     = 'TI'
+                highValueFields = @('TimeGenerated', 'ObservableValue', 'IndicatorType', 'NetworkSourceIP', 'Confidence')
+                splitHints      = @([PSCustomObject]@{ description = 'active'; kql = 'IsActive == true' })
+            }
+        }
+        $script:tiSchema = @('TimeGenerated', 'ObservableKey', 'ObservableValue', 'Confidence', 'IsActive', 'Pattern')
+    }
+
+    It 'drops candidate fields that are not in the live schema and reports them' {
+        $rules = @([PSCustomObject]@{ RuleName = 'r'; Enabled = $true; Tables = @('ThreatIntelIndicators'); Query = 'ThreatIntelIndicators | where Confidence > 50 | project ObservableValue, LegacyUrl' })
+        $result = Get-SplitKql -TableName 'ThreatIntelIndicators' -Rules $rules -HighValueFieldsDB $script:hvTI -SchemaColumns $script:tiSchema
+
+        $result.AllFields | Should -Be @('Confidence', 'ObservableValue', 'TimeGenerated')
+        $result.DroppedFields | Should -Contain 'IndicatorType'
+        $result.DroppedFields | Should -Contain 'NetworkSourceIP'
+        $result.DroppedFields | Should -Contain 'LegacyUrl'
+        $result.ProjectKql | Should -Not -Match 'IndicatorType'
+        $result.ProjectKql | Should -Match 'ObservableValue'
+    }
+
+    It 'keeps every field when no schema is supplied' {
+        $result = Get-SplitKql -TableName 'ThreatIntelIndicators' -HighValueFieldsDB $script:hvTI
+        $result.AllFields | Should -Contain 'IndicatorType'
+        $result.DroppedFields.Count | Should -Be 0
+    }
+
+    It 'appends distinct rule conditions to the knowledge-base hint and labels the result combined' {
+        $rules = @([PSCustomObject]@{ RuleName = 'r'; Enabled = $true; Tables = @('ThreatIntelIndicators'); Query = 'ThreatIntelIndicators | where Confidence > 50 | where IsActive == true' })
+        $result = Get-SplitKql -TableName 'ThreatIntelIndicators' -Rules $rules -HighValueFieldsDB $script:hvTI
+        $result.Source | Should -Be 'combined'
+        $result.SplitKql | Should -Match '^\(IsActive == true\)'
+        $result.SplitKql | Should -Match 'or \(Confidence > 50\)'
+        # the duplicate of the hint itself is not appended twice
+        ([regex]::Matches($result.SplitKql, 'IsActive == true')).Count | Should -Be 1
+    }
+
+    It 'uses the pre-grouped rule subset passed from Invoke-Analysis' {
+        $rules = @(
+            [PSCustomObject]@{ RuleName = 'other'; Enabled = $true; Tables = @('Other'); Query = 'Other | where X == 1' },
+            [PSCustomObject]@{ RuleName = 'off'; Enabled = $false; Tables = @('ThreatIntelIndicators'); Query = 'ThreatIntelIndicators | where Y == 1' }
+        )
+        $result = Get-SplitKql -TableName 'ThreatIntelIndicators' -Rules $rules
+        $result.RuleCount | Should -Be 0
+        $result.Source | Should -Be 'none'
+    }
+
+    It 'drops rule conditions that reference columns outside the live schema and never appends them to the hint' {
+        $rules = @([PSCustomObject]@{ RuleName = 'r'; Enabled = $true; Tables = @('ThreatIntelIndicators'); Query = 'ThreatIntelIndicators | where Confidence > 50 | where JoinedTable_Field == "x" | where LegacyUrl has "evil"' })
+        $result = Get-SplitKql -TableName 'ThreatIntelIndicators' -Rules $rules -HighValueFieldsDB $script:hvTI -SchemaColumns $script:tiSchema
+
+        $result.Source | Should -Be 'combined'
+        $result.SplitKql | Should -Match 'Confidence > 50'
+        $result.SplitKql | Should -Not -Match 'JoinedTable_Field'
+        $result.SplitKql | Should -Not -Match 'LegacyUrl'
+        $result.DroppedConditions.Count | Should -Be 2
+        $result.ConditionCount | Should -Be 1
+    }
+
+    It 'falls back to rule-analysis only with schema-valid conditions and reports none when all are dropped' {
+        $rules = @([PSCustomObject]@{ RuleName = 'r'; Enabled = $true; Tables = @('Plain'); Query = 'Plain | where GhostColumn == 1 | where ResultType == 2' })
+        $withSchema = Get-SplitKql -TableName 'Plain' -Rules $rules -SchemaColumns @('TimeGenerated', 'ResultType')
+        $withSchema.Source | Should -Be 'rule-analysis'
+        $withSchema.SplitKql | Should -Be '(ResultType == 2)'
+        $withSchema.DroppedConditions | Should -Be @('GhostColumn == 1')
+
+        $allDropped = Get-SplitKql -TableName 'Plain' -Rules $rules -SchemaColumns @('TimeGenerated')
+        $allDropped.Source | Should -Be 'none'
+        $allDropped.SplitKql | Should -BeNullOrEmpty
+        $allDropped.DroppedConditions.Count | Should -Be 2
+    }
+
+    It 'Select-KqlConditionInSchema keeps everything without a schema and splits by referenced columns with one' {
+        $r = Select-KqlConditionInSchema -Conditions @('Alpha == 1', 'Beta == 2') -SchemaColumns @()
+        $r.Kept | Should -Be @('Alpha == 1', 'Beta == 2')
+        $r.Dropped.Count | Should -Be 0
+
+        $r = Select-KqlConditionInSchema -Conditions @('Alpha == 1 and Beta == 2', 'Gamma == 3', '') -SchemaColumns @('alpha', 'beta')
+        $r.Kept | Should -Be @('Alpha == 1 and Beta == 2')
+        $r.Dropped | Should -Be @('Gamma == 3')
+    }
+}
+
+Describe 'Get-LiveTuningAnalysis schema intersection' {
+    It 'removes rule fields absent from the schema from ProjectKql and reports DroppedFields' {
+        $rules = @([PSCustomObject]@{ RuleName = 'r'; Enabled = $true; Tables = @('SigninLogs'); Query = 'SigninLogs | where ResultType != 0 | project UserPrincipalName, csUserName' })
+        $schema = @{ 'SigninLogs' = @('TimeGenerated', 'ResultType', 'UserPrincipalName', 'IPAddress') }
+        $result = @(Get-LiveTuningAnalysis -Rules $rules -SchemaLookup $schema)
+        $result.Count | Should -Be 1
+        $result[0].DroppedFields | Should -Be @('csUserName')
+        $result[0].UsedFields | Should -Not -Contain 'csUserName'
+        $result[0].ProjectKql | Should -Not -Match 'csUserName'
+        $result[0].UnusedFields | Should -Be @('IPAddress')
+    }
+
+    It 'drops where conditions on columns the table does not have from FilterKql and reports DroppedConditions' {
+        $rules = @([PSCustomObject]@{ RuleName = 'r'; Enabled = $true; Tables = @('SigninLogs'); Query = 'SigninLogs | where ResultType != 0 | where csUserName == "x"' })
+        $schema = @{ 'SigninLogs' = @('TimeGenerated', 'ResultType', 'UserPrincipalName') }
+        $result = @(Get-LiveTuningAnalysis -Rules $rules -SchemaLookup $schema)
+        $result[0].FilterKql | Should -Be '(ResultType != 0)'
+        $result[0].DroppedConditions | Should -Be @('csUserName == "x"')
+        $result[0].ConditionCount | Should -Be 1
+    }
+
+    It 'builds filter-only and project-only combined KQL and resolves rule names from hunting queries' {
+        $rules = @(
+            [PSCustomObject]@{ Enabled = $true; Tables = @('OnlyWhere'); Query = 'OnlyWhere | where 1 == 1' },
+            [PSCustomObject]@{ DisplayName = 'disp'; Enabled = $true; Tables = @('OnlyProject'); Query = 'OnlyProject | project Alpha, Beta' },
+            [PSCustomObject]@{ Enabled = $true; Tables = $null; Query = 'X | take 1' }
+        )
+        $hunting = @([PSCustomObject]@{ QueryName = 'hunt'; Enabled = $true; Tables = @('OnlyProject'); Query = 'OnlyProject | project Gamma' })
+        $result = @(Get-LiveTuningAnalysis -Rules $rules -HuntingQueries $hunting)
+        $onlyWhere = $result | Where-Object TableName -eq 'OnlyWhere'
+        $onlyWhere.CombinedKql | Should -Be "source`n| where (1 == 1)"
+        $onlyWhere.ProjectKql | Should -BeNullOrEmpty
+        $onlyWhere.RuleDetails[0].RuleName | Should -Be 'Unknown'
+        $onlyProject = $result | Where-Object TableName -eq 'OnlyProject'
+        $onlyProject.ProjectKql | Should -Match 'Alpha, Beta, Gamma, TimeGenerated'
+        $onlyProject.CombinedKql | Should -Be $onlyProject.ProjectKql
+        ($onlyProject.RuleDetails | ForEach-Object RuleName) | Should -Be @('disp', 'hunt')
+    }
+}
+
+Describe 'Get-ArmErrorSummary detail parsing' {
+    It 'prefers the error code from a JSON error body' {
+        $er = $null
+        try { throw 'HTTP failure' } catch { $er = $_ }
+        $er.ErrorDetails = [System.Management.Automation.ErrorDetails]::new('{"error":{"code":"AuthorizationFailed","message":"no"}}')
+        Get-ArmErrorSummary -ErrorRecord $er | Should -Be 'AuthorizationFailed'
+    }
+
+    It 'includes the HTTP status when a response is attached' {
+        $resp = [System.Net.Http.HttpResponseMessage]::new([System.Net.HttpStatusCode]::Forbidden)
+        $ex = [Microsoft.PowerShell.Commands.HttpResponseException]::new('Response status code does not indicate success: 403 (Forbidden).', $resp)
+        $er = [System.Management.Automation.ErrorRecord]::new($ex, 'x', 'InvalidOperation', $null)
+        $er.ErrorDetails = [System.Management.Automation.ErrorDetails]::new('{"error":{"code":"AuthorizationFailed"}}')
+        Get-ArmErrorSummary -ErrorRecord $er | Should -Be 'HTTP 403 AuthorizationFailed'
+        $resp.Dispose()
+    }
+}
+
+Describe 'Get-TableRetention collector' {
+    It 'captures AsDefault flags, table type, plan-modified date, columns and the default DCR id' {
+        Mock Invoke-AzRestWithRetry {
+            if ($Uri -like '*/tables?*') {
+                return [PSCustomObject]@{ value = @(
+                    [PSCustomObject]@{ name = 'SigninLogs'; properties = [PSCustomObject]@{ plan = 'Analytics'; retentionInDays = 90; totalRetentionInDays = 90; archiveRetentionInDays = 0; retentionInDaysAsDefault = $true; totalRetentionInDaysAsDefault = $true; provisioningState = 'Succeeded'; tableSubType = 'Any'; lastPlanModifiedDate = '2026-01-02T00:00:00Z'; schema = [PSCustomObject]@{ tableType = 'Microsoft'; columns = @([PSCustomObject]@{ name = 'UserPrincipalName'; isHidden = $false }, [PSCustomObject]@{ name = 'Secret'; isHidden = $true }); standardColumns = @([PSCustomObject]@{ name = 'TimeGenerated'; isHidden = $false }) } } },
+                    [PSCustomObject]@{ name = 'Hunt_SRCH'; properties = [PSCustomObject]@{ plan = 'Analytics'; retentionInDays = 30; totalRetentionInDays = 365; archiveRetentionInDays = 335; retentionInDaysAsDefault = $false; totalRetentionInDaysAsDefault = $false; schema = [PSCustomObject]@{ tableType = 'SearchResults'; columns = @(); standardColumns = @() } } },
+                    [PSCustomObject]@{ name = 'NoSchema'; properties = [PSCustomObject]@{ plan = 'Basic' } }
+                ) }
+            }
+            [PSCustomObject]@{ properties = [PSCustomObject]@{ retentionInDays = 90; defaultDataCollectionRuleResourceId = '/subscriptions/s/resourceGroups/rg/providers/Microsoft.Insights/dataCollectionRules/ws-dcr' } }
+        }
+        $ctx = [PSCustomObject]@{ ArmToken = 'tok'; ResourceId = '/subscriptions/s/resourceGroups/rg/providers/Microsoft.OperationalInsights/workspaces/ws' }
+
+        $result = Get-TableRetention -Context $ctx
+
+        $result.WorkspaceRetentionDays | Should -Be 90
+        $result.WorkspaceDefaultDcrId | Should -Match 'ws-dcr$'
+        $result.Tables.Count | Should -Be 3
+        $signin = $result.Tables | Where-Object TableName -eq 'SigninLogs'
+        $signin.RetentionInDaysAsDefault | Should -Be $true
+        $signin.TotalRetentionInDaysAsDefault | Should -Be $true
+        $signin.TableType | Should -Be 'Microsoft'
+        $signin.LastPlanModifiedDate | Should -Be '2026-01-02T00:00:00Z'
+        $signin.Columns | Should -Be @('TimeGenerated', 'UserPrincipalName')
+        ($result.Tables | Where-Object TableName -eq 'Hunt_SRCH').TableType | Should -Be 'SearchResults'
+        $noSchema = $result.Tables | Where-Object TableName -eq 'NoSchema'
+        $noSchema.TableType | Should -BeNullOrEmpty
+        $noSchema.RetentionInDays | Should -BeNullOrEmpty
+        $noSchema.RetentionInDaysAsDefault | Should -Be $false
+        $noSchema.LastPlanModifiedDate | Should -BeNullOrEmpty
+    }
+
+    It 'returns a null default DCR id when the workspace has none' {
+        Mock Invoke-AzRestWithRetry {
+            if ($Uri -like '*/tables?*') { return [PSCustomObject]@{ value = @() } }
+            [PSCustomObject]@{ properties = [PSCustomObject]@{ retentionInDays = 30 } }
+        }
+        $ctx = [PSCustomObject]@{ ArmToken = 'tok'; ResourceId = '/subscriptions/s/resourceGroups/rg/providers/Microsoft.OperationalInsights/workspaces/ws' }
+        $result = Get-TableRetention -Context $ctx
+        $result.WorkspaceDefaultDcrId | Should -BeNullOrEmpty
+        $result.Tables.Count | Should -Be 0
     }
 }
 
@@ -1982,6 +3007,36 @@ Describe 'Get-AutomationRules Resolved status and Boolean conditions' {
         $rules[0].IsCloseIncidentRule | Should -Be $true
     }
 
+    It 'does not carry the raw API object or assigned-owner identities into the rule model' {
+        $mockResponse = @{
+            value = @(
+                @{
+                    name = 'ar-owner-1'
+                    properties = @{
+                        displayName = 'Assign and close'
+                        isEnabled = $true
+                        order = 1
+                        createdBy = @{ userPrincipalName = 'admin@contoso.com'; email = 'admin@contoso.com' }
+                        lastModifiedBy = @{ userPrincipalName = 'admin@contoso.com' }
+                        triggeringLogic = @{ triggersOn = 'Incidents'; triggersWhen = 'Created'; conditions = @() }
+                        actions = @(
+                            @{ order = 1; actionType = 'ModifyProperties'; actionConfiguration = @{ owner = @{ userPrincipalName = 'analyst@contoso.com'; assignedTo = 'Analyst' } } },
+                            @{ order = 2; actionType = 'ModifyProperties'; actionConfiguration = @{ status = 'Closed' } }
+                        )
+                    }
+                }
+            )
+        }
+        Mock Invoke-AzRestWithRetry { $mockResponse }
+        $ctx = [PSCustomObject]@{ ArmToken = 'fake'; ResourceId = '/subscriptions/xxx/resourceGroups/rg/providers/Microsoft.OperationalInsights/workspaces/ws' }
+        $rules = @(Get-AutomationRules -Context $ctx)
+        $rules[0].PSObject.Properties.Name | Should -Not -Contain 'Raw'
+        $rules[0].IsCloseIncidentRule | Should -Be $true
+        $rules[0].Actions.Count | Should -Be 2
+        ($rules[0] | ConvertTo-Json -Depth 6) | Should -Not -Match 'contoso\.com|assignedTo'
+        $rules[0].Actions[1].status | Should -Be 'Closed'
+    }
+
     It 'extracts title filter from Boolean wrapper conditions' {
         $mockResponse = @{
             value = @(
@@ -2031,6 +3086,725 @@ Describe 'Get-AutomationRules Resolved status and Boolean conditions' {
         $rules[0].TitleOperators | Should -Contain 'Contains'
         $rules[0].IsCloseIncidentRule | Should -Be $true
         $rules[0].HasConditions | Should -Be $true
+    }
+
+    It 'keeps title filters and operators aligned when the same value appears with two operators' {
+        $mockResponse = @{
+            value = @(
+                @{
+                    name = 'ar-pairs-1'
+                    properties = @{
+                        displayName = 'Pair rule'
+                        isEnabled = $true
+                        order = 1
+                        triggeringLogic = @{
+                            triggersOn = 'Incidents'; triggersWhen = 'Created'
+                            conditions = @(
+                                @{ conditionType = 'Property'; conditionProperties = @{ propertyName = 'IncidentTitle'; operator = 'Contains'; propertyValues = @('Alpha', 'Alpha', '') } },
+                                @{ conditionType = 'Property'; conditionProperties = @{ propertyName = 'IncidentTitle'; operator = 'NotContains'; propertyValues = 'Alpha' } },
+                                @{ conditionType = 'Property'; conditionProperties = @{ propertyName = 'IncidentRelatedAnalyticRuleIds'; operator = 'Contains'; propertyValues = @('/x/alertRules/r1', '/x/alertRules/r1') } }
+                            )
+                        }
+                        actions = @(@{ order = 1; actionType = 'ModifyProperties'; actionConfiguration = @{ status = 'Closed' } })
+                    }
+                }
+            )
+        }
+        Mock Invoke-AzRestWithRetry { $mockResponse }
+        $ctx = [PSCustomObject]@{ ArmToken = 'fake'; ResourceId = '/subscriptions/xxx/resourceGroups/rg/providers/Microsoft.OperationalInsights/workspaces/ws' }
+        $rules = Get-AutomationRules -Context $ctx
+
+        @($rules[0].TitleConditions).Count | Should -Be 2
+        $rules[0].TitleFilters.Count | Should -Be $rules[0].TitleOperators.Count
+        $rules[0].TitleFilters | Should -Be @('Alpha', 'Alpha')
+        $rules[0].TitleOperators | Should -Contain 'Contains'
+        $rules[0].TitleOperators | Should -Contain 'NotContains'
+        @($rules[0].RuleIdFilters).Count | Should -Be 1
+    }
+
+    It 'reads the enabled flag from triggeringLogic.isEnabled as returned by the API' {
+        $mockResponse = @{
+            value = @(
+                @{ name = 'ar-on';  properties = @{ displayName = 'On';  order = 1; triggeringLogic = @{ isEnabled = $true;  triggersOn = 'Incidents'; triggersWhen = 'Created'; conditions = @() }; actions = @() } },
+                @{ name = 'ar-off'; properties = @{ displayName = 'Off'; order = 2; triggeringLogic = @{ isEnabled = $false; triggersOn = 'Incidents'; triggersWhen = 'Created'; conditions = @() }; actions = @() } },
+                @{ name = 'ar-none'; properties = @{ displayName = 'None'; order = 3; triggeringLogic = @{ triggersOn = 'Incidents'; triggersWhen = 'Created'; conditions = @() }; actions = @() } }
+            )
+        }
+        Mock Invoke-AzRestWithRetry { $mockResponse }
+        $ctx = [PSCustomObject]@{ ArmToken = 'fake'; ResourceId = '/subscriptions/xxx/resourceGroups/rg/providers/Microsoft.OperationalInsights/workspaces/ws' }
+        $rules = Get-AutomationRules -Context $ctx
+        ($rules | Where-Object DisplayName -eq 'On').Enabled | Should -Be $true
+        ($rules | Where-Object DisplayName -eq 'Off').Enabled | Should -Be $false
+        ($rules | Where-Object DisplayName -eq 'None').Enabled | Should -Be $false
+    }
+}
+
+Describe 'Get-Incidents' {
+    BeforeAll {
+        $script:incCtx = [PSCustomObject]@{ ArmToken = 'fake'; ResourceId = '/subscriptions/xxx/resourceGroups/rg/providers/Microsoft.OperationalInsights/workspaces/ws' }
+    }
+
+    It 'requests 1000 incidents per page on the 2025-09-01 API and follows nextLink' {
+        $script:seenUris = [System.Collections.Generic.List[string]]::new()
+        Mock Invoke-AzRestWithRetry {
+            $script:seenUris.Add($Uri)
+            if ($Uri -like '*page2*') {
+                return [PSCustomObject]@{ value = @([PSCustomObject]@{ name = 'i2'; etag = 'e2'; properties = [PSCustomObject]@{ incidentNumber = 2; title = 'B'; status = 'New'; createdTimeUtc = '2026-08-01T00:00:00Z' } }) }
+            }
+            [PSCustomObject]@{
+                value = @([PSCustomObject]@{ name = 'i1'; etag = 'e1'; properties = [PSCustomObject]@{ incidentNumber = 1; title = 'A'; status = 'Closed'; classification = 'FalsePositive'; createdTimeUtc = '2026-08-01T00:00:00Z'; closedTimeUtc = '2026-08-01T00:03:00Z'; relatedAnalyticRuleIds = @('/x/alertRules/r1'); relatedAnalyticRuleNames = 'Rule One'; owner = [PSCustomObject]@{ userPrincipalName = 'a@b.c' } } })
+                nextLink = 'https://example/page2'
+            }
+        }
+
+        $incidents = Get-Incidents -Context $script:incCtx -DaysBack 30
+
+        $incidents.Count | Should -Be 2
+        $script:seenUris[0] | Should -Match 'api-version=2025-09-01'
+        $script:seenUris[0] | Should -Match '\$top=1000'
+        $script:seenUris[0] | Should -Match 'createdTimeUtc%20ge%20'
+        $incidents[0].IncidentNumber | Should -Be 1
+        $incidents[0].Etag | Should -Be 'e1'
+        $incidents[0].PSObject.Properties.Name | Should -Not -Contain 'Raw'
+        $incidents[0].RelatedAnalyticRuleNames | Should -Be @('Rule One')
+        $incidents[0].PSObject.Properties.Name | Should -Not -Contain 'Owner'
+        $incidents[0].ClosedTimeUtc | Should -BeOfType [datetime]
+        $incidents[1].ClosedTimeUtc | Should -BeNullOrEmpty
+    }
+
+    It 'normalises helper values' {
+        ConvertTo-UtcDateOrNull -Value $null | Should -BeNullOrEmpty
+        ConvertTo-UtcDateOrNull -Value '  ' | Should -BeNullOrEmpty
+        ConvertTo-UtcDateOrNull -Value 'not a date' | Should -BeNullOrEmpty
+        (ConvertTo-UtcDateOrNull -Value '2026-08-01T10:00:00Z').Kind | Should -Be 'Utc'
+
+        Get-NormalizedArray -Value $null | Should -Be @()
+        Get-NormalizedArray -Value '' | Should -Be @()
+        Get-NormalizedArray -Value 'one' | Should -Be @('one')
+        Get-NormalizedArray -Value @('a', '', 'b') | Should -Be @('a', 'b')
+        Get-NormalizedArray -Value 42 | Should -Be @('42')
+    }
+}
+
+Describe 'Get-AutoCloseFromHealth' {
+    BeforeAll {
+        $script:healthCtx = [PSCustomObject]@{ LaToken = 'fake'; WorkspaceId = 'ws-id' }
+    }
+
+    It 'returns an empty set without querying when no close rules are supplied' {
+        Mock Invoke-AzRestWithRetry { throw 'should not be called' }
+        $result = Get-AutoCloseFromHealth -Context $script:healthCtx -DaysBack 30
+        $result | Should -BeOfType [hashtable]
+        $result.Count | Should -Be 0
+        Should -Invoke Invoke-AzRestWithRetry -Times 0
+
+        $result2 = Get-AutoCloseFromHealth -Context $script:healthCtx -DaysBack 30 -CloseRuleNames @('', '  ')
+        $result2.Count | Should -Be 0
+    }
+
+    It 'only attributes incidents touched by the supplied close rules' {
+        Mock Invoke-AzRestWithRetry {
+            [PSCustomObject]@{ tables = @([PSCustomObject]@{ rows = @(
+                @(1, 'Auto close noise'),
+                @(2, 'Tag incidents'),
+                @(3, 'Auto close noise'),
+                @(3, 'Assign owner')
+            ) }) }
+        }
+        $result = Get-AutoCloseFromHealth -Context $script:healthCtx -DaysBack 30 -CloseRuleNames @('Auto close noise')
+        $result.Count | Should -Be 2
+        $result.ContainsKey(1) | Should -Be $true
+        $result.ContainsKey(3) | Should -Be $true
+        $result.ContainsKey(2) | Should -Be $false
+    }
+
+    It 'returns an empty set when SentinelHealth has no automation rule runs' {
+        Mock Invoke-AzRestWithRetry { [PSCustomObject]@{ tables = @([PSCustomObject]@{ rows = @() }) } }
+        $result = Get-AutoCloseFromHealth -Context $script:healthCtx -DaysBack 30 -CloseRuleNames @('X')
+        $result.Count | Should -Be 0
+    }
+
+    It 'returns null quietly when the SentinelHealth table does not exist' {
+        Mock Invoke-AzRestWithRetry { throw "Response status code does not indicate success: 400 (Bad Request). SemanticError: Failed to resolve table or column expression named 'SentinelHealth'" }
+        $result = Get-AutoCloseFromHealth -Context $script:healthCtx -DaysBack 30 -CloseRuleNames @('X') -WarningVariable w -WarningAction SilentlyContinue
+        $result | Should -BeNullOrEmpty
+        @($w).Count | Should -Be 0
+    }
+
+    It 'returns null with a warning on other query failures' {
+        Mock Invoke-AzRestWithRetry { throw 'Response status code does not indicate success: 403 (Forbidden).' }
+        $result = Get-AutoCloseFromHealth -Context $script:healthCtx -DaysBack 30 -CloseRuleNames @('X') -WarningVariable w -WarningAction SilentlyContinue
+        $result | Should -BeNullOrEmpty
+        @($w).Count | Should -Be 1
+    }
+}
+
+Describe 'Test-KqlTableMissingError' {
+    It 'recognises semantic errors for the named table only' {
+        $er = $null
+        try { throw "SemanticError: Failed to resolve table or column expression named 'SentinelHealth'" } catch { $er = $_ }
+        Test-KqlTableMissingError -ErrorRecord $er -TableName 'SentinelHealth' | Should -Be $true
+        Test-KqlTableMissingError -ErrorRecord $er -TableName 'OtherTable' | Should -Be $false
+        Test-KqlTableMissingError -ErrorRecord $er | Should -Be $true
+    }
+
+    It 'returns false for unrelated errors' {
+        $er = $null
+        try { throw 'Response status code does not indicate success: 429 (Too Many Requests).' } catch { $er = $_ }
+        Test-KqlTableMissingError -ErrorRecord $er -TableName 'SentinelHealth' | Should -Be $false
+    }
+}
+
+Describe 'Get-AnalyticsRules coverage and identity' {
+    It 'exposes RuleId, counts only enabled rules in TableCoverage and all rules in AllRuleTableCoverage' {
+        $mockResponse = [PSCustomObject]@{
+            value = @(
+                [PSCustomObject]@{ name = 'guid-1'; kind = 'Scheduled'; properties = [PSCustomObject]@{ displayName = 'Enabled rule'; enabled = $true; description = '#DONT_CORR#'; query = 'SigninLogs | where ResultType != 0' } },
+                [PSCustomObject]@{ name = 'guid-2'; kind = 'NRT'; properties = [PSCustomObject]@{ displayName = 'Disabled rule'; enabled = $false; description = ''; query = 'SigninLogs | union AuditLogs' } },
+                [PSCustomObject]@{ name = 'guid-3'; kind = 'ThreatIntelligence'; properties = [PSCustomObject]@{ displayName = 'TI matching'; enabled = $true; description = '#INC_CORR#' } },
+                [PSCustomObject]@{ name = 'guid-4'; kind = 'Fusion'; properties = [PSCustomObject]@{ displayName = 'Fusion'; enabled = $true; description = $null } }
+            )
+        }
+        Mock Invoke-AzRestWithRetry { $mockResponse }
+        $ctx = [PSCustomObject]@{ ArmToken = 'fake'; ResourceId = '/subscriptions/xxx/resourceGroups/rg/providers/Microsoft.OperationalInsights/workspaces/ws' }
+
+        $data = Get-AnalyticsRules -Context $ctx
+
+        $data.TotalRules | Should -Be 4
+        $data.EnabledRules | Should -Be 3
+        $data.DontCorrCount | Should -Be 1
+        $data.IncCorrCount | Should -Be 1
+        $data.Rules[0].RuleId | Should -Be 'guid-1'
+        $data.Rules[2].HasQuery | Should -Be $false
+        $data.Rules[3].Tables | Should -Be @()
+        $data.TableCoverage['SigninLogs'] | Should -Be 1
+        $data.TableCoverage.ContainsKey('AuditLogs') | Should -Be $false
+        $data.AllRuleTableCoverage['SigninLogs'] | Should -Be 2
+        $data.AllRuleTableCoverage['AuditLogs'] | Should -Be 1
+    }
+
+    It 'maps enabled non-KQL rule kinds to the tables they consume implicitly' {
+        $mockResponse = [PSCustomObject]@{
+            value = @(
+                [PSCustomObject]@{ name = 'ti-1'; kind = 'ThreatIntelligence'; properties = [PSCustomObject]@{ displayName = 'TI map'; enabled = $true; description = '' } },
+                [PSCustomObject]@{ name = 'ti-2'; kind = 'ThreatIntelligence'; properties = [PSCustomObject]@{ displayName = 'TI map disabled'; enabled = $false; description = '' } },
+                [PSCustomObject]@{ name = 'fu-1'; kind = 'Fusion'; properties = [PSCustomObject]@{ displayName = 'Fusion'; enabled = $true; description = '' } },
+                [PSCustomObject]@{ name = 'ml-1'; kind = 'MLBehaviorAnalytics'; properties = [PSCustomObject]@{ displayName = 'ML'; enabled = $true; description = '' } },
+                [PSCustomObject]@{ name = 'ms-1'; kind = 'MicrosoftSecurityIncidentCreation'; properties = [PSCustomObject]@{ displayName = 'MDC'; enabled = $true; description = '' } },
+                [PSCustomObject]@{ name = 'zz-1'; kind = 'SomethingNew'; properties = [PSCustomObject]@{ displayName = 'Unknown kind'; enabled = $true; description = '' } }
+            )
+        }
+        Mock Invoke-AzRestWithRetry { $mockResponse }
+        $ctx = [PSCustomObject]@{ ArmToken = 'fake'; ResourceId = '/subscriptions/xxx/resourceGroups/rg/providers/Microsoft.OperationalInsights/workspaces/ws' }
+
+        $data = Get-AnalyticsRules -Context $ctx
+
+        $data.ImplicitCoverage['ThreatIntelIndicators'] | Should -Be 1
+        $data.ImplicitCoverage['ThreatIntelObjects'] | Should -Be 1
+        $data.ImplicitCoverage['SecurityAlert'] | Should -Be 2
+        $data.ImplicitCoverage['Anomalies'] | Should -Be 1
+        $data.ImplicitCoverage['BehaviorAnalytics'] | Should -Be 1
+        $data.ImplicitCoverage['UserPeerAnalytics'] | Should -Be 1
+        $data.ImplicitCoverage['IdentityInfo'] | Should -Be 1
+        $data.TableCoverage.Count | Should -Be 0
+        $data.Rules[0].ImplicitTables | Should -Contain 'ThreatIntelIndicators'
+        $data.Rules[0].Tables | Should -Be @()
+        $data.Rules[5].ImplicitTables | Should -Be @()
+        $data.PlatformTables | Should -Contain 'SecurityIncident'
+        $data.PlatformTables | Should -Contain 'SentinelHealth'
+    }
+}
+
+Describe 'Get-ImplicitConsumerMap' {
+    It 'loads the shipped map' {
+        $map = Get-ImplicitConsumerMap
+        $map.RuleKinds.Keys | Should -Contain 'ThreatIntelligence'
+        $map.RuleKinds['Fusion'] | Should -Contain 'SecurityAlert'
+        $map.PlatformTables | Should -Contain 'Usage'
+    }
+
+    It 'returns empty structures when the file is missing' {
+        $map = Get-ImplicitConsumerMap -Path (Join-Path $TestDrive 'nope.json')
+        $map.RuleKinds.Count | Should -Be 0
+        @($map.PlatformTables).Count | Should -Be 0
+    }
+
+    It 'tolerates a file without either section' {
+        $p = Join-Path $TestDrive 'partial.json'
+        '{ "description": "x" }' | Set-Content $p
+        $map = Get-ImplicitConsumerMap -Path $p
+        $map.RuleKinds.Count | Should -Be 0
+        @($map.PlatformTables).Count | Should -Be 0
+    }
+}
+
+Describe 'Implicit consumers data integrity' {
+    It 'only references tables that exist in the classification database or are known Sentinel tables' {
+        $db = Get-Content "$PSScriptRoot\..\Data\log-classifications.json" -Raw | ConvertFrom-Json
+        $known = [System.Collections.Generic.HashSet[string]]::new([string[]]$db.tableName, [StringComparer]::OrdinalIgnoreCase)
+        # Not (yet) in the DB but documented Sentinel tables
+        foreach ($extra in 'ThreatIntelObjects', 'SecurityCaseEvent', 'ConfidentialWatchlist', 'Usage', 'Operation', 'ThreatIntelExportOperation') { [void]$known.Add($extra) }
+        $map = Get-Content "$PSScriptRoot\..\Data\implicit-consumers.json" -Raw | ConvertFrom-Json
+        foreach ($p in $map.ruleKinds.PSObject.Properties) {
+            foreach ($t in $p.Value) { $known.Contains($t) | Should -Be $true -Because "$($p.Name) references $t" }
+        }
+        foreach ($t in $map.platformTables) { $known.Contains($t) | Should -Be $true -Because "platform table $t" }
+    }
+}
+
+Describe 'Invoke-Analysis coverage semantics' {
+    BeforeAll {
+        $script:covRules = [PSCustomObject]@{
+            Rules = @(); TotalRules = 2; EnabledRules = 2; DontCorrCount = 0; IncCorrCount = 0
+            TableCoverage = @{ 'SigninLogs' = 1 }
+            ImplicitCoverage = @{ 'ThreatIntelIndicators' = 1 }
+            PlatformTables = @('SecurityIncident', 'SentinelHealth')
+        }
+        $script:covHunting = [PSCustomObject]@{ Queries = @(); TableCoverage = @{}; TotalQueries = 0 }
+        $script:covUsage = @(
+            [PSCustomObject]@{ TableName = 'SigninLogs'; DataGB = 3; MonthlyGB = 1; UsageRowCount = 1; EstMonthlyCostUSD = 5.59; IsFree = $false; IsFreeSource = 'usage' },
+            [PSCustomObject]@{ TableName = 'ThreatIntelIndicators'; DataGB = 6; MonthlyGB = 2; UsageRowCount = 1; EstMonthlyCostUSD = 11.18; IsFree = $false; IsFreeSource = 'usage' },
+            [PSCustomObject]@{ TableName = 'SecurityIncident'; DataGB = 0.1; MonthlyGB = 0.03; UsageRowCount = 1; EstMonthlyCostUSD = 0; IsFree = $true; IsFreeSource = 'usage' },
+            [PSCustomObject]@{ TableName = 'SecurityCaseEvent'; DataGB = 0.1; MonthlyGB = 0.03; UsageRowCount = 1; EstMonthlyCostUSD = 0.17; IsFree = $false; IsFreeSource = 'usage' },
+            [PSCustomObject]@{ TableName = 'DeviceEvents'; DataGB = 3; MonthlyGB = 1; UsageRowCount = 1; EstMonthlyCostUSD = 5.59; IsFree = $false; IsFreeSource = 'usage' },
+            [PSCustomObject]@{ TableName = 'Lonely'; DataGB = 3; MonthlyGB = 1; UsageRowCount = 1; EstMonthlyCostUSD = 5.59; IsFree = $false; IsFreeSource = 'usage' }
+        )
+        $primary = { param($cat) [PSCustomObject]@{ Classification = 'primary'; Category = $cat; RecommendedTier = 'analytics'; IsFree = $false; RecommendedRetentionDays = 365 } }
+        $script:covClass = [PSCustomObject]@{
+            Classifications = @{
+                'SigninLogs' = & $primary 'Identity & Access'
+                'ThreatIntelIndicators' = & $primary 'Threat Intelligence'
+                'SecurityIncident' = [PSCustomObject]@{ Classification = 'primary'; Category = 'Security Alerts'; RecommendedTier = 'analytics'; IsFree = $true; RecommendedRetentionDays = 365 }
+                'SecurityCaseEvent' = & $primary 'Security Alerts'
+                'DeviceEvents' = & $primary 'Endpoint Detection'
+                'Lonely' = & $primary 'Identity & Access'
+            }
+            KeywordGaps = @(); DatabaseEntries = 6
+        }
+        $script:covXdr = [PSCustomObject]@{ TotalXDRRules = 1; XDRTableCoverage = @{ 'DeviceEvents' = 1 }; KnownXDRTables = @('DeviceEvents'); CustomRules = @() }
+        $script:covRetention = @(
+            [PSCustomObject]@{ TableName = 'SigninLogs'; RetentionInDays = 30; TotalRetentionInDays = 365; ArchiveRetentionInDays = 335; Plan = 'Analytics' },
+            [PSCustomObject]@{ TableName = 'ThreatIntelIndicators'; RetentionInDays = 90; TotalRetentionInDays = 90; ArchiveRetentionInDays = 0; Plan = 'Analytics' },
+            [PSCustomObject]@{ TableName = 'SecurityIncident'; RetentionInDays = 90; TotalRetentionInDays = 90; ArchiveRetentionInDays = 0; Plan = 'Analytics' },
+            [PSCustomObject]@{ TableName = 'SecurityCaseEvent'; RetentionInDays = 90; TotalRetentionInDays = 90; ArchiveRetentionInDays = 0; Plan = 'Analytics' },
+            [PSCustomObject]@{ TableName = 'DeviceEvents'; RetentionInDays = 90; TotalRetentionInDays = 90; ArchiveRetentionInDays = 0; Plan = 'Analytics' },
+            [PSCustomObject]@{ TableName = 'Lonely'; RetentionInDays = 90; TotalRetentionInDays = 90; ArchiveRetentionInDays = 0; Plan = 'Analytics' }
+        )
+        $script:covResult = Invoke-Analysis -TableUsage $script:covUsage -Classifications $script:covClass -RulesData $script:covRules -HuntingData $script:covHunting -DefenderXDR $script:covXdr -TableRetention $script:covRetention
+        $script:byName = @{}
+        foreach ($t in $script:covResult.TableAnalysis) { $script:byName[$t.TableName] = $t }
+    }
+
+    It 'counts implicit consumers toward effective coverage and labels the source' {
+        $ti = $script:byName['ThreatIntelIndicators']
+        $ti.ImplicitRules | Should -Be 1
+        $ti.EffectiveCoverage | Should -Be 1
+        $ti.CoverageSource | Should -Be 'implicit'
+        $ti.Assessment | Should -Not -Be 'Missing Coverage'
+        @($script:covResult.Recommendations | Where-Object { $_.Type -eq 'MissingCoverage' -and $_.TableName -eq 'ThreatIntelIndicators' }).Count | Should -Be 0
+    }
+
+    It 'labels kql, xdr, platform and none sources' {
+        $script:byName['SigninLogs'].CoverageSource | Should -Be 'kql'
+        $script:byName['DeviceEvents'].CoverageSource | Should -Be 'xdr'
+        $script:byName['SecurityIncident'].CoverageSource | Should -Be 'platform'
+        $script:byName['SecurityIncident'].IsPlatform | Should -Be $true
+        $script:byName['Lonely'].CoverageSource | Should -Be 'none'
+    }
+
+    It 'never flags platform tables as Missing Coverage but still flags primary tables with nothing' {
+        # SecurityCaseEvent is not in PlatformTables for this test, so it behaves like any primary table
+        @($script:covResult.Recommendations | Where-Object { $_.Type -eq 'MissingCoverage' -and $_.TableName -eq 'SecurityIncident' }).Count | Should -Be 0
+        @($script:covResult.Recommendations | Where-Object { $_.Type -eq 'MissingCoverage' -and $_.TableName -eq 'Lonely' }).Count | Should -Be 1
+    }
+
+    It 'gives a paid platform table the Platform assessment instead of Missing Coverage' {
+        $rules = [PSCustomObject]@{ Rules = @(); TotalRules = 0; EnabledRules = 0; DontCorrCount = 0; IncCorrCount = 0; TableCoverage = @{}; ImplicitCoverage = @{}; PlatformTables = @('SecurityCaseEvent') }
+        $r = Invoke-Analysis -TableUsage @($script:covUsage[3]) -Classifications $script:covClass -RulesData $rules -HuntingData $script:covHunting -TableRetention $script:covRetention
+        $r.TableAnalysis[0].Assessment | Should -Be 'Platform'
+        $r.TableAnalysis[0].CoverageSource | Should -Be 'platform'
+        @($r.Recommendations | Where-Object Type -eq 'MissingCoverage').Count | Should -Be 0
+    }
+
+    It 'does not raise RetentionImprovement for free or platform tables' {
+        $script:byName['SecurityIncident'].RetentionCanImprove | Should -Be $false
+        @($script:covResult.Recommendations | Where-Object { $_.Type -eq 'RetentionImprovement' -and $_.TableName -eq 'SecurityIncident' }).Count | Should -Be 0
+        $script:byName['Lonely'].RetentionCanImprove | Should -Be $true
+    }
+
+    It 'flags interactive retention below the 90-day baseline even when total retention is compliant' {
+        $signin = $script:byName['SigninLogs']
+        $signin.RetentionCompliant | Should -Be $true
+        $signin.InteractiveBelowBaseline | Should -Be $true
+        $rec = @($script:covResult.Recommendations | Where-Object { $_.Type -eq 'RetentionInteractiveBelowBaseline' })
+        $rec.Count | Should -Be 1
+        $rec[0].TableName | Should -Be 'SigninLogs'
+        $rec[0].Priority | Should -Be 'Medium'
+        $script:byName['ThreatIntelIndicators'].InteractiveBelowBaseline | Should -Be $false
+    }
+
+    It 'returns TableAnalysis as an array even for a single table' {
+        $rules = [PSCustomObject]@{ Rules = @(); TotalRules = 0; EnabledRules = 0; DontCorrCount = 0; IncCorrCount = 0; TableCoverage = @{} }
+        $r = Invoke-Analysis -TableUsage @($script:covUsage[0]) -Classifications $script:covClass -RulesData $rules -HuntingData $script:covHunting
+        ,$r.TableAnalysis | Should -BeOfType [array]
+        $r.TableAnalysis.Count | Should -Be 1
+    }
+
+    It 'tolerates a DefenderXDR object with null coverage and table lists' {
+        $xdr = [PSCustomObject]@{ TotalXDRRules = 0; XDRTableCoverage = $null; KnownXDRTables = $null; CustomRules = $null }
+        $rules = [PSCustomObject]@{ Rules = @(); TotalRules = 0; EnabledRules = 0; DontCorrCount = 0; IncCorrCount = 0; TableCoverage = @{} }
+        { Invoke-Analysis -TableUsage @($script:covUsage[0]) -Classifications $script:covClass -RulesData $rules -HuntingData $script:covHunting -DefenderXDR $xdr } | Should -Not -Throw
+    }
+
+    It 'sorts recommendations High > Medium > Low then by savings' {
+        $recs = $script:covResult.Recommendations
+        $order = @{ High = 0; Medium = 1; Low = 2 }
+        for ($i = 1; $i -lt $recs.Count; $i++) {
+            $prev = $recs[$i - 1]; $cur = $recs[$i]
+            ($order[$prev.Priority] -le $order[$cur.Priority]) | Should -Be $true
+            if ($prev.Priority -eq $cur.Priority) { ($prev.EstSavingsUSD -ge $cur.EstSavingsUSD) | Should -Be $true }
+        }
+    }
+}
+
+Describe 'Get-DefenderXDR REST fallback' {
+    BeforeAll {
+        $script:xdrCtx = [PSCustomObject]@{ TenantId = 'tid'; SubscriptionId = 'sub' }
+    }
+
+    It 'skips disabled custom detections when building table coverage and hoists the known table list' {
+        Mock Get-Command { $null } -ParameterFilter { $Name -eq 'Invoke-MgGraphRequest' }
+        Mock Resolve-AzToken { 'graph-token' }
+        Mock Invoke-AzRestWithRetry {
+            [PSCustomObject]@{
+                value = @(
+                    [PSCustomObject]@{ id = 'r1'; displayName = 'On';  isEnabled = $true;  queryCondition = [PSCustomObject]@{ queryText = 'DeviceEvents | where ActionType == "x"' } },
+                    [PSCustomObject]@{ id = 'r2'; displayName = 'Off'; isEnabled = $false; queryCondition = [PSCustomObject]@{ queryText = 'EmailEvents | take 1' } },
+                    [PSCustomObject]@{ id = 'r3'; displayName = 'Nested'; detectionAction = [PSCustomObject]@{ queryCondition = [PSCustomObject]@{ queryText = 'DeviceEvents | take 1' } } }
+                )
+            }
+        }
+
+        $result = Get-DefenderXDR -Context $script:xdrCtx
+
+        $result.TotalXDRRules | Should -Be 3
+        $result.XDRTableCoverage['DeviceEvents'] | Should -Be 2
+        $result.XDRTableCoverage.ContainsKey('EmailEvents') | Should -Be $false
+        $result.KnownXDRTables.Count | Should -Be 21
+        $result.KnownXDRTables | Should -Contain 'AlertEvidence'
+        Should -Invoke Resolve-AzToken -Times 1 -ParameterFilter { $ResourceUrl -eq 'https://graph.microsoft.com' -and $TenantId -eq 'tid' }
+    }
+
+    It 'projects custom detections to the consumed fields so author identities never reach the cache' {
+        Mock Get-Command { $null } -ParameterFilter { $Name -eq 'Invoke-MgGraphRequest' }
+        Mock Resolve-AzToken { 'graph-token' }
+        Mock Invoke-AzRestWithRetry {
+            [PSCustomObject]@{ value = @(
+                [PSCustomObject]@{ id = 'r1'; displayName = 'On'; isEnabled = $true; createdBy = 'alice@contoso.com'; lastModifiedBy = 'alice@contoso.com'; schedule = [PSCustomObject]@{ period = '1h'; nextRunDateTime = 'x' }; queryCondition = [PSCustomObject]@{ queryText = 'DeviceEvents | take 1'; extra = 'y' } },
+                [PSCustomObject]@{ id = 'r3'; displayName = 'Nested'; detectionAction = [PSCustomObject]@{ queryCondition = [PSCustomObject]@{ queryText = 'EmailEvents | take 1' } } }
+            ) }
+        }
+
+        $result = Get-DefenderXDR -Context $script:xdrCtx
+        $flat = $result.CustomRules | ConvertTo-Json -Depth 5
+        $flat | Should -Not -Match 'alice@contoso.com'
+        $flat | Should -Not -Match 'createdBy|lastModifiedBy|nextRunDateTime'
+        @($result.CustomRules[0].PSObject.Properties.Name | Sort-Object) | Should -Be @('displayName', 'id', 'isEnabled', 'queryCondition', 'schedule')
+        $result.CustomRules[0].schedule.period | Should -Be '1h'
+        # detectionAction query is hoisted so Invoke-Analysis can read queryCondition.queryText uniformly
+        $result.CustomRules[1].queryCondition.queryText | Should -Be 'EmailEvents | take 1'
+        $result.CustomRules[1].isEnabled | Should -BeTrue
+        $result.XDRTableCoverage['EmailEvents'] | Should -Be 1
+    }
+
+    It 'follows @odata.nextLink' {
+        Mock Get-Command { $null } -ParameterFilter { $Name -eq 'Invoke-MgGraphRequest' }
+        Mock Resolve-AzToken { 'graph-token' }
+        Mock Invoke-AzRestWithRetry {
+            if ($Uri -like '*skip*') { return [PSCustomObject]@{ value = @([PSCustomObject]@{ id = 'r2'; isEnabled = $true }) } }
+            [PSCustomObject]@{ value = @([PSCustomObject]@{ id = 'r1'; isEnabled = $true }); '@odata.nextLink' = 'https://graph.microsoft.com/beta/security/rules/detectionRules?$skip=1' }
+        }
+        (Get-DefenderXDR -Context $script:xdrCtx).TotalXDRRules | Should -Be 2
+    }
+
+    It 'returns null when no Graph token can be acquired' {
+        Mock Get-Command { $null } -ParameterFilter { $Name -eq 'Invoke-MgGraphRequest' }
+        Mock Resolve-AzToken { throw 'no token' }
+        $r = Get-DefenderXDR -Context ([PSCustomObject]@{ SubscriptionId = 'sub' }) -WarningAction SilentlyContinue
+        $r | Should -Not -BeNullOrEmpty
+        $r.Fetched | Should -BeFalse
+        $r.FetchError | Should -Match 'Graph token'
+        $r.TotalXDRRules | Should -Be 0
+        $r.KnownXDRTables.Count | Should -Be 21
+    }
+
+    It 'returns the empty shape with the known table list when every endpoint fails' {
+        Mock Get-Command { $null } -ParameterFilter { $Name -eq 'Invoke-MgGraphRequest' }
+        Mock Resolve-AzToken { 'graph-token' }
+        Mock Invoke-AzRestWithRetry { throw 'boom' }
+        $result = Get-DefenderXDR -Context $script:xdrCtx -WarningVariable w -WarningAction SilentlyContinue
+        $result.TotalXDRRules | Should -Be 0
+        $result.KnownXDRTables.Count | Should -Be 21
+        "$w" | Should -Match 'Microsoft.Graph.Authentication'
+    }
+}
+
+Describe 'Get-DefenderXDR delegated Graph path' {
+    BeforeAll {
+        # Stubs so the Microsoft.Graph cmdlets can be mocked without the module installed
+        function Get-MgContext { }
+        function Connect-MgGraph { param([string[]]$Scopes, [string]$ContextScope, [switch]$NoWelcome, [string]$TenantId) }
+        function Invoke-MgGraphRequest { param([string]$Method, [string]$Uri, [string]$OutputType) }
+        $script:xdrCtx2 = [PSCustomObject]@{ TenantId = 'tid'; SubscriptionId = 'sub' }
+    }
+
+    It 'uses an existing delegated context with the required scope' {
+        Mock Get-Command { [PSCustomObject]@{ Name = 'Invoke-MgGraphRequest' } } -ParameterFilter { $Name -eq 'Invoke-MgGraphRequest' }
+        Mock Get-MgContext { [PSCustomObject]@{ Scopes = @('CustomDetection.Read.All') } }
+        Mock Connect-MgGraph { throw 'should not reconnect' }
+        Mock Invoke-MgGraphRequest {
+            if ($Uri -like '*skip*') { return [PSCustomObject]@{ value = @([PSCustomObject]@{ id = 'r2'; isEnabled = $true; queryCondition = [PSCustomObject]@{ queryText = 'EmailEvents | take 1' } }) } }
+            [PSCustomObject]@{ value = @([PSCustomObject]@{ id = 'r1'; isEnabled = $true; queryCondition = [PSCustomObject]@{ queryText = 'DeviceEvents | take 1' } }); '@odata.nextLink' = 'https://graph.microsoft.com/beta/x?$skip=1' }
+        }
+        Mock Resolve-AzToken { throw 'fallback must not run' }
+
+        $result = Get-DefenderXDR -Context $script:xdrCtx2
+        $result.TotalXDRRules | Should -Be 2
+        $result.XDRTableCoverage['DeviceEvents'] | Should -Be 1
+        $result.XDRTableCoverage['EmailEvents'] | Should -Be 1
+        Should -Invoke Connect-MgGraph -Times 0
+    }
+
+    It 'connects with the tenant when the current context lacks the scope' {
+        Mock Get-Command { [PSCustomObject]@{ Name = 'Invoke-MgGraphRequest' } } -ParameterFilter { $Name -eq 'Invoke-MgGraphRequest' }
+        $script:mgConnected = $false
+        Mock Get-MgContext { if ($script:mgConnected) { [PSCustomObject]@{ Scopes = @('CustomDetection.ReadWrite.All') } } else { [PSCustomObject]@{ Scopes = @('User.Read') } } }
+        Mock Connect-MgGraph { $script:mgConnected = $true }
+        Mock Invoke-MgGraphRequest { [PSCustomObject]@{ value = @([PSCustomObject]@{ id = 'r1'; isEnabled = $true }) } }
+
+        $result = Get-DefenderXDR -Context $script:xdrCtx2
+        $result.TotalXDRRules | Should -Be 1
+        Should -Invoke Connect-MgGraph -Times 1 -ParameterFilter { $TenantId -eq 'tid' -and $Scopes -contains 'CustomDetection.Read.All' }
+    }
+
+    It 'warns and falls back to the Az token when the scope cannot be established' {
+        Mock Get-Command { [PSCustomObject]@{ Name = 'Invoke-MgGraphRequest' } } -ParameterFilter { $Name -eq 'Invoke-MgGraphRequest' }
+        Mock Get-MgContext { $null }
+        Mock Connect-MgGraph { }
+        Mock Invoke-MgGraphRequest { throw 'not used' }
+        Mock Resolve-AzToken { 'graph-token' }
+        Mock Invoke-AzRestWithRetry { [PSCustomObject]@{ value = @([PSCustomObject]@{ id = 'r1'; isEnabled = $true }) } }
+
+        $result = Get-DefenderXDR -Context $script:xdrCtx2 -WarningVariable w -WarningAction SilentlyContinue
+        $result.TotalXDRRules | Should -Be 1
+        "$w" | Should -Match 'CustomDetection.Read.All'
+    }
+
+    It 'falls back to the Az token when every delegated request fails, without naming the Graph module' {
+        Mock Get-Command { [PSCustomObject]@{ Name = 'Invoke-MgGraphRequest' } } -ParameterFilter { $Name -eq 'Invoke-MgGraphRequest' }
+        Mock Get-MgContext { [PSCustomObject]@{ Scopes = @('CustomDetection.Read.All') } }
+        Mock Invoke-MgGraphRequest { throw 'graph down' }
+        Mock Resolve-AzToken { 'graph-token' }
+        Mock Invoke-AzRestWithRetry { throw 'rest down' }
+
+        $result = Get-DefenderXDR -Context $script:xdrCtx2 -WarningVariable w -WarningAction SilentlyContinue
+        $result.TotalXDRRules | Should -Be 0
+        "$w" | Should -Not -Match 'Microsoft.Graph.Authentication'
+    }
+
+    It 'survives a throwing Connect-MgGraph by falling back' {
+        Mock Get-Command { [PSCustomObject]@{ Name = 'Invoke-MgGraphRequest' } } -ParameterFilter { $Name -eq 'Invoke-MgGraphRequest' }
+        Mock Get-MgContext { $null }
+        Mock Connect-MgGraph { throw 'user cancelled' }
+        Mock Resolve-AzToken { 'graph-token' }
+        Mock Invoke-AzRestWithRetry { [PSCustomObject]@{ value = @() } }
+
+        (Get-DefenderXDR -Context ([PSCustomObject]@{ SubscriptionId = 'sub' })).TotalXDRRules | Should -Be 0
+    }
+}
+
+Describe 'Get-SortedRecommendation' {
+    It 'orders by priority then savings and pushes unknown priorities last' {
+        $unsorted = @(
+            [PSCustomObject]@{ Priority = 'Low'; EstSavingsUSD = 500 },
+            [PSCustomObject]@{ Priority = 'High'; EstSavingsUSD = 0 },
+            [PSCustomObject]@{ Priority = 'Weird'; EstSavingsUSD = 999 },
+            [PSCustomObject]@{ Priority = 'Medium'; EstSavingsUSD = 10 },
+            [PSCustomObject]@{ Priority = 'High'; EstSavingsUSD = 50 },
+            [PSCustomObject]@{ Priority = 'Medium'; EstSavingsUSD = $null }
+        )
+        $sorted = Get-SortedRecommendation -Recommendations $unsorted
+        ($sorted | ForEach-Object { "$($_.Priority):$($_.EstSavingsUSD)" }) | Should -Be @('High:50', 'High:0', 'Medium:10', 'Medium:', 'Low:500', 'Weird:999')
+    }
+
+    It 'returns an empty array for no input' {
+        @(Get-SortedRecommendation -Recommendations @()).Count | Should -Be 0
+    }
+}
+
+Describe 'Invoke-Analysis skips split copies for DataLake recommendations' {
+    It 'does not recommend moving a _SPLT_CL table to the lake' {
+        $usage = @([PSCustomObject]@{ TableName = 'SecurityEvent_SPLT_CL'; DataGB = 300; MonthlyGB = 100; UsageRowCount = 1; EstMonthlyCostUSD = 559; IsFree = $false; IsFreeSource = 'usage' })
+        $cls = [PSCustomObject]@{ Classifications = @{ 'SecurityEvent_SPLT_CL' = [PSCustomObject]@{ Classification = 'secondary'; Category = 'Split Table (Data Lake)'; RecommendedTier = 'datalake'; IsFree = $false; RecommendedRetentionDays = 90; IsSplitTable = $true; ParentTable = 'SecurityEvent' } }; KeywordGaps = @(); DatabaseEntries = 1 }
+        $rules = [PSCustomObject]@{ Rules = @(); TotalRules = 0; EnabledRules = 0; DontCorrCount = 0; IncCorrCount = 0; TableCoverage = @{} }
+        $hunting = [PSCustomObject]@{ Queries = @(); TableCoverage = @{}; TotalQueries = 0 }
+        $r = Invoke-Analysis -TableUsage $usage -Classifications $cls -RulesData $rules -HuntingData $hunting
+        @($r.Recommendations | Where-Object Type -eq 'DataLake').Count | Should -Be 0
+    }
+}
+
+Describe 'Get-PercentileRank' {
+    It 'returns 0 for empty, single-value and flat populations' {
+        Get-PercentileRank -Value 5 -Population @() | Should -Be 0
+        Get-PercentileRank -Value 5 -Population @(5) | Should -Be 0
+        Get-PercentileRank -Value 5 -Population @(5, 5, 5) | Should -Be 0
+        Get-PercentileRank -Value 5 -Population @($null, 5, $null) | Should -Be 0
+    }
+
+    It 'ranks a value against the population' {
+        Get-PercentileRank -Value 10 -Population @(1, 5, 10, 20) | Should -Be 75
+        Get-PercentileRank -Value 20 -Population @(1, 5, 10, 20) | Should -Be 100
+        Get-PercentileRank -Value 1 -Population @(1, 5, 10, 20) | Should -Be 25
+    }
+}
+
+Describe 'Get-AutomationTitleConditions' {
+    It 'prefers TitleConditions pairs' {
+        $rule = [PSCustomObject]@{ TitleConditions = @([PSCustomObject]@{ Value = 'A'; Operator = 'Equals' }, [PSCustomObject]@{ Value = ''; Operator = 'Equals' }, [PSCustomObject]@{ Value = 'B'; Operator = '' }); TitleFilters = @('ignored'); TitleOperators = @('Contains') }
+        $conds = @(Get-AutomationTitleConditions -AutomationRule $rule)
+        $conds.Count | Should -Be 2
+        $conds[0].Operator | Should -Be 'Equals'
+        $conds[1].Operator | Should -Be 'Contains'
+    }
+
+    It 'zips TitleFilters with TitleOperators and defaults missing operators to Contains' {
+        $rule = [PSCustomObject]@{ TitleFilters = @('A', ' ', 'B'); TitleOperators = @('StartsWith') }
+        $conds = @(Get-AutomationTitleConditions -AutomationRule $rule)
+        $conds.Count | Should -Be 2
+        $conds[0].Value | Should -Be 'A'
+        $conds[0].Operator | Should -Be 'StartsWith'
+        $conds[1].Value | Should -Be 'B'
+        $conds[1].Operator | Should -Be 'Contains'
+    }
+}
+
+Describe 'Test-AutomationRuleIncidentMatch AND semantics' {
+    It 'requires both rule id and title groups to match when both are present' {
+        $rule = [PSCustomObject]@{ HasConditions = $true; TitleFilters = @('Suspicious*'); TitleOperators = @('Contains'); RuleIdFilters = @('/x/alertRules/r1') }
+        Test-AutomationRuleIncidentMatch -AutomationRule $rule -IncidentTitle 'Suspicious login' -IncidentRuleIds @('/y/alertRules/r1') | Should -Be $true
+        Test-AutomationRuleIncidentMatch -AutomationRule $rule -IncidentTitle 'Suspicious login' -IncidentRuleIds @('/y/alertRules/r2') | Should -Be $false
+        Test-AutomationRuleIncidentMatch -AutomationRule $rule -IncidentTitle 'Other' -IncidentRuleIds @('/y/alertRules/r1') | Should -Be $false
+    }
+
+    It 'does not match a rule-id filter when the incident carries no rule ids' {
+        $rule = [PSCustomObject]@{ HasConditions = $true; TitleFilters = @(); TitleOperators = @(); RuleIdFilters = @('/x/alertRules/r1') }
+        Test-AutomationRuleIncidentMatch -AutomationRule $rule -IncidentTitle 'Anything' -IncidentRuleIds @() | Should -Be $false
+    }
+
+    It 'treats rules with only unmodelled conditions as matching' {
+        $rule = [PSCustomObject]@{ HasConditions = $true; TitleFilters = @(); TitleOperators = @(); RuleIdFilters = @() }
+        Test-AutomationRuleIncidentMatch -AutomationRule $rule -IncidentTitle 'Anything' -IncidentRuleIds @() | Should -Be $true
+    }
+
+    It 'evaluates severity conditions with Equals and NotEquals and ANDs them with the other groups' {
+        $eq = [PSCustomObject]@{ HasConditions = $true; TitleFilters = @(); TitleOperators = @(); RuleIdFilters = @(); SeverityConditions = @([PSCustomObject]@{ Values = @('Informational', 'Low'); Operator = 'Equals' }) }
+        Test-AutomationRuleIncidentMatch -AutomationRule $eq -IncidentTitle 'x' -IncidentRuleIds @() -IncidentSeverity 'Low' | Should -Be $true
+        Test-AutomationRuleIncidentMatch -AutomationRule $eq -IncidentTitle 'x' -IncidentRuleIds @() -IncidentSeverity 'High' | Should -Be $false
+        Test-AutomationRuleIncidentMatch -AutomationRule $eq -IncidentTitle 'x' -IncidentRuleIds @() -IncidentSeverity '' | Should -Be $false
+
+        $ne = [PSCustomObject]@{ HasConditions = $true; TitleFilters = @(); TitleOperators = @(); RuleIdFilters = @(); SeverityConditions = @([PSCustomObject]@{ Values = @('High'); Operator = 'NotEquals' }) }
+        Test-AutomationRuleIncidentMatch -AutomationRule $ne -IncidentTitle 'x' -IncidentRuleIds @() -IncidentSeverity 'High' | Should -Be $false
+        Test-AutomationRuleIncidentMatch -AutomationRule $ne -IncidentTitle 'x' -IncidentRuleIds @() -IncidentSeverity 'Medium' | Should -Be $true
+        Test-AutomationRuleIncidentMatch -AutomationRule $ne -IncidentTitle 'x' -IncidentRuleIds @() -IncidentSeverity '' | Should -Be $true
+
+        $both = [PSCustomObject]@{ HasConditions = $true; TitleFilters = @('Suspicious'); TitleOperators = @('Contains'); RuleIdFilters = @(); SeverityConditions = @([PSCustomObject]@{ Values = @('High'); Operator = 'Equals' }) }
+        Test-AutomationRuleIncidentMatch -AutomationRule $both -IncidentTitle 'Suspicious login' -IncidentRuleIds @() -IncidentSeverity 'High' | Should -Be $true
+        Test-AutomationRuleIncidentMatch -AutomationRule $both -IncidentTitle 'Suspicious login' -IncidentRuleIds @() -IncidentSeverity 'Low' | Should -Be $false
+    }
+
+    It 'fails a title group when the incident has no title' {
+        $rule = [PSCustomObject]@{ HasConditions = $true; TitleFilters = @('A'); TitleOperators = @('Contains'); RuleIdFilters = @() }
+        Test-AutomationRuleIncidentMatch -AutomationRule $rule -IncidentTitle '' -IncidentRuleIds @() | Should -Be $false
+    }
+
+    It 'uses TitleConditions pairs when present' {
+        $rule = [PSCustomObject]@{ HasConditions = $true; TitleConditions = @([PSCustomObject]@{ Value = 'Exact'; Operator = 'Equals' }); TitleFilters = @(); TitleOperators = @(); RuleIdFilters = @() }
+        Test-AutomationRuleIncidentMatch -AutomationRule $rule -IncidentTitle 'Exact' -IncidentRuleIds @() | Should -Be $true
+        Test-AutomationRuleIncidentMatch -AutomationRule $rule -IncidentTitle 'Exact more' -IncidentRuleIds @() | Should -Be $false
+    }
+}
+
+Describe 'Get-DetectionAnalyzerData bucketing and scoring' {
+    BeforeAll {
+        $script:daRules = @(
+            [PSCustomObject]@{ RuleId = 'guid-a'; RuleName = 'Shared Name'; Kind = 'Scheduled'; Enabled = $true },
+            [PSCustomObject]@{ RuleId = 'guid-b'; RuleName = 'Shared Name'; Kind = 'Scheduled'; Enabled = $true },
+            [PSCustomObject]@{ RuleId = 'guid-c'; RuleName = 'Quiet Rule'; Kind = 'Scheduled'; Enabled = $true },
+            [PSCustomObject]@{ RuleName = 'Legacy No Id'; Kind = 'NRT'; Enabled = $true }
+        )
+        $script:daIncidents = @(
+            [PSCustomObject]@{ IncidentId = 'i1'; IncidentNumber = 1; Title = 'x'; Status = 'Closed'; Classification = 'FalsePositive'; CreatedTimeUtc = [datetime]'2026-08-01T10:00:00Z'; ClosedTimeUtc = [datetime]'2026-08-01T10:01:00Z'; RelatedAnalyticRuleIds = @('/s/alertRules/guid-a'); RelatedAnalyticRuleNames = @('Shared Name') },
+            [PSCustomObject]@{ IncidentId = 'i2'; IncidentNumber = 2; Title = 'x'; Status = 'Closed'; Classification = 'TruePositive'; CreatedTimeUtc = [datetime]'2026-08-01T10:00:00Z'; ClosedTimeUtc = [datetime]'2026-08-01T12:00:00Z'; RelatedAnalyticRuleIds = @('/s/alertRules/guid-a', '/s/alertRules/guid-b'); RelatedAnalyticRuleNames = @('Shared Name') },
+            [PSCustomObject]@{ IncidentId = 'i3'; IncidentNumber = 3; Title = 'Legacy No Id fired'; Status = 'New'; Classification = $null; CreatedTimeUtc = [datetime]'2026-08-01T10:00:00Z'; ClosedTimeUtc = $null; RelatedAnalyticRuleIds = @(); RelatedAnalyticRuleNames = @() },
+            [PSCustomObject]@{ IncidentId = 'i4'; IncidentNumber = 4; Title = 'y'; Status = 'Closed'; Classification = 'BenignPositive'; CreatedTimeUtc = [datetime]'2026-08-01T10:00:00Z'; ClosedTimeUtc = [datetime]'2026-08-01T10:00:30Z'; RelatedAnalyticRuleIds = @(); RelatedAnalyticRuleNames = @('Quiet Rule') }
+        )
+        $script:daAutomation = @(
+            [PSCustomObject]@{ AutomationRuleId = 'ar1'; DisplayName = 'Close guid-a'; Enabled = $true; IsCloseIncidentRule = $true; HasPlaybookAction = $false; HasConditions = $true; TitleFilters = @(); TitleOperators = @(); RuleIdFilters = @('/s/alertRules/guid-a') },
+            [PSCustomObject]@{ AutomationRuleId = 'ar2'; DisplayName = 'Close nothing'; Enabled = $true; IsCloseIncidentRule = $true; HasPlaybookAction = $false; HasConditions = $true; TitleFilters = @('zzz'); TitleOperators = @('Equals'); RuleIdFilters = @() }
+        )
+        $script:daResult = Get-DetectionAnalyzerData -Rules $script:daRules -Incidents $script:daIncidents -AutomationRules $script:daAutomation -AutoCloseHealthData @{ 4 = $true }
+    }
+
+    It 'buckets by rule id so duplicate display names stay separate' {
+        $a = $script:daResult.RuleMetrics | Where-Object RuleId -eq 'guid-a'
+        $b = $script:daResult.RuleMetrics | Where-Object RuleId -eq 'guid-b'
+        $a.IncidentsTotal | Should -Be 2
+        $b.IncidentsTotal | Should -Be 1
+        $a.RuleKey | Should -Be 'guid-a'
+    }
+
+    It 'falls back to name and then title for rules without ids' {
+        $legacy = $script:daResult.RuleMetrics | Where-Object RuleName -eq 'Legacy No Id'
+        $legacy.RuleKey | Should -Be 'name:Legacy No Id'
+        $legacy.IncidentsTotal | Should -Be 1
+        $quiet = $script:daResult.RuleMetrics | Where-Object RuleName -eq 'Quiet Rule'
+        $quiet.IncidentsTotal | Should -Be 1
+    }
+
+    It 'links only the automation rules that actually matched and counts distinct auto-closed incidents' {
+        $a = $script:daResult.RuleMetrics | Where-Object RuleId -eq 'guid-a'
+        $a.IncidentsAutoClosed | Should -Be 2
+        $a.LinkedAutomationRules | Should -Be @('Close guid-a')
+        $b = $script:daResult.RuleMetrics | Where-Object RuleId -eq 'guid-b'
+        $b.LinkedAutomationRules | Should -Be @('Close guid-a')
+        $quiet = $script:daResult.RuleMetrics | Where-Object RuleName -eq 'Quiet Rule'
+        $quiet.IncidentsAutoClosed | Should -Be 1
+        $quiet.LinkedAutomationRules | Should -Be @()
+        # i1, i2 (via guid-a and guid-b) and i4: three distinct incidents, not the per-rule sum of 4
+        $script:daResult.Summary.AutoClosedIncidents | Should -Be 3
+    }
+
+    It 'scores when at least three rules have incidents and marks the rest' {
+        $script:daResult.Summary.ScorableRules | Should -Be 4
+        $script:daResult.Summary.MinScorablePopulation | Should -Be 3
+        ($script:daResult.RuleMetrics | Where-Object RuleId -eq 'guid-a').ScoreStatus | Should -Be 'Scored'
+        ($script:daResult.RuleMetrics | Where-Object RuleId -eq 'guid-a').NoisinessScore | Should -Not -BeNullOrEmpty
+    }
+
+    It 'withholds scores when fewer than three rules have incidents' {
+        $small = Get-DetectionAnalyzerData -Rules @($script:daRules[0], $script:daRules[2]) -Incidents @($script:daIncidents[0]) -AutomationRules @()
+        $withIncidents = $small.RuleMetrics | Where-Object IncidentsTotal -gt 0
+        $withIncidents.NoisinessScore | Should -BeNullOrEmpty
+        $withIncidents.ScoreStatus | Should -Be 'InsufficientSample'
+        ($small.RuleMetrics | Where-Object IncidentsTotal -eq 0).ScoreStatus | Should -Be 'NoIncidents'
+        $small.Summary.ScorableRules | Should -Be 1
+        $small.Summary.NoisyRules | Should -Be 0
+    }
+
+    It 'returns an empty result when there are no rules at all' {
+        $empty = Get-DetectionAnalyzerData -Rules @() -Incidents $script:daIncidents -AutomationRules @()
+        $empty.RuleMetrics.Count | Should -Be 0
+        $empty.Summary.RulesAnalyzed | Should -Be 0
     }
 }
 
@@ -2758,6 +4532,805 @@ Describe 'Invoke-AzRestWithRetry' {
         { Invoke-AzRestWithRetry -Uri 'https://example.com/api' -Headers @{ Authorization = 'Bearer test' } -MaxRetries 1 -BaseDelaySeconds 0 } | Should -Throw
         Should -Invoke Invoke-RestMethod -Times 2 -Exactly
     }
+
+    It 'makes exactly MaxRetries additional attempts' {
+        Mock Invoke-RestMethod {
+            $resp = [System.Net.Http.HttpResponseMessage]::new([System.Net.HttpStatusCode]::ServiceUnavailable)
+            throw ([Microsoft.PowerShell.Commands.HttpResponseException]::new('Down', $resp))
+        }
+        { Invoke-AzRestWithRetry -Uri 'https://example.com/api' -Headers @{} -MaxRetries 3 -BaseDelaySeconds 0 -WarningAction SilentlyContinue } | Should -Throw
+        Should -Invoke Invoke-RestMethod -Times 4 -Exactly
+    }
+
+    It 'retries transport-level failures that carry no HTTP response' {
+        $script:transportCalls = 0
+        Mock Invoke-RestMethod {
+            $script:transportCalls++
+            if ($script:transportCalls -eq 1) { throw ([System.Net.Http.HttpRequestException]::new('connection reset')) }
+            [PSCustomObject]@{ value = @('recovered') }
+        }
+        $result = Invoke-AzRestWithRetry -Uri 'https://example.com/api' -Headers @{} -BaseDelaySeconds 0 -WarningVariable w -WarningAction SilentlyContinue
+        $result.value | Should -Contain 'recovered'
+        "$w" | Should -Match 'HttpRequestException'
+    }
+
+    It 'does not retry plain script errors' {
+        Mock Invoke-RestMethod { throw 'not a transport problem' }
+        { Invoke-AzRestWithRetry -Uri 'https://example.com/api' -Headers @{} -BaseDelaySeconds 0 } | Should -Throw
+        Should -Invoke Invoke-RestMethod -Times 1 -Exactly
+    }
+}
+
+Describe 'Invoke-AzRestWithRetry async paths' {
+    It 'warns and reports unconfirmed success on a 202 without async headers' {
+        Mock Invoke-WebRequest { [PSCustomObject]@{ StatusCode = 202; Headers = @{}; Content = '' } }
+        $result = Invoke-AzRestWithRetry -Uri 'https://example.com/api' -Headers @{} -Method Patch -Body '{}' -FollowAsync -WarningVariable w -WarningAction SilentlyContinue
+        $result.status | Should -Be 'Succeeded'
+        $result.unconfirmed | Should -Be $true
+        "$w" | Should -Match 'could not be confirmed'
+    }
+
+    It 'returns the parsed body for a synchronous 200' {
+        Mock Invoke-WebRequest { [PSCustomObject]@{ StatusCode = 200; Headers = @{}; Content = '{"properties":{"plan":"Basic"}}' } }
+        $result = Invoke-AzRestWithRetry -Uri 'https://example.com/api' -Headers @{} -Method Patch -Body '{}' -FollowAsync
+        $result.properties.plan | Should -Be 'Basic'
+    }
+
+    It 'returns raw content when the body is not JSON and null when there is no body' {
+        Mock Invoke-WebRequest { [PSCustomObject]@{ StatusCode = 200; Headers = @{}; Content = 'plain text' } }
+        Invoke-AzRestWithRetry -Uri 'https://example.com/api' -Headers @{} -FollowAsync | Should -Be 'plain text'
+        Mock Invoke-WebRequest { [PSCustomObject]@{ StatusCode = 204; Headers = @{}; Content = $null } }
+        Invoke-AzRestWithRetry -Uri 'https://example.com/api' -Headers @{} -FollowAsync | Should -BeNullOrEmpty
+    }
+
+    It 'follows the Azure-AsyncOperation header to a terminal status' {
+        Mock Start-Sleep {}
+        Mock Invoke-WebRequest {
+            if ($Method -eq 'Get') { return [PSCustomObject]@{ StatusCode = 200; Headers = @{}; Content = '{"status":"Succeeded"}' } }
+            [PSCustomObject]@{ StatusCode = 202; Headers = @{ 'Azure-AsyncOperation' = @('https://example.com/op/1') }; Content = '' }
+        }
+        $result = Invoke-AzRestWithRetry -Uri 'https://example.com/api' -Headers @{} -Method Patch -Body '{}' -FollowAsync
+        $result.status | Should -Be 'Succeeded'
+    }
+
+    It 'treats a Location-header completion (200 with provisioningState) as terminal' {
+        Mock Start-Sleep {}
+        Mock Invoke-WebRequest {
+            if ($Method -eq 'Get') { return [PSCustomObject]@{ StatusCode = 200; Headers = @{}; Content = '{"properties":{"provisioningState":"Succeeded","plan":"Analytics"}}' } }
+            [PSCustomObject]@{ StatusCode = 202; Headers = @{ 'Location' = 'https://example.com/op/2' }; Content = '' }
+        }
+        $result = Invoke-AzRestWithRetry -Uri 'https://example.com/api' -Headers @{} -Method Patch -Body '{}' -FollowAsync
+        $result.properties.plan | Should -Be 'Analytics'
+    }
+
+    It 'throws when the Location-style resource reports a failed provisioning state' {
+        Mock Start-Sleep {}
+        Mock Invoke-WebRequest { [PSCustomObject]@{ StatusCode = 200; Headers = @{}; Content = '{"properties":{"provisioningState":"Failed"},"error":{"message":"quota"}}' } }
+        { Wait-AzAsyncOperation -Uri 'https://example.com/op' -Headers @{} -TimeoutSeconds 30 } | Should -Throw '*quota*'
+    }
+
+    It 'keeps polling while the resource is still Updating and honours Retry-After' {
+        Mock Start-Sleep {}
+        $script:pollCalls = 0
+        Mock Invoke-WebRequest {
+            $script:pollCalls++
+            if ($script:pollCalls -lt 3) { return [PSCustomObject]@{ StatusCode = 200; Headers = @{ 'Retry-After' = @('1') }; Content = '{"properties":{"provisioningState":"Updating"}}' } }
+            [PSCustomObject]@{ StatusCode = 200; Headers = @{}; Content = '{"status":"Succeeded"}' }
+        }
+        (Wait-AzAsyncOperation -Uri 'https://example.com/op' -Headers @{} -TimeoutSeconds 60).status | Should -Be 'Succeeded'
+        $script:pollCalls | Should -Be 3
+    }
+
+    It 'throws when the async operation reports Failed' {
+        Mock Start-Sleep {}
+        Mock Invoke-WebRequest { [PSCustomObject]@{ StatusCode = 200; Headers = @{}; Content = '{"status":"Failed","error":{"message":"bad plan"}}' } }
+        { Wait-AzAsyncOperation -Uri 'https://example.com/op' -Headers @{} -TimeoutSeconds 30 } | Should -Throw '*bad plan*'
+    }
+
+    It 'returns a synthetic success for a 204 poll with no body' {
+        Mock Start-Sleep {}
+        Mock Invoke-WebRequest { [PSCustomObject]@{ StatusCode = 204; Headers = @{}; Content = $null } }
+        (Wait-AzAsyncOperation -Uri 'https://example.com/op' -Headers @{} -TimeoutSeconds 30).status | Should -Be 'Succeeded'
+    }
+
+    It 'backs off on 429/5xx while polling and rethrows other errors' {
+        Mock Start-Sleep {}
+        $script:pollCalls = 0
+        Mock Invoke-WebRequest {
+            $script:pollCalls++
+            if ($script:pollCalls -eq 1) {
+                $resp = [System.Net.Http.HttpResponseMessage]::new([System.Net.HttpStatusCode]::TooManyRequests)
+                throw ([Microsoft.PowerShell.Commands.HttpResponseException]::new('slow down', $resp))
+            }
+            [PSCustomObject]@{ StatusCode = 200; Headers = @{}; Content = '{"status":"Succeeded"}' }
+        }
+        (Wait-AzAsyncOperation -Uri 'https://example.com/op' -Headers @{} -TimeoutSeconds 60).status | Should -Be 'Succeeded'
+
+        Mock Invoke-WebRequest {
+            $resp = [System.Net.Http.HttpResponseMessage]::new([System.Net.HttpStatusCode]::Forbidden)
+            throw ([Microsoft.PowerShell.Commands.HttpResponseException]::new('nope', $resp))
+        }
+        { Wait-AzAsyncOperation -Uri 'https://example.com/op' -Headers @{} -TimeoutSeconds 60 } | Should -Throw '*nope*'
+    }
+
+    It 'times out when the operation never completes' {
+        Mock Start-Sleep {}
+        Mock Invoke-WebRequest { [PSCustomObject]@{ StatusCode = 200; Headers = @{}; Content = '{"status":"InProgress"}' } }
+        { Wait-AzAsyncOperation -Uri 'https://example.com/op' -Headers @{} -TimeoutSeconds 0 } | Should -Throw '*terminal status*'
+    }
+
+    It 'treats a 200 poll with a non-JSON body as completed and rethrows non-HTTP poll errors' {
+        Mock Start-Sleep {}
+        Mock Invoke-WebRequest { [PSCustomObject]@{ StatusCode = 200; Headers = @{}; Content = 'garbage' } }
+        (Wait-AzAsyncOperation -Uri 'https://example.com/op' -Headers @{} -TimeoutSeconds 30).status | Should -Be 'Succeeded'
+
+        Mock Invoke-WebRequest { throw 'socket closed' }
+        { Wait-AzAsyncOperation -Uri 'https://example.com/op' -Headers @{} -TimeoutSeconds 30 } | Should -Throw '*socket closed*'
+    }
+
+    It 'honours Retry-After on a throttled request' {
+        $script:raCalls = 0
+        Mock Start-Sleep {}
+        Mock Invoke-RestMethod {
+            $script:raCalls++
+            if ($script:raCalls -eq 1) {
+                $resp = [System.Net.Http.HttpResponseMessage]::new([System.Net.HttpStatusCode]::TooManyRequests)
+                $resp.Headers.Add('Retry-After', '7')
+                throw ([Microsoft.PowerShell.Commands.HttpResponseException]::new('Throttled', $resp))
+            }
+            [PSCustomObject]@{ ok = $true }
+        }
+        $result = Invoke-AzRestWithRetry -Uri 'https://example.com/api' -Headers @{} -BaseDelaySeconds 0 -WarningVariable w -WarningAction SilentlyContinue
+        $result.ok | Should -Be $true
+        "$w" | Should -Match 'in 7s'
+        Should -Invoke Start-Sleep -Times 1 -ParameterFilter { $Seconds -eq 7 }
+    }
+}
+
+Describe 'Collection cache' {
+    BeforeAll {
+        $script:cacheDir = Join-Path $TestDrive 'cache'
+        $script:sample = [PSCustomObject]@{
+            Context    = [PSCustomObject]@{ ArmToken = 'SECRET-ARM'; LaToken = 'SECRET-LA'; WorkspaceName = 'ws' }
+            GraphToken = 'SECRET-GRAPH'
+            TableUsage = @([PSCustomObject]@{ TableName = 'SigninLogs'; MonthlyGB = 1.5 })
+            RulesData  = [PSCustomObject]@{ TableCoverage = @{ 'SigninLogs' = 2 }; Rules = @() }
+        }
+    }
+
+    It 'produces a stable key that changes with any collection-shaping input' {
+        $k1 = Get-CollectionCacheKey -SubscriptionId 'SUB' -ResourceGroup 'rg' -WorkspaceName 'ws'
+        $k2 = Get-CollectionCacheKey -SubscriptionId 'sub' -ResourceGroup 'RG' -WorkspaceName 'WS'
+        $k1 | Should -Be $k2
+        $k1 | Should -Match '^[0-9a-f]{64}$'
+        (Get-CollectionCacheKey -SubscriptionId 'sub' -ResourceGroup 'rg' -WorkspaceName 'ws' -DaysBack 30) | Should -Not -Be $k1
+        (Get-CollectionCacheKey -SubscriptionId 'sub' -ResourceGroup 'rg' -WorkspaceName 'ws' -DetectionLookbackDays 7) | Should -Not -Be $k1
+        (Get-CollectionCacheKey -SubscriptionId 'sub' -ResourceGroup 'rg' -WorkspaceName 'ws' -IncludeDefenderXDR $true) | Should -Not -Be $k1
+        (Get-CollectionCacheKey -SubscriptionId 'sub' -ResourceGroup 'rg' -WorkspaceName 'ws' -IncludeDetectionAnalyzer $true) | Should -Not -Be $k1
+        (Get-CollectionCacheKey -SubscriptionId 'sub' -ResourceGroup 'rg' -WorkspaceName 'other') | Should -Not -Be $k1
+        (Get-CollectionCacheKey -SubscriptionId 'sub' -ResourceGroup 'rg' -WorkspaceName 'ws' -PricePerGB 4.61) | Should -Not -Be $k1
+        (Get-CollectionCacheKey -SubscriptionId 'sub' -ResourceGroup 'rg' -WorkspaceName 'ws' -BasicPricePerGB 1) | Should -Not -Be $k1
+        (Get-CollectionCacheKey -SubscriptionId 'sub' -ResourceGroup 'rg' -WorkspaceName 'ws' -LakePricePerGB 0.1) | Should -Not -Be $k1
+        (Get-CollectionCacheKey -SubscriptionId 'sub' -ResourceGroup 'rg' -WorkspaceName 'ws' -ModuleVersion '0.8.0') | Should -Not -Be $k1
+        (Get-CollectionCacheKey -SubscriptionId 'sub' -ResourceGroup 'rg' -WorkspaceName 'ws' -PricePerGB 5.59 -ModuleVersion '') | Should -Be $k1
+    }
+
+    It 'resolves the default cache path under the local app data folder' {
+        $p = Get-CollectionCachePath -Key 'abc'
+        $p | Should -Match 'LogHorizon'
+        $p | Should -Match 'collection-abc\.clixml$'
+        (Get-CollectionCachePath -Key 'abc' -CachePath 'C:\x') | Should -Be 'C:\x\collection-abc.clixml'
+    }
+
+    It 'round-trips a collection without persisting the context or any token' {
+        $file = Save-CollectionCache -Key 'k1' -Data $script:sample -CachePath $script:cacheDir -Version '0.9.0'
+        Test-Path $file | Should -Be $true
+        $raw = Get-Content $file -Raw
+        $raw | Should -Not -Match 'SECRET-ARM'
+        $raw | Should -Not -Match 'SECRET-LA'
+        $raw | Should -Not -Match 'SECRET-GRAPH'
+
+        $hit = Get-CollectionCache -Key 'k1' -CachePath $script:cacheDir -MaxAgeMinutes 60
+        $hit | Should -Not -BeNullOrEmpty
+        $hit.Data.PSObject.Properties.Name | Should -Not -Contain 'Context'
+        $hit.Data.PSObject.Properties.Name | Should -Not -Contain 'GraphToken'
+        $hit.Data.TableUsage[0].TableName | Should -Be 'SigninLogs'
+        $hit.Data.RulesData.TableCoverage | Should -BeOfType [hashtable]
+        $hit.Data.RulesData.TableCoverage['SigninLogs'] | Should -Be 2
+        $hit.Version | Should -Be '0.9.0'
+        $hit.AgeMinutes | Should -BeLessThan 5
+        $hit.Path | Should -Be $file
+    }
+
+    It 'misses when the file is absent, expired, corrupt or has the wrong shape' {
+        Get-CollectionCache -Key 'missing' -CachePath $script:cacheDir | Should -BeNullOrEmpty
+
+        Save-CollectionCache -Key 'old' -Data $script:sample -CachePath $script:cacheDir | Out-Null
+        $oldFile = Get-CollectionCachePath -Key 'old' -CachePath $script:cacheDir
+        $env = Import-Clixml $oldFile
+        $env.SavedAt = (Get-Date).ToUniversalTime().AddHours(-3).ToString('o')
+        $env | Export-Clixml $oldFile -Force
+        Get-CollectionCache -Key 'old' -CachePath $script:cacheDir -MaxAgeMinutes 60 | Should -BeNullOrEmpty
+        (Get-CollectionCache -Key 'old' -CachePath $script:cacheDir -MaxAgeMinutes 600).AgeMinutes | Should -BeGreaterThan 170
+
+        Set-Content -Path (Get-CollectionCachePath -Key 'corrupt' -CachePath $script:cacheDir) -Value 'not xml'
+        Get-CollectionCache -Key 'corrupt' -CachePath $script:cacheDir -WarningAction SilentlyContinue | Should -BeNullOrEmpty
+
+        [PSCustomObject]@{ Something = 1 } | Export-Clixml (Get-CollectionCachePath -Key 'shape' -CachePath $script:cacheDir)
+        Get-CollectionCache -Key 'shape' -CachePath $script:cacheDir | Should -BeNullOrEmpty
+
+        # Key mismatch inside the envelope (file renamed by hand)
+        Copy-Item (Get-CollectionCachePath -Key 'k1' -CachePath $script:cacheDir) (Get-CollectionCachePath -Key 'k2' -CachePath $script:cacheDir)
+        Get-CollectionCache -Key 'k2' -CachePath $script:cacheDir | Should -BeNullOrEmpty
+    }
+
+    It 'purges expired sibling cache files on save but keeps fresh ones and the file just written' {
+        $dir = Join-Path $TestDrive 'purge'
+        New-Item -ItemType Directory -Path $dir | Out-Null
+        $stale = Join-Path $dir 'collection-stale.clixml'
+        $fresh = Join-Path $dir 'collection-fresh.clixml'
+        $other = Join-Path $dir 'notes.txt'
+        foreach ($f in $stale, $fresh, $other) { Set-Content $f 'x' }
+        (Get-Item $stale).LastWriteTime = (Get-Date).AddHours(-2)
+        (Get-Item $other).LastWriteTime = (Get-Date).AddHours(-2)
+
+        $written = Save-CollectionCache -Key 'new' -Data $script:sample -CachePath $dir -MaxAgeMinutes 60
+
+        Test-Path $stale | Should -BeFalse
+        Test-Path $fresh | Should -BeTrue
+        Test-Path $other | Should -BeTrue
+        Test-Path $written | Should -BeTrue
+
+        # -WhatIf reports without deleting; missing directory is a no-op
+        (Get-Item $fresh).LastWriteTime = (Get-Date).AddHours(-2)
+        Remove-ExpiredCollectionCache -CachePath $dir -MaxAgeMinutes 60 -WhatIf | Should -BeNullOrEmpty
+        Test-Path $fresh | Should -BeTrue
+        @(Remove-ExpiredCollectionCache -CachePath (Join-Path $TestDrive 'nope') -MaxAgeMinutes 60).Count | Should -Be 0
+        @(Remove-ExpiredCollectionCache -CachePath $dir -MaxAgeMinutes 60 -Keep $written) | Should -Be @($fresh)
+    }
+}
+
+Describe 'TUI layout helpers' {
+    It 'Sync-ConsoleSize pushes the live window size into the Spectre profile and every view calls it' {
+        $profile = [Spectre.Console.AnsiConsole]::Console.Profile
+        $before = $profile.Width
+        $raw = $Host.UI.RawUI
+        $bufBefore = $raw.BufferSize
+        try {
+            $profile.Width = 42
+            # conhost keeps the old buffer width after a resize; PwshSpectreConsole sizes tables from it
+            try { $b = $raw.BufferSize; $b.Width = $raw.WindowSize.Width + 40; $raw.BufferSize = $b } catch { Write-Verbose 'buffer not adjustable in this host' }
+            $r = Sync-ConsoleSize
+            $r.Width | Should -Be $raw.WindowSize.Width
+            $profile.Width | Should -Be $raw.WindowSize.Width
+            $raw.BufferSize.Width | Should -Be $raw.WindowSize.Width
+        }
+        finally {
+            $profile.Width = $before
+            try { $raw.BufferSize = $bufBefore } catch { Write-Verbose 'buffer not restorable in this host' }
+        }
+
+        $src = Get-Content (Join-Path $PSScriptRoot '..\Private\Write-Report.ps1') -Raw
+        $ast = [System.Management.Automation.Language.Parser]::ParseInput($src, [ref]$null, [ref]$null)
+        $views = @($ast.FindAll({ $args[0] -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $args[0].Name -match '^(Write-(?!Report$|LogHorizonBanner$|DefinitionTable$|InteractiveMenu$)|Show-|Invoke-(Export|Manage|LogHorizonManaged))' }, $true))
+        $views.Count | Should -BeGreaterOrEqual 20
+        foreach ($v in $views) {
+            $first = @($v.Body.EndBlock.Statements)[0]
+            "$($first.Extent.Text)" | Should -Match 'Sync-ConsoleSize' -Because "$($v.Name) must sync the console size before rendering"
+        }
+        # Prompts go through the wrapper so the size is re-synced after every pick
+        ([regex]::Matches($src, 'Read-SpectreSelection @splat|Read-SpectreSelection -')).Count | Should -Be 1
+        ([regex]::Matches($src, 'Read-LogHorizonSelection ')).Count | Should -BeGreaterOrEqual 25
+    }
+
+    It 'Read-LogHorizonSelection forwards to Read-SpectreSelection and re-syncs the size' {
+        $orig = if (Test-Path Function:\Read-SpectreSelection) { (Get-Item Function:\Read-SpectreSelection).ScriptBlock } else { $null }
+        try {
+            Set-Item -Path Function:\Read-SpectreSelection -Value { param([string]$Title, [object[]]$Choices, $Color, [switch]$EnableSearch) $script:wrapArgs = [PSCustomObject]@{ Title = $Title; Choices = $Choices; Search = [bool]$EnableSearch }; $Choices[1] }
+            Mock Sync-ConsoleSize { $script:synced = $true }
+            $script:synced = $false
+            $pick = Read-LogHorizonSelection -Title 't' -Choices @('Back', 'X') -EnableSearch
+            $pick | Should -Be 'X'
+            $script:wrapArgs.Search | Should -BeTrue
+            $script:synced | Should -BeTrue
+        }
+        finally {
+            if ($null -ne $orig) { Set-Item -Path Function:\Read-SpectreSelection -Value $orig } else { Remove-Item -Path Function:\Read-SpectreSelection -ErrorAction SilentlyContinue }
+        }
+    }
+
+    It 'ConvertTo-TransposedMatrix pivots measures into rows and strips markup from the new headers' {
+        $rows = @(
+            [PSCustomObject]@{ Classification = '[green]Primary[/]'; 'High Value' = 3; 'Low Value' = '[dim]-[/]'; Total = 16 },
+            [PSCustomObject]@{ Classification = '[grey]Secondary[/]'; 'High Value' = 0; 'Low Value' = 4; Total = 8 }
+        )
+        $t = @(ConvertTo-TransposedMatrix -Rows $rows -KeyColumn 'Classification' -RowLabel 'Assessment')
+        $t.Count | Should -Be 3
+        @($t[0].PSObject.Properties.Name) | Should -Be @('Assessment', 'Primary', 'Secondary')
+        $t[0].Assessment | Should -Be '[bold]High Value[/]'
+        $t[1].Secondary | Should -Be 4
+        $t[2].Primary | Should -Be 16
+        @(ConvertTo-TransposedMatrix -Rows @() -KeyColumn 'X').Count | Should -Be 0
+    }
+
+    It 'every submenu in Write-Report lists Back or Cancel as the first choice' {
+        $src = Get-Content (Join-Path $PSScriptRoot '..\Private\Write-Report.ps1') -Raw
+        # Literal choice arrays
+        foreach ($m in [regex]::Matches($src, "-Choices @\(('[^)]*')\)")) {
+            $items = @($m.Groups[1].Value -split ',\s*' | ForEach-Object { $_.Trim().Trim("'") })
+            if ($items -contains 'Back' -or $items -contains 'Cancel') {
+                $items[0] | Should -BeIn @('Back', 'Cancel') -Because "choices '$($m.Groups[1].Value)' must lead with Back/Cancel"
+            }
+        }
+        # Arrays built by concatenation must start with @('Back')
+        foreach ($m in [regex]::Matches($src, "\`$\w+ = @\(([^)]*)\) \+ @\('Back'\)")) {
+            $m.Value | Should -BeNullOrEmpty -Because "'$($m.Value)' appends Back last"
+        }
+        # Ordered menu hashtables: the Back/Cancel entry must be the first key
+        foreach ($m in [regex]::Matches($src, "\[ordered\]@\{\s*\r?\n\s*'([^']+)'\s*=\s*'[^']+'(?:\s*\r?\n\s*'([^']+)'\s*=\s*'[^']+')*\s*\r?\n\s*\}")) {
+            $block = $m.Value
+            if ($block -match "'(Back|Cancel)'\s*=") { $m.Groups[1].Value | Should -BeIn @('Back', 'Cancel') -Because "menu block must lead with Back/Cancel: $($block.Substring(0, [Math]::Min(80, $block.Length)))" }
+        }
+        $src | Should -Not -Match "\`$\w+\['Back'\]\s*=\s*'back'"
+        $src | Should -Not -Match "\`$\w+\['Cancel'\]\s*=\s*'cancel'"
+    }
+}
+
+Describe 'Resolve-ReportOutputPath' {
+    It 'returns a timestamped file inside an existing directory' {
+        $dir = Join-Path $TestDrive 'reports-existing'
+        New-Item -ItemType Directory -Path $dir | Out-Null
+        $p = Resolve-ReportOutputPath -OutputPath $dir -Format 'json' -Timestamp '2026-09-06_1200'
+        $p | Should -Be (Join-Path $dir 'LogHorizon_Report_2026-09-06_1200.json')
+    }
+
+    It 'treats a trailing separator as a directory, creates it and maps md aliases' {
+        $dir = Join-Path $TestDrive 'slash'
+        $p = Resolve-ReportOutputPath -OutputPath ($dir + '\') -Format 'markdown' -Timestamp 'T'
+        Test-Path $dir -PathType Container | Should -Be $true
+        $p | Should -Be (Join-Path $dir 'LogHorizon_Report_T.md')
+        (Resolve-ReportOutputPath -OutputPath (Join-Path $TestDrive 'x/') -Format 'md' -Timestamp 'T') | Should -Match '\.md$'
+    }
+
+    It 'treats a non-existing extensionless path as a file and appends the format extension' {
+        $p = Resolve-ReportOutputPath -OutputPath (Join-Path $TestDrive 'out\report') -Format 'html'
+        $p | Should -Be (Join-Path $TestDrive 'out\report.html')
+        Test-Path (Join-Path $TestDrive 'out') -PathType Container | Should -Be $true
+        Test-Path (Join-Path $TestDrive 'out\report') | Should -Be $false
+        (Resolve-ReportOutputPath -OutputPath (Join-Path $TestDrive 'out\notes') -Format 'markdown') | Should -Match 'notes\.md$'
+    }
+
+    It 'creates the parent of an explicit file path and returns it unchanged' {
+        $file = Join-Path $TestDrive 'deep\nested\report.html'
+        $p = Resolve-ReportOutputPath -OutputPath $file -Format 'html'
+        $p | Should -Be $file
+        Test-Path (Split-Path $file) -PathType Container | Should -Be $true
+        Test-Path $file | Should -Be $false
+    }
+
+    It 'rejects a syntactically invalid path' {
+        { Resolve-ReportOutputPath -OutputPath 'C:\bad|dir\report.json' -Format 'json' } | Should -Throw
+    }
+}
+
+Describe 'ConvertTo-SafeMarkdownText' {
+    It 'escapes table separators, markdown syntax, angle brackets and newlines' {
+        ConvertTo-SafeMarkdownText -Text 'a|b *c* <d>' | Should -Be 'a\|b \*c\* &lt;d&gt;'
+        ConvertTo-SafeMarkdownText -Text "line1`r`nline2" | Should -Be 'line1 line2'
+        ConvertTo-SafeMarkdownText -Text '' | Should -Be ''
+        ConvertTo-SafeMarkdownText -Text $null | Should -Be ''
+    }
+}
+
+Describe 'Export-Report hardening' {
+    BeforeAll {
+        $script:hardDir = Join-Path $TestDrive 'export-hard'
+        New-Item -ItemType Directory -Path $script:hardDir -Force | Out-Null
+    }
+
+    It 'returns the written path and includes liveTuningAnalysis in JSON' {
+        $a = New-MockAnalysis
+        $a | Add-Member -NotePropertyName LiveTuningAnalysis -NotePropertyValue @([PSCustomObject]@{ TableName = 'SecurityEvent'; FilterKql = 'x' })
+        $written = Export-Report -Analysis $a -Format 'json' -OutputPath $script:hardDir -WorkspaceName 'W'
+        $written | Should -Match '\.json$'
+        Test-Path $written | Should -Be $true
+        $json = Get-Content $written -Raw | ConvertFrom-Json
+        $json.liveTuningAnalysis[0].TableName | Should -Be 'SecurityEvent'
+    }
+
+    It 'escapes hostile recommendation titles, details and rule names in Markdown' {
+        $a = New-MockAnalysis
+        $a.Recommendations = @([PSCustomObject]@{
+            Title = 'Bad | title ![img](https://evil/x.png)'; TableName = 'T'; Priority = 'High'; Type = 'DetectionAnalyzer'
+            CurrentCost = 0; EstSavingsUSD = 0; Detail = "line one`n`n<img src=x>"
+        })
+        $a | Add-Member -NotePropertyName DetectionAnalyzer -NotePropertyValue ([PSCustomObject]@{
+            RuleMetrics = @([PSCustomObject]@{ RuleName = 'Rule | with pipe'; RuleKind = 'Scheduled'; IncidentsTotal = 3; AutoCloseRatio = 0.5; FalsePositiveRatio = 0; NoisinessScore = 80 })
+            Summary = [PSCustomObject]@{ RulesAnalyzed = 1; NoisyRules = 1; IncidentsAnalyzed = 3; ScorableRules = 1; MinScorablePopulation = 3 }
+        })
+        $sections = ConvertTo-ReportSections -Analysis $a
+        $recs = ($sections | Where-Object TabId -eq 'recs').Markdown
+        $recs | Should -Match '### 1\. .* Bad \\\| title \\!\\\[img\\\]'
+        $recs | Should -Not -Match '<img src=x>'
+        $recs | Should -Match '&lt;img src=x&gt;'
+        $da = ($sections | Where-Object TabId -eq 'detanalyzer').Markdown
+        $da | Should -Match '\| Rule \\\| with pipe \|'
+        $da | Should -Match 'scores are N/A'
+    }
+
+    It 'uses TotalCoverage in the Markdown Rules column, matching HTML' {
+        $a = New-MockAnalysis
+        $a.TableAnalysis[0].AnalyticsRules = 1
+        $a.TableAnalysis[0].TotalCoverage = 7
+        $tables = ($sections = ConvertTo-ReportSections -Analysis $a | Where-Object TabId -eq 'tables')
+        ($tables.Markdown -split "`n" | Where-Object { $_ -match '\| SecurityEvent \|' }) | Should -Match '\| 7 \| 3 \|'
+    }
+
+    It 'HTML-encodes markup inside the Markdown KQL preview' {
+        $a = New-MockAnalysis
+        $a.DataTransforms = [PSCustomObject]@{ Transforms = @([PSCustomObject]@{ DCRName = 'd'; OutputTable = 'T'; TransformKql = 'source | where a < 1 </code><b>x</b>'; TransformType = 'Filter' }) }
+        $a.TableAnalysis[0].HasTransform = $true
+        $tx = (ConvertTo-ReportSections -Analysis $a | Where-Object TabId -eq 'transforms').Markdown
+        $line = ($tx -split "`n" | Where-Object { $_ -match '^\| T \|' })
+        $line | Should -Match '&lt;/code&gt;&lt;b&gt;'
+        $line | Should -Not -Match '</code><b>'
+    }
+}
+
+Describe 'Custom classification validation' {
+    It 'normalises a minimal entry with defaults' {
+        $e = ConvertTo-ValidClassificationEntry -Entry ([PSCustomObject]@{ tableName = ' MyApp_CL '; classification = 'Primary' })
+        $e.tableName | Should -Be 'MyApp_CL'
+        $e.classification | Should -Be 'primary'
+        $e.connector | Should -Be 'Custom'
+        $e.category | Should -Be 'Custom'
+        $e.description | Should -Be ''
+        $e.keywords | Should -Be @()
+        $e.recommendedTier | Should -Be 'analytics'
+        $e.isFree | Should -Be $false
+        $e.recommendedRetentionDays | Should -Be 90
+    }
+
+    It 'keeps supplied values and coerces types' {
+        $e = ConvertTo-ValidClassificationEntry -Entry ([PSCustomObject]@{ tableName = 'T'; classification = 'secondary'; connector = 'C'; category = 'Cat'; description = 'D'; keywords = @('a', '', 'b'); mitreSources = @('DS0001'); recommendedTier = 'DataLake'; isFree = 'true'; recommendedRetentionDays = '365' })
+        $e.keywords | Should -Be @('a', 'b')
+        $e.recommendedTier | Should -Be 'datalake'
+        $e.isFree | Should -Be $true
+        $e.recommendedRetentionDays | Should -Be 365
+        $e.mitreSources | Should -Be @('DS0001')
+    }
+
+    It 'rejects entries without a name or with an invalid classification' {
+        ConvertTo-ValidClassificationEntry -Entry ([PSCustomObject]@{ classification = 'primary' }) -WarningVariable w1 -WarningAction SilentlyContinue | Should -BeNullOrEmpty
+        "$w1" | Should -Match 'without tableName'
+        ConvertTo-ValidClassificationEntry -Entry ([PSCustomObject]@{ tableName = 'T'; classification = 'tertiary' }) -WarningVariable w2 -WarningAction SilentlyContinue | Should -BeNullOrEmpty
+        "$w2" | Should -Match 'primary or secondary'
+        ConvertTo-ValidClassificationEntry -Entry $null | Should -BeNullOrEmpty
+    }
+
+    It 'skips malformed custom entries during Invoke-Classification and keeps the rest' {
+        $custom = Join-Path $TestDrive 'custom.json'
+        @(
+            @{ tableName = 'GoodTable_CL'; classification = 'primary'; category = 'Application Logs' },
+            @{ tableName = ''; classification = 'primary' },
+            @{ tableName = 'BadClass_CL'; classification = 'maybe' },
+            @{ tableName = 'AzureMetrics'; classification = 'primary' }
+        ) | ConvertTo-Json | Set-Content $custom
+
+        $usage = @(
+            [PSCustomObject]@{ TableName = 'GoodTable_CL'; MonthlyGB = 1; IsFree = $false },
+            [PSCustomObject]@{ TableName = 'BadClass_CL'; MonthlyGB = 1; IsFree = $false },
+            [PSCustomObject]@{ TableName = 'AzureMetrics'; MonthlyGB = 1; IsFree = $false }
+        )
+        $result = Invoke-Classification -TableUsage $usage -RuleTableCoverage @{} -CustomClassificationPath $custom -Keywords @('GoodTable') -WarningAction SilentlyContinue
+        $result.CustomEntries | Should -Be 2
+        $result.Classifications['GoodTable_CL'].Source | Should -Be 'database'
+        $result.Classifications['GoodTable_CL'].Connector | Should -Be 'Custom'
+        $result.Classifications['BadClass_CL'].Source | Should -Be 'heuristic'
+        $result.Classifications['AzureMetrics'].Classification | Should -Be 'primary'
+    }
+
+    It 'matches keywords null-safely across name, connector, description and keywords' {
+        $entry = [PSCustomObject]@{ tableName = 'Okta_CL'; connector = $null; description = $null; keywords = @('sso', $null) }
+        Test-ClassificationKeywordMatch -Entry $entry -Keyword 'okta' | Should -Be $true
+        Test-ClassificationKeywordMatch -Entry $entry -Keyword 'SSO' | Should -Be $true
+        Test-ClassificationKeywordMatch -Entry $entry -Keyword 'aws' | Should -Be $false
+        Test-ClassificationKeywordMatch -Entry $entry -Keyword '' | Should -Be $false
+        Test-ClassificationKeywordMatch -Entry ([PSCustomObject]@{ tableName = 'X'; connector = 'Amazon Web Services'; description = 'CloudTrail events'; keywords = @() }) -Keyword 'cloudtrail' | Should -Be $true
+    }
+
+    It 'reports every matched keyword for a gap' {
+        $usage = @([PSCustomObject]@{ TableName = 'SecurityEvent'; MonthlyGB = 1; IsFree = $false })
+        $result = Invoke-Classification -TableUsage $usage -RuleTableCoverage @{} -Keywords @('AWS', 'CloudTrail')
+        $gap = $result.KeywordGaps | Where-Object TableName -eq 'AWSCloudTrail'
+        $gap.MatchedKeyword | Should -Match 'AWS'
+        $gap.MatchedKeyword | Should -Match 'CloudTrail'
+    }
+
+    It 'split tables inherit the parent recommended retention' {
+        $usage = @(
+            [PSCustomObject]@{ TableName = 'SigninLogs'; MonthlyGB = 5; IsFree = $false },
+            [PSCustomObject]@{ TableName = 'SigninLogs_SPLT_CL'; MonthlyGB = 3; IsFree = $false },
+            [PSCustomObject]@{ TableName = 'Orphan_SPLT_CL'; MonthlyGB = 3; IsFree = $false }
+        )
+        $result = Invoke-Classification -TableUsage $usage -RuleTableCoverage @{}
+        $result.Classifications['SigninLogs_SPLT_CL'].RecommendedRetentionDays | Should -Be 365
+        $result.Classifications['Orphan_SPLT_CL'].RecommendedRetentionDays | Should -Be 90
+    }
+}
+
+Describe 'Resolve-DynamicClassification heuristics' {
+    It 'requires tokens to start a PascalCase word' {
+        (Resolve-DynamicClassification -TableName 'MicrosoftServicePrincipalSignInLogs' -RuleCount 0 -MonthlyGB 0).Classification | Should -Be 'primary'
+        (Resolve-DynamicClassification -TableName 'Realerting_CL' -RuleCount 0 -MonthlyGB 0).Classification | Should -Not -Be 'primary'
+    }
+
+    It 'treats Microsoft first-party names as primary when nothing else matches' {
+        $r = Resolve-DynamicClassification -TableName 'AADGraphActivityLogs' -RuleCount 0 -MonthlyGB 0
+        $r.Classification | Should -Be 'primary'
+        $r.Category | Should -Match 'Microsoft first-party'
+        (Resolve-DynamicClassification -TableName 'GraphNotificationsActivityLogs' -RuleCount 0 -MonthlyGB 0).Classification | Should -Be 'primary'
+    }
+
+    It 'treats generic *Logs custom tables as secondary' {
+        $r = Resolve-DynamicClassification -TableName 'ContainerAppSystemLogs_CL' -RuleCount 0 -MonthlyGB 0.1
+        $r.Classification | Should -Be 'secondary'
+        $r.Category | Should -Match 'Generic log table'
+        $r.RecommendedTier | Should -Be 'datalake'
+    }
+
+    It 'prefers rule coverage over the Microsoft prefix and telemetry tokens over rules' {
+        (Resolve-DynamicClassification -TableName 'AzureSomething' -RuleCount 2 -MonthlyGB 0).Category | Should -Match 'active analytics rules'
+        (Resolve-DynamicClassification -TableName 'AzureSomethingMetrics' -RuleCount 2 -MonthlyGB 0).Classification | Should -Be 'secondary'
+    }
+
+    It 'still returns unknown for names with no signal' {
+        $r = Resolve-DynamicClassification -TableName 'Zebra_CL' -RuleCount 0 -MonthlyGB 1
+        $r.Classification | Should -Be 'unknown'
+        $r.Category | Should -Be 'Custom Log: Unknown / Custom'
+    }
+}
+
+Describe 'Connect-Sentinel' {
+    BeforeAll {
+        function Connect-AzAccount { param($SubscriptionId) }
+    }
+
+    It 'resolves the workspace over REST and returns tokens plus workspace facts' {
+        Mock Get-AzContext { [PSCustomObject]@{ Subscription = [PSCustomObject]@{ Id = 'sub' }; Tenant = [PSCustomObject]@{ Id = 'tid' } } }
+        Mock Connect-AzAccount { throw 'should not reconnect' }
+        Mock Resolve-AzToken { if ($ResourceUrl -like '*loganalytics*') { 'LA-TOKEN' } else { 'ARM-TOKEN' } }
+        Mock Invoke-AzRestWithRetry { [PSCustomObject]@{ location = 'westeurope'; properties = [PSCustomObject]@{ customerId = 'ws-guid'; retentionInDays = 90; defaultDataCollectionRuleResourceId = '/dcr' } } }
+
+        $ctx = Connect-Sentinel -SubscriptionId 'sub' -ResourceGroup 'rg' -WorkspaceName 'ws' -WarningVariable w -WarningAction SilentlyContinue
+
+        $ctx.WorkspaceId | Should -Be 'ws-guid'
+        $ctx.TenantId | Should -Be 'tid'
+        $ctx.ArmToken | Should -Be 'ARM-TOKEN'
+        $ctx.LaToken | Should -Be 'LA-TOKEN'
+        $ctx.Region | Should -Be 'westeurope'
+        $ctx.WorkspaceRetentionDays | Should -Be 90
+        $ctx.DefaultDataCollectionRuleResourceId | Should -Be '/dcr'
+        $ctx.ResourceId | Should -Be '/subscriptions/sub/resourceGroups/rg/providers/Microsoft.OperationalInsights/workspaces/ws'
+        $ctx.PSObject.Properties.Name | Should -Not -Contain 'DefenderUnified'
+        $ctx.Endpoints.Arm | Should -Be 'https://management.azure.com'
+        $ctx.Endpoints.LogAnalytics | Should -Be 'https://api.loganalytics.io/v1'
+        Should -Invoke Invoke-AzRestWithRetry -Times 1 -ParameterFilter { $Uri -eq 'https://management.azure.com/subscriptions/sub/resourceGroups/rg/providers/Microsoft.OperationalInsights/workspaces/ws?api-version=2025-07-01' }
+        Should -Invoke Connect-AzAccount -Times 0
+    }
+
+    It 'uses the sovereign endpoints of the signed-in environment for tokens and the workspace call' {
+        $gov = [PSCustomObject]@{
+            Name                                       = 'AzureUSGovernment'
+            ResourceManagerUrl                         = 'https://management.usgovcloudapi.net/'
+            AzureOperationalInsightsEndpoint           = 'https://api.loganalytics.us/v1'
+            AzureOperationalInsightsEndpointResourceId = 'https://api.loganalytics.us'
+            ExtendedProperties                         = @{ MicrosoftGraphUrl = 'https://graph.microsoft.us' }
+        }
+        Mock Get-AzContext { [PSCustomObject]@{ Subscription = [PSCustomObject]@{ Id = 'sub' }; Tenant = [PSCustomObject]@{ Id = 'tid' }; Environment = $gov } }
+        Mock Resolve-AzToken { "tok-$ResourceUrl" }
+        Mock Invoke-AzRestWithRetry { [PSCustomObject]@{ location = 'usgovvirginia'; properties = [PSCustomObject]@{ customerId = 'gov-guid' } } }
+
+        $ctx = Connect-Sentinel -SubscriptionId 'sub' -ResourceGroup 'rg' -WorkspaceName 'ws'
+
+        $ctx.ArmToken | Should -Be 'tok-https://management.usgovcloudapi.net'
+        $ctx.LaToken | Should -Be 'tok-https://api.loganalytics.us'
+        $ctx.Endpoints.Name | Should -Be 'AzureUSGovernment'
+        $ctx.Endpoints.Graph | Should -Be 'https://graph.microsoft.us'
+        $ctx.Endpoints.GraphEnvironment | Should -Be 'USGov'
+        Should -Invoke Invoke-AzRestWithRetry -Times 1 -ParameterFilter { $Uri -like 'https://management.usgovcloudapi.net/subscriptions/sub/*' }
+    }
+
+    It 'signs in when the current context is for another subscription and warns on a WorkspaceId mismatch' {
+        $script:signedIn = $false
+        Mock Get-AzContext { if ($script:signedIn) { [PSCustomObject]@{ Subscription = [PSCustomObject]@{ Id = 'sub' }; Tenant = [PSCustomObject]@{ Id = 'tid' } } } else { [PSCustomObject]@{ Subscription = [PSCustomObject]@{ Id = 'other' }; Tenant = [PSCustomObject]@{ Id = 'tid' } } } }
+        Mock Connect-AzAccount { $script:signedIn = $true }
+        Mock Resolve-AzToken { 'tok' }
+        Mock Invoke-AzRestWithRetry { [PSCustomObject]@{ location = 'x'; properties = [PSCustomObject]@{ customerId = 'real-guid' } } }
+
+        $ctx = Connect-Sentinel -SubscriptionId 'sub' -ResourceGroup 'rg' -WorkspaceName 'ws' -WorkspaceId 'user-guid' -WarningVariable w -WarningAction SilentlyContinue
+        $ctx.WorkspaceId | Should -Be 'real-guid'
+        $ctx.WorkspaceRetentionDays | Should -BeNullOrEmpty
+        "$w" | Should -Match 'differs from resolved'
+        Should -Invoke Connect-AzAccount -Times 1 -ParameterFilter { $SubscriptionId -eq 'sub' }
+    }
+
+    It 'throws a clear error when the workspace has no customerId' {
+        Mock Get-AzContext { [PSCustomObject]@{ Subscription = [PSCustomObject]@{ Id = 'sub' }; Tenant = [PSCustomObject]@{ Id = 'tid' } } }
+        Mock Resolve-AzToken { 'tok' }
+        Mock Invoke-AzRestWithRetry { [PSCustomObject]@{ properties = [PSCustomObject]@{} } }
+        { Connect-Sentinel -SubscriptionId 'sub' -ResourceGroup 'rg' -WorkspaceName 'ws' } | Should -Throw '*customerId*'
+    }
+}
+
+Describe 'Resolve-AzToken' {
+    BeforeAll {
+        function Get-AzAccessToken { param($ResourceUrl, $TenantId, $ErrorAction) }
+    }
+
+    It 'handles SecureString and plain tokens and forwards TenantId' {
+        Mock Get-AzAccessToken { [PSCustomObject]@{ Token = (ConvertTo-SecureString 'secure-token' -AsPlainText -Force) } }
+        Resolve-AzToken -ResourceUrl 'https://x' -TenantId 't1' | Should -Be 'secure-token'
+        Should -Invoke Get-AzAccessToken -Times 1 -ParameterFilter { $TenantId -eq 't1' }
+
+        Mock Get-AzAccessToken { [PSCustomObject]@{ Token = 'plain-token' } }
+        Resolve-AzToken -ResourceUrl 'https://x' | Should -Be 'plain-token'
+        Should -Invoke Get-AzAccessToken -Times 1 -ParameterFilter { -not $PSBoundParameters.ContainsKey('TenantId') }
+    }
+}
+
+Describe 'Endpoint resolution' {
+    It 'returns the public cloud defaults when there is no Az context' {
+        Mock Get-AzContext { $null }
+        $e = Resolve-LogHorizonEndpoints
+        $e.Name | Should -Be 'AzureCloud'
+        $e.Arm | Should -Be 'https://management.azure.com'
+        $e.LogAnalytics | Should -Be 'https://api.loganalytics.io/v1'
+        $e.LogAnalyticsResource | Should -Be 'https://api.loganalytics.io'
+        $e.Graph | Should -Be 'https://graph.microsoft.com'
+        $e.GraphEnvironment | Should -Be 'Global'
+    }
+
+    It 'returns the defaults when Get-AzContext is unavailable' {
+        Mock Get-AzContext { throw 'no Az' }
+        (Resolve-LogHorizonEndpoints).Arm | Should -Be 'https://management.azure.com'
+    }
+
+    It 'reads sovereign values from properties and ExtendedProperties and trims trailing slashes' {
+        $china = [PSCustomObject]@{
+            Name                                       = 'AzureChinaCloud'
+            ResourceManagerUrl                         = 'https://management.chinacloudapi.cn/'
+            AzureOperationalInsightsEndpoint           = ''
+            AzureOperationalInsightsEndpointResourceId = $null
+            ExtendedProperties                         = @{
+                OperationalInsightsEndpoint           = 'https://api.loganalytics.azure.cn/v1/'
+                OperationalInsightsEndpointResourceId = 'https://api.loganalytics.azure.cn'
+                MicrosoftGraphEndpointResourceId      = 'https://microsoftgraph.chinacloudapi.cn/'
+            }
+        }
+        $e = Resolve-LogHorizonEndpoints -Environment $china
+        $e.Name | Should -Be 'AzureChinaCloud'
+        $e.Arm | Should -Be 'https://management.chinacloudapi.cn'
+        $e.LogAnalytics | Should -Be 'https://api.loganalytics.azure.cn/v1'
+        $e.LogAnalyticsResource | Should -Be 'https://api.loganalytics.azure.cn'
+        $e.Graph | Should -Be 'https://microsoftgraph.chinacloudapi.cn'
+        $e.GraphEnvironment | Should -Be 'China'
+    }
+
+    It 'falls back per value when an environment is missing fields' {
+        $partial = [PSCustomObject]@{ Name = ''; ResourceManagerUrl = 'https://arm.example/' }
+        $e = Resolve-LogHorizonEndpoints -Environment $partial
+        $e.Name | Should -Be 'AzureCloud'
+        $e.Arm | Should -Be 'https://arm.example'
+        $e.LogAnalytics | Should -Be 'https://api.loganalytics.io/v1'
+        $e.Graph | Should -Be 'https://graph.microsoft.com'
+        $e.GraphEnvironment | Should -Be 'Global'
+    }
+
+    It 'Get-LogHorizonEndpoint prefers the context Endpoints and otherwise resolves from the environment' {
+        $ctx = [PSCustomObject]@{ Endpoints = [PSCustomObject]@{ Arm = 'https://ctx.example'; Graph = '' } }
+        Get-LogHorizonEndpoint -Name Arm -Context $ctx | Should -Be 'https://ctx.example'
+
+        Mock Get-AzContext { $null }
+        Get-LogHorizonEndpoint -Name Graph -Context $ctx | Should -Be 'https://graph.microsoft.com'
+        Get-LogHorizonEndpoint -Name LogAnalytics -Context ([PSCustomObject]@{ ArmToken = 'x' }) | Should -Be 'https://api.loganalytics.io/v1'
+        Get-LogHorizonEndpoint -Name GraphEnvironment | Should -Be 'Global'
+    }
+}
+
+Describe 'Collector endpoints and API versions' {
+    BeforeAll {
+        $script:epCtx = [PSCustomObject]@{
+            ArmToken    = 'tok'
+            LaToken     = 'la'
+            WorkspaceId = 'ws-guid'
+            ResourceId  = '/subscriptions/s/resourceGroups/rg/providers/Microsoft.OperationalInsights/workspaces/ws'
+            Endpoints   = [PSCustomObject]@{ Arm = 'https://management.usgovcloudapi.net'; LogAnalytics = 'https://api.loganalytics.us/v1'; Graph = 'https://graph.microsoft.us'; GraphEnvironment = 'USGov' }
+        }
+    }
+
+    It 'Get-AnalyticsRules uses SecurityInsights 2025-09-01 on the environment ARM host' {
+        Mock Invoke-AzRestWithRetry { [PSCustomObject]@{ value = @() } }
+        $null = Get-AnalyticsRules -Context $script:epCtx
+        Should -Invoke Invoke-AzRestWithRetry -Times 1 -ParameterFilter { $Uri -eq 'https://management.usgovcloudapi.net/subscriptions/s/resourceGroups/rg/providers/Microsoft.OperationalInsights/workspaces/ws/providers/Microsoft.SecurityInsights/alertRules?api-version=2025-09-01' }
+    }
+
+    It 'Get-DataConnectors uses SecurityInsights 2025-09-01 on the environment ARM host' {
+        Mock Invoke-AzRestWithRetry { [PSCustomObject]@{ value = @() } }
+        $null = Get-DataConnectors -Context $script:epCtx
+        Should -Invoke Invoke-AzRestWithRetry -Times 1 -ParameterFilter { $Uri -eq 'https://management.usgovcloudapi.net/subscriptions/s/resourceGroups/rg/providers/Microsoft.OperationalInsights/workspaces/ws/providers/Microsoft.SecurityInsights/dataConnectors?api-version=2025-09-01' }
+    }
+
+    It 'Get-DataConnectors follows nextLink and derives IsConnected from dataTypes state' {
+        Mock Invoke-AzRestWithRetry {
+            if ($Uri -like '*page2*') {
+                return [PSCustomObject]@{ value = @(
+                    [PSCustomObject]@{ id = 'c3'; name = 'c3'; kind = 'GenericUI'; properties = [PSCustomObject]@{ connectorUiConfig = [PSCustomObject]@{ title = 'x' } } },
+                    [PSCustomObject]@{ id = 'c4'; name = 'c4'; kind = 'Other'; properties = [PSCustomObject]@{ displayName = 'no types' } }
+                ) }
+            }
+            [PSCustomObject]@{
+                value    = @(
+                    [PSCustomObject]@{ id = 'c1'; name = 'c1'; kind = 'AzureActiveDirectory'; properties = [PSCustomObject]@{ dataTypes = [PSCustomObject]@{ alerts = [PSCustomObject]@{ state = 'Enabled' } } } },
+                    [PSCustomObject]@{ id = 'c2'; name = 'c2'; kind = 'Office365'; properties = [PSCustomObject]@{ dataTypes = [PSCustomObject]@{ exchange = [PSCustomObject]@{ state = 'Disabled' } } } }
+                )
+                nextLink = 'https://management.usgovcloudapi.net/page2'
+            }
+        }
+        $r = @(Get-DataConnectors -Context $script:epCtx)
+        $r.Count | Should -Be 4
+        ($r | Where-Object Id -eq 'c1').IsConnected | Should -BeTrue
+        ($r | Where-Object Id -eq 'c2').IsConnected | Should -BeFalse
+        ($r | Where-Object Id -eq 'c3').IsConnected | Should -BeTrue
+        ($r | Where-Object Id -eq 'c4').IsConnected | Should -BeTrue
+        ($r | Where-Object Id -eq 'c1').ConnectorType | Should -Be 'AzureActiveDirectory'
+        Should -Invoke Invoke-AzRestWithRetry -Times 2
+    }
+
+    It 'Get-HuntingQueries uses OperationalInsights 2025-07-01 and keeps only Hunting Queries' {
+        Mock Invoke-AzRestWithRetry { [PSCustomObject]@{ value = @(
+            [PSCustomObject]@{ properties = [PSCustomObject]@{ category = 'Hunting Queries'; displayName = 'H1'; query = 'SigninLogs | take 1' } },
+            [PSCustomObject]@{ properties = [PSCustomObject]@{ category = 'General Exploration'; displayName = 'S1'; query = 'Heartbeat | take 1' } }
+        ) } }
+        $r = Get-HuntingQueries -Context $script:epCtx
+        @($r.Queries).Count | Should -Be 1
+        $r.TableCoverage['SigninLogs'] | Should -Be 1
+        Should -Invoke Invoke-AzRestWithRetry -Times 1 -ParameterFilter { $Uri -eq 'https://management.usgovcloudapi.net/subscriptions/s/resourceGroups/rg/providers/Microsoft.OperationalInsights/workspaces/ws/savedSearches?api-version=2025-07-01' }
+    }
+
+    It 'Get-SocOptimization uses recommendations 2025-10-01-preview and returns an empty list on failure' {
+        Mock Invoke-AzRestWithRetry { [PSCustomObject]@{ value = @([PSCustomObject]@{ id = 'r1'; properties = [PSCustomObject]@{ title = 'T'; state = 'Active'; recommendationTypeId = 'X'; suggestions = @([PSCustomObject]@{ title = 's'; action = 'a'; suggestionTypeId = 'st' }) } }) } }
+        $r = @(Get-SocOptimization -Context $script:epCtx)
+        $r.Count | Should -Be 1
+        $r[0].Suggestions[0].TypeId | Should -Be 'st'
+        Should -Invoke Invoke-AzRestWithRetry -Times 1 -ParameterFilter { $Uri -eq 'https://management.usgovcloudapi.net/subscriptions/s/resourceGroups/rg/providers/Microsoft.OperationalInsights/workspaces/ws/providers/Microsoft.SecurityInsights/recommendations?api-version=2025-10-01-preview' }
+
+        Mock Invoke-AzRestWithRetry { throw '403' }
+        @(Get-SocOptimization -Context $script:epCtx).Count | Should -Be 0
+    }
+
+    It 'Get-TableRetention uses OperationalInsights 2025-07-01 for the workspace and tables' {
+        Mock Invoke-AzRestWithRetry { if ($Uri -like '*/tables?*') { [PSCustomObject]@{ value = @() } } else { [PSCustomObject]@{ properties = [PSCustomObject]@{ retentionInDays = 30 } } } }
+        $null = Get-TableRetention -Context $script:epCtx
+        Should -Invoke Invoke-AzRestWithRetry -Times 1 -ParameterFilter { $Uri -eq 'https://management.usgovcloudapi.net/subscriptions/s/resourceGroups/rg/providers/Microsoft.OperationalInsights/workspaces/ws?api-version=2025-07-01' }
+        Should -Invoke Invoke-AzRestWithRetry -Times 1 -ParameterFilter { $Uri -eq 'https://management.usgovcloudapi.net/subscriptions/s/resourceGroups/rg/providers/Microsoft.OperationalInsights/workspaces/ws/tables?api-version=2025-07-01' }
+    }
+
+    It 'Get-TableRetention reuses the workspace facts from Connect-Sentinel instead of fetching the workspace again' {
+        Mock Invoke-AzRestWithRetry { [PSCustomObject]@{ value = @() } }
+        $ctx = [PSCustomObject]@{ ArmToken = 'tok'; ResourceId = $script:epCtx.ResourceId; Endpoints = $script:epCtx.Endpoints; WorkspaceRetentionDays = 120; DefaultDataCollectionRuleResourceId = '/dcr/ws' }
+        $r = Get-TableRetention -Context $ctx
+        $r.WorkspaceRetentionDays | Should -Be 120
+        $r.WorkspaceDefaultDcrId | Should -Be '/dcr/ws'
+        Should -Invoke Invoke-AzRestWithRetry -Times 1
+        Should -Invoke Invoke-AzRestWithRetry -Times 1 -ParameterFilter { $Uri -like '*/tables?*' }
+    }
+
+    It 'Get-TableUsage queries the environment Log Analytics endpoint' {
+        Mock Invoke-AzRestWithRetry { [PSCustomObject]@{ tables = @([PSCustomObject]@{ columns = @([PSCustomObject]@{ name = 'DataType' }, [PSCustomObject]@{ name = 'TotalGB' }); rows = @() }) } }
+        $null = Get-TableUsage -Context $script:epCtx -DaysBack 7
+        Should -Invoke Invoke-AzRestWithRetry -ParameterFilter { $Uri -eq 'https://api.loganalytics.us/v1/workspaces/ws-guid/query' }
+    }
 }
 
 Describe 'Get-TablesFromKql keyword filtering via $script:kqlKeywords' {
@@ -2795,6 +5368,208 @@ SecurityEvent
         $result | Should -Contain 'SecurityEvent'
         $result | Should -Not -Contain 'the'
         $result | Should -Not -Contain 'key'
+    }
+}
+
+Describe 'Dictionary' {
+    BeforeAll {
+        $script:dict = Get-LogHorizonDictionary
+        $script:dictSection = { param($Name) $script:dict.Sections | Where-Object Name -eq $Name | Select-Object -First 1 }
+        $script:analysisSource = Get-Content (Join-Path $PSScriptRoot '..\Private\Invoke-Analysis.ps1') -Raw
+    }
+
+    It 'loads every section with non-empty terms and definitions' {
+        $script:dict.Sections.Count | Should -BeGreaterOrEqual 10
+        foreach ($s in $script:dict.Sections) {
+            $s.Name | Should -Not -BeNullOrEmpty
+            @($s.Terms).Count | Should -BeGreaterThan 0 -Because "$($s.Name) needs terms"
+            foreach ($t in $s.Terms) {
+                $t.Term | Should -Not -BeNullOrEmpty
+                $t.Definition | Should -Not -BeNullOrEmpty -Because "$($s.Name)/$($t.Term) needs a definition"
+            }
+        }
+        (Get-Content (Join-Path $PSScriptRoot '..\Data\dictionary.json') -Raw) | Should -Not -Match ([char]0x2014)
+    }
+
+    It 'returns an empty dictionary for a missing or corrupt file' {
+        (Get-LogHorizonDictionary -Path (Join-Path $TestDrive 'nope.json')).Sections.Count | Should -Be 0
+        $bad = Join-Path $TestDrive 'bad.json'
+        Set-Content $bad '{ not json'
+        (Get-LogHorizonDictionary -Path $bad -WarningAction SilentlyContinue).Sections.Count | Should -Be 0
+    }
+
+    It 'recommendation types match every Type emitted by Invoke-Analysis (finding types excluded)' {
+        $emitted = @([regex]::Matches($script:analysisSource, "Type\s+=\s+'([A-Za-z]+)'") | ForEach-Object { $_.Groups[1].Value } | Sort-Object -Unique)
+        $findingTypes = @('NotStreaming', 'StreamingNoCoverage', 'NotForwardedToDataLake', 'AdvisoryRetentionGap')
+        $recTypes = @($emitted | Where-Object { $_ -notin $findingTypes })
+        $dictTypes = @((& $script:dictSection 'Recommendation types').Terms.Term | Sort-Object)
+        $dictTypes | Should -Be $recTypes
+        foreach ($f in $findingTypes) { (& $script:dictSection 'XDR states').Terms.Term | Should -Contain $f }
+    }
+
+    It 'assessments match Get-Assessment outputs plus Platform' {
+        $expected = @('High Value', 'Good Value', 'Missing Coverage', 'Optimize', 'Low Value', 'Underutilized', 'Free Tier', 'Platform')
+        foreach ($e in $expected) { $script:analysisSource | Should -Match ([regex]::Escape("'$e'")) }
+        @((& $script:dictSection 'Assessment').Terms.Term | Sort-Object) | Should -Be @($expected | Sort-Object)
+    }
+
+    It 'cost and detection tiers match the thresholds in Invoke-Analysis' {
+        @((& $script:dictSection 'Cost tier').Terms.Term) | Should -Be @('Free', 'Low', 'Medium', 'High', 'Very High')
+        $script:analysisSource | Should -Match "MonthlyGB -ge 50\)\s+\{ 'Very High'"
+        $script:analysisSource | Should -Match "MonthlyGB -ge 10\)\s+\{ 'High'"
+        $script:analysisSource | Should -Match "MonthlyGB -ge 1\)\s+\{ 'Medium'"
+        (& $script:dictSection 'Cost tier').Terms | Where-Object Term -eq 'Very High' | ForEach-Object Definition | Should -Match '50 GB'
+        (& $script:dictSection 'Cost tier').Terms | Where-Object Term -eq 'High' | ForEach-Object Definition | Should -Match '10 to 50'
+
+        @((& $script:dictSection 'Detection tier').Terms.Term) | Should -Be @('None', 'Low', 'Medium', 'High')
+        $script:analysisSource | Should -Match "effectiveCoverage -ge 10\) \{ 'High'"
+        $script:analysisSource | Should -Match "effectiveCoverage -ge 3\)\s+\{ 'Medium'"
+        (& $script:dictSection 'Detection tier').Terms | Where-Object Term -eq 'High' | ForEach-Object Definition | Should -Match '10 or more'
+    }
+
+    It 'coverage sources, score statuses, plans, lifecycle keys and transform operations match the code' {
+        @((& $script:dictSection 'Coverage source').Terms.Term | Sort-Object) | Should -Be @('implicit', 'kql', 'none', 'platform', 'xdr')
+        foreach ($s in 'Scored', 'InsufficientSample', 'NoIncidents') {
+            $script:analysisSource | Should -Match "'$s'"
+            (& $script:dictSection 'Detection Analyzer').Terms.Term | Should -Contain $s
+        }
+        foreach ($p in 'Analytics', 'Basic', 'Auxiliary') { (& $script:dictSection 'Table plans').Terms.Term | Should -Contain $p }
+        foreach ($k in 'deprecated', 'legacy', 'replacedBy', 'xdrStreamable', 'platform') { (& $script:dictSection 'Lifecycle status').Terms.Term | Should -Contain $k }
+
+        $ops = @('Filter', 'ColumnRemoval', 'Projection', 'Enrichment', 'Aggregation')
+        foreach ($o in $ops) {
+            (& $script:dictSection 'Transform types').Terms.Term | Should -Contain $o
+            (Get-TransformType -KQL 'source | where a == 1 | project-away b | project c | extend d = 1 | summarize count() by c') | Should -Match $o
+        }
+        (& $script:dictSection 'Transform types').Terms.Term | Should -Contain 'Custom'
+    }
+
+    It 'the README documents the same recommendation types and assessment values' {
+        $readme = Get-Content (Join-Path $PSScriptRoot '..\README.md') -Raw
+        foreach ($a in (& $script:dictSection 'Assessment').Terms.Term) { $readme | Should -Match ([regex]::Escape($a)) }
+        $readme | Should -Match 'Deprecated Source'
+        $readme | Should -Match 'Interactive Below Baseline'
+        $readme | Should -Match '\*\*Dictionary\*\*'
+    }
+
+    It 'Write-DictionaryView renders the chosen section and returns on Back' {
+        $script:selectionResponses = [System.Collections.Generic.Queue[string]]::new()
+        @('Assessment', 'Back') | ForEach-Object { $script:selectionResponses.Enqueue($_) }
+        $script:renderedRows = @()
+        $script:hostLines = [System.Collections.Generic.List[string]]::new()
+
+        $orig = @{}
+        foreach ($fn in 'Read-SpectreSelection', 'Write-SpectreHost', 'Write-SpectreRule', 'Write-DefinitionTable') {
+            $orig[$fn] = if (Test-Path "Function:\$fn") { (Get-Item "Function:\$fn").ScriptBlock } else { $null }
+        }
+        try {
+            Set-Item -Path Function:\Read-SpectreSelection -Value {
+                param([string]$Title, [object[]]$Choices, $Color, [switch]$EnableSearch)
+                $Choices[0] | Should -Be 'Back'
+                $next = $script:selectionResponses.Dequeue()
+                $next | Should -BeIn @($Choices)
+                $next
+            }
+            Set-Item -Path Function:\Write-SpectreHost -Value { param([string]$Text) $script:hostLines.Add($Text) }
+            Set-Item -Path Function:\Write-SpectreRule -Value { param($Title, $Color) $script:hostLines.Add("RULE:$Title") }
+            Set-Item -Path Function:\Write-DefinitionTable -Value {
+                param([object[]]$Rows)
+                $script:renderedRows += @($Rows)
+            }
+
+            Write-DictionaryView
+
+            $script:selectionResponses.Count | Should -Be 0
+            ($script:hostLines | Where-Object { $_ -like 'RULE:*Assessment*' }).Count | Should -Be 1
+            $script:renderedRows.Count | Should -Be 8
+            ($script:renderedRows | ForEach-Object Term) -join ' ' | Should -Match 'High Value'
+            ($script:renderedRows | ForEach-Object Definition) -join ' ' | Should -Not -Match '\[bold\]'
+        }
+        finally {
+            foreach ($fn in $orig.Keys) {
+                if ($null -ne $orig[$fn]) { Set-Item -Path "Function:\$fn" -Value $orig[$fn] }
+                else { Remove-Item -Path "Function:\$fn" -ErrorAction SilentlyContinue }
+            }
+        }
+    }
+
+    It 'Write-DefinitionTable renders a no-wrap term column with row separators' {
+        $rows = @(
+            [PSCustomObject]@{ Term = '[bold]TotalRetentionInDaysAsDefault[/]'; Definition = ('word ' * 60) },
+            [PSCustomObject]@{ Term = '[bold]Basic[/]'; Definition = 'short' }
+        )
+        $out = (Write-DefinitionTable -Rows $rows | Out-String) -split "`r?`n"
+        ($out | Where-Object { $_ -match 'TotalRetentionInDaysAsDefault' }).Count | Should -Be 1
+        ($out | Where-Object { $_ -match 'TotalRetentionInDaysAsDefaul$|^\W*t\W' }).Count | Should -Be 0
+        ($out | Where-Object { $_ -match '├' }).Count | Should -Be 2
+        { Write-DefinitionTable -Rows @() } | Should -Not -Throw
+    }
+
+    It 'Write-DictionaryView reports an empty dictionary without prompting' {
+        $script:hostLines = [System.Collections.Generic.List[string]]::new()
+        $origHost = if (Test-Path Function:\Write-SpectreHost) { (Get-Item Function:\Write-SpectreHost).ScriptBlock } else { $null }
+        try {
+            Set-Item -Path Function:\Write-SpectreHost -Value { param([string]$Text) $script:hostLines.Add($Text) }
+            Write-DictionaryView -Dictionary ([PSCustomObject]@{ Description = ''; Sections = @() })
+            ($script:hostLines -join ' ') | Should -Match 'No dictionary entries'
+        }
+        finally {
+            if ($null -ne $origHost) { Set-Item -Path Function:\Write-SpectreHost -Value $origHost } else { Remove-Item -Path Function:\Write-SpectreHost -ErrorAction SilentlyContinue }
+        }
+    }
+}
+
+Describe 'Invoke-ExportFromMenu' {
+    BeforeAll {
+        $script:exportAnalysis = New-MockAnalysis
+        # Pester Mock inherits Read-SpectreSelection's [Spectre.Console.Color] binder; replace the function instead
+        $script:exportOrig = @{}
+        foreach ($fn in 'Read-SpectreSelection', 'Write-SpectreHost') {
+            $script:exportOrig[$fn] = if (Test-Path "Function:\$fn") { (Get-Item "Function:\$fn").ScriptBlock } else { $null }
+        }
+        Set-Item -Path Function:\Read-SpectreSelection -Value { param([string]$Title, [object[]]$Choices, $Color, [switch]$EnableSearch) $script:menuAnswers.Dequeue() }
+        Set-Item -Path Function:\Write-SpectreHost -Value { param([string]$Text) $script:exportHost = $Text }
+    }
+    AfterAll {
+        foreach ($fn in $script:exportOrig.Keys) {
+            if ($null -ne $script:exportOrig[$fn]) { Set-Item -Path "Function:\$fn" -Value $script:exportOrig[$fn] }
+            else { Remove-Item -Path "Function:\$fn" -ErrorAction SilentlyContinue }
+        }
+    }
+
+    It 'asks for a format and a path, then writes into the chosen directory' {
+        $target = Join-Path $TestDrive 'menu-export\'
+        $script:menuAnswers = [System.Collections.Generic.Queue[string]]::new([string[]]@('JSON'))
+        Mock Read-LogHorizonTextInput { $target }
+
+        Invoke-ExportFromMenu -Analysis $script:exportAnalysis -WorkspaceName 'ws'
+
+        Should -Invoke Read-LogHorizonTextInput -Times 1
+        $files = @(Get-ChildItem (Join-Path $TestDrive 'menu-export') -Filter '*.json')
+        $files.Count | Should -Be 1
+        $script:exportHost | Should -Match ([regex]::Escape($files[0].Name))
+    }
+
+    It 'does not prompt for a path when one was supplied and writes an explicit file name' {
+        $file = Join-Path $TestDrive 'given\explicit.md'
+        $script:menuAnswers = [System.Collections.Generic.Queue[string]]::new([string[]]@('Markdown'))
+        Mock Read-LogHorizonTextInput { throw 'should not prompt' }
+
+        Invoke-ExportFromMenu -Analysis $script:exportAnalysis -WorkspaceName 'ws' -ExportPath $file
+        Test-Path $file | Should -BeTrue
+    }
+
+    It 'returns on Cancel and reports an export failure without throwing' {
+        $script:menuAnswers = [System.Collections.Generic.Queue[string]]::new([string[]]@('Cancel'))
+        Mock Read-LogHorizonTextInput { throw 'should not prompt' }
+        Mock Export-Report { throw 'should not export' }
+        { Invoke-ExportFromMenu -Analysis $script:exportAnalysis -WorkspaceName 'ws' } | Should -Not -Throw
+
+        $script:menuAnswers = [System.Collections.Generic.Queue[string]]::new([string[]]@('HTML'))
+        Mock Read-LogHorizonTextInput { 'C:\nope\' }
+        Mock Export-Report { throw 'disk full' }
+        { Invoke-ExportFromMenu -Analysis $script:exportAnalysis -WorkspaceName 'ws' } | Should -Not -Throw
+        $script:exportHost | Should -Match 'Export failed: disk full'
     }
 }
 

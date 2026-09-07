@@ -17,6 +17,8 @@ function Invoke-Analysis {
         [array]$TableRetention,
         [int]$WorkspaceRetentionDays = 0,
         [decimal]$PricePerGB = 5.59,
+        [decimal]$BasicPricePerGB = 1.15,
+        [decimal]$LakePricePerGB = 0.20,
         [PSCustomObject]$DataTransforms,
         [hashtable]$HighValueFields,
         [hashtable]$FieldFrequencyStats = @{},
@@ -29,8 +31,15 @@ function Invoke-Analysis {
     $classMap       = $Classifications.Classifications   # hashtable
     $ruleCoverage   = $RulesData.TableCoverage            # hashtable: table -> count
     $huntCoverage   = $HuntingData.TableCoverage          # hashtable: table -> count
-    $xdrCoverage    = if ($DefenderXDR) { $DefenderXDR.XDRTableCoverage } else { @{} }
-    $knownXDRTables = if ($DefenderXDR) { $DefenderXDR.KnownXDRTables } else { @() }
+    $implicitCoverage = if ($RulesData.PSObject.Properties.Name -contains 'ImplicitCoverage' -and $RulesData.ImplicitCoverage) { $RulesData.ImplicitCoverage } else { @{} }
+    $platformTables = if ($RulesData.PSObject.Properties.Name -contains 'PlatformTables' -and $RulesData.PlatformTables) { @($RulesData.PlatformTables) } else { @() }
+    $xdrCoverage    = if ($DefenderXDR -and $DefenderXDR.XDRTableCoverage) { $DefenderXDR.XDRTableCoverage } else { @{} }
+    $knownXDRTables = if ($DefenderXDR -and $DefenderXDR.KnownXDRTables) { @($DefenderXDR.KnownXDRTables) } else { @() }
+    # The classification DB is the source of truth for which XDR tables the connector can stream
+    $knownXDRTables = @($knownXDRTables | Where-Object {
+        $c = $classMap[$_]
+        -not ($c -and $c.PSObject.Properties.Name -contains 'XdrStreamable' -and $c.XdrStreamable -eq $false)
+    })
 
     # Build retention lookup from Tables API data
     $retentionMap = @{}
@@ -48,6 +57,17 @@ function Invoke-Analysis {
 
     Write-Verbose "Starting analysis for $($TableUsage.Count) table(s)."
 
+    # Group enabled rules by table once so Get-SplitKql does not rescan every rule per table
+    $rulesByTable = @{}
+    foreach ($rule in @($RulesData.Rules)) {
+        if (-not $rule.Enabled) { continue }
+        foreach ($t in @($rule.Tables)) {
+            if ([string]::IsNullOrWhiteSpace($t)) { continue }
+            if (-not $rulesByTable.ContainsKey($t)) { $rulesByTable[$t] = [System.Collections.Generic.List[object]]::new() }
+            $rulesByTable[$t].Add($rule)
+        }
+    }
+
     # Per-table analysis
     $tableAnalysis = foreach ($table in $TableUsage) {
         $name = $table.TableName
@@ -56,12 +76,31 @@ function Invoke-Analysis {
         $ruleCount    = if ($ruleCoverage.ContainsKey($name)) { [int]$ruleCoverage[$name] } else { 0 }
         $huntCount    = if ($huntCoverage.ContainsKey($name)) { [int]$huntCoverage[$name] } else { 0 }
         $xdrRuleCount = if ($xdrCoverage.ContainsKey($name)) { [int]$xdrCoverage[$name] } else { 0 }
+        $implicitCount = if ($implicitCoverage.ContainsKey($name)) { [int]$implicitCoverage[$name] } else { 0 }
+        $isPlatform   = ($name -in $platformTables) -or ($cls -and $cls.PSObject.Properties.Name -contains 'IsPlatform' -and $cls.IsPlatform -eq $true)
+        $lifecycleStatus = if ($cls -and $cls.PSObject.Properties.Name -contains 'Status') { $cls.Status } else { $null }
+        $replacedBy = if ($cls -and $cls.PSObject.Properties.Name -contains 'ReplacedBy') { @($cls.ReplacedBy) } else { @() }
         $totalCoverage = $ruleCount + $huntCount
-        $effectiveCoverage = $ruleCount + $huntCount + $xdrRuleCount
+        $effectiveCoverage = $ruleCount + $huntCount + $xdrRuleCount + $implicitCount
+
+        # Where the coverage signal comes from (first match wins for display)
+        $coverageSource = if ($ruleCount -gt 0 -or $huntCount -gt 0) { 'kql' }
+                          elseif ($xdrRuleCount -gt 0) { 'xdr' }
+                          elseif ($implicitCount -gt 0) { 'implicit' }
+                          elseif ($isPlatform) { 'platform' }
+                          else { 'none' }
+
+        # Usage.IsBillable wins; the classification DB only decides when Usage had no flag
+        $isFree = [bool]$table.IsFree
+        $monthlyCost = $table.EstMonthlyCostUSD
+        if ($table.IsFreeSource -eq 'database' -and $cls -and $null -ne $cls.IsFree) {
+            $isFree = [bool]$cls.IsFree
+            if ($isFree) { $monthlyCost = 0 }
+        }
 
         # Cost tier
         $costTier = switch ($true) {
-            ($table.IsFree)              { 'Free'; break }
+            ($isFree)                    { 'Free'; break }
             ($table.MonthlyGB -ge 50)    { 'Very High'; break }
             ($table.MonthlyGB -ge 10)    { 'High'; break }
             ($table.MonthlyGB -ge 1)     { 'Medium'; break }
@@ -78,11 +117,14 @@ function Invoke-Analysis {
 
         $classification = if ($cls) { $cls.Classification } else { 'unknown' }
 
-        # Combined assessment
-        $assessment = Get-Assessment -Classification $classification `
-                                      -CostTier $costTier `
-                                      -DetectionTier $detectionTier `
-                                      -IsFree $table.IsFree
+        # Combined assessment (platform tables are never "missing" coverage)
+        $assessment = if ($isPlatform -and $detectionTier -eq 'None' -and -not $isFree) { 'Platform' }
+                      else {
+                          Get-Assessment -Classification $classification `
+                                         -CostTier $costTier `
+                                         -DetectionTier $detectionTier `
+                                         -IsFree $isFree
+                      }
 
         # Retention data
         $ret = $retentionMap[$name]
@@ -116,8 +158,10 @@ function Invoke-Analysis {
         }
         # Compliant = at least 90 days total retention (baseline)
         $retentionCompliant = if ($null -ne $actualTotal -and $tablePlan -eq 'Analytics') { $actualTotal -ge 90 } else { $null }
-        # Can improve = meets 90d baseline but below category-specific recommendation
-        $retentionCanImprove = if ($retentionCompliant -and $recommendedRetention -gt 90) { $actualTotal -lt $recommendedRetention } else { $false }
+        # Can improve = meets 90d baseline but below category-specific recommendation; free and platform tables are excluded
+        $retentionCanImprove = if ($retentionCompliant -and $recommendedRetention -gt 90 -and -not $isFree -and -not $isPlatform) { $actualTotal -lt $recommendedRetention } else { $false }
+        # Interactive (hot) retention below the 90-day Sentinel baseline on an Analytics table
+        $interactiveBelowBaseline = ($tablePlan -eq 'Analytics' -and $null -ne $actualInteractive -and $actualInteractive -lt 90)
 
         # Transform data
         $tableTransforms = $transformLookup[$name]
@@ -132,22 +176,32 @@ function Invoke-Analysis {
         # Schema columns from retention data
         $schemaColumns = if ($ret -and $ret.Columns) { @($ret.Columns) } else { @() }
 
+        $supportsAuxiliary = Test-TableSupportsAuxiliaryPlan -Table ([PSCustomObject]@{ TableName = $name; Plan = $tablePlan; TableSubType = $tableSubType })
+
         $splitSuggestion = Get-SplitKql -TableName $name `
-                                        -Rules $RulesData.Rules `
+                                        -Rules $(if ($rulesByTable.ContainsKey($name)) { @($rulesByTable[$name]) } else { @() }) `
                                         -HighValueFieldsDB $HighValueFields `
                                         -FieldFrequencyStats $FieldFrequencyStats `
-                                        -TableCategory $(if ($cls) { $cls.Category } else { $null })
+                                        -TableCategory $(if ($cls) { $cls.Category } else { $null }) `
+                                        -SchemaColumns $schemaColumns
 
         [PSCustomObject]@{
             TableName                    = $name
             Classification               = $classification
             Category                     = if ($cls) { $cls.Category } else { 'Unknown' }
             MonthlyGB                    = $table.MonthlyGB
-            EstMonthlyCostUSD            = $table.EstMonthlyCostUSD
-            IsFree                       = $table.IsFree
+            EstMonthlyCostUSD            = $monthlyCost
+            IsFree                       = $isFree
+            IsFreeSource                 = $(if ($table.IsFreeSource) { $table.IsFreeSource } else { 'database' })
             AnalyticsRules               = $ruleCount
             HuntingQueries               = $huntCount
             XDRRules                     = $xdrRuleCount
+            ImplicitRules                = $implicitCount
+            IsPlatform                   = $isPlatform
+            Status                       = $lifecycleStatus
+            ReplacedBy                   = $replacedBy
+            SupportsAuxiliaryPlan        = $supportsAuxiliary
+            CoverageSource               = $coverageSource
             TotalCoverage                = $totalCoverage
             EffectiveCoverage            = $effectiveCoverage
             CostTier                     = $costTier
@@ -162,6 +216,10 @@ function Invoke-Analysis {
             RecommendedRetentionDays     = $recommendedRetention
             TablePlan                    = $tablePlan
             TableSubType                 = $tableSubType
+            TableType                    = if ($ret -and $ret.PSObject.Properties.Name -contains 'TableType') { $ret.TableType } else { $null }
+            RetentionInDaysAsDefault      = if ($ret -and $ret.PSObject.Properties.Name -contains 'RetentionInDaysAsDefault') { [bool]$ret.RetentionInDaysAsDefault } else { $false }
+            TotalRetentionInDaysAsDefault = if ($ret -and $ret.PSObject.Properties.Name -contains 'TotalRetentionInDaysAsDefault') { [bool]$ret.TotalRetentionInDaysAsDefault } else { $false }
+            LastPlanModifiedDate         = if ($ret -and $ret.PSObject.Properties.Name -contains 'LastPlanModifiedDate') { $ret.LastPlanModifiedDate } else { $null }
             ObservedPlans                = $observedPlans
             ObservedKnownPlans           = $observedKnownPlans
             ObservedPlanCount            = $observedPlanCount
@@ -171,6 +229,7 @@ function Invoke-Analysis {
             ObservedPlanMismatch         = $observedPlanMismatch
             RetentionCompliant           = $retentionCompliant
             RetentionCanImprove          = $retentionCanImprove
+            InteractiveBelowBaseline     = $interactiveBelowBaseline
             HasTransform                 = $hasTransform
             TransformTypes               = $transformTypes
             TransformKql                 = $transformKql
@@ -180,6 +239,7 @@ function Invoke-Analysis {
             SplitSuggestion              = $splitSuggestion
         }
     }
+    $tableAnalysis = @($tableAnalysis)
 
     $cdrRules = if ($DefenderXDR -and $DefenderXDR.CustomRules) { $DefenderXDR.CustomRules } else { @() }
     $detectionAnalyzer = if ($IncludeDetectionAnalyzer) {
@@ -199,21 +259,59 @@ function Invoke-Analysis {
     $recommendations = [System.Collections.Generic.List[PSCustomObject]]::new()
 
     foreach ($t in $tableAnalysis) {
-        # 1. Data lake candidates: secondary + high cost + low rules
+        # 1. Data lake candidates: secondary + high cost + low rules (split copies are already lake data).
+        #    Only when the table can actually move: Auxiliary where the feature matrix allows it, else Basic.
         if ($t.Classification -eq 'secondary' -and
+            -not $t.IsSplitTable -and
             $t.TablePlan -ne 'Auxiliary' -and
             $t.CostTier -in @('High', 'Very High') -and
             $t.DetectionTier -in @('None', 'Low')) {
 
-            $savings = [math]::Round($t.EstMonthlyCostUSD * 0.95, 2)  # ~95% savings at data lake pricing
+            $planProbe = [PSCustomObject]@{ TableName = $t.TableName; Plan = $t.TablePlan; TableSubType = $t.TableSubType }
+            if ($t.SupportsAuxiliaryPlan) {
+                $savings = [math]::Max(0, [math]::Round($t.EstMonthlyCostUSD - ($t.MonthlyGB * $LakePricePerGB), 2))
+                $recommendations.Add([PSCustomObject]@{
+                    Priority     = 'High'
+                    Type         = 'DataLake'
+                    TableName    = $t.TableName
+                    Title        = "Move $($t.TableName) to Data Lake tier"
+                    Detail       = "Secondary source ingesting $($t.MonthlyGB) GB/mo with $($t.EffectiveCoverage) detection(s). " +
+                                   "Create summary rules to aggregate key events back to analytics tier."
+                    EstSavingsUSD = $savings
+                    CurrentCost   = $t.EstMonthlyCostUSD
+                })
+            }
+            elseif ($t.TablePlan -ne 'Basic' -and (Test-TableSupportsBasicPlan -Table $planProbe)) {
+                $savings = [math]::Max(0, [math]::Round($t.EstMonthlyCostUSD - ($t.MonthlyGB * $BasicPricePerGB), 2))
+                $recommendations.Add([PSCustomObject]@{
+                    Priority     = 'High'
+                    Type         = 'DataLake'
+                    TableName    = $t.TableName
+                    Title        = "Move $($t.TableName) to Basic plan"
+                    Detail       = "Secondary source ingesting $($t.MonthlyGB) GB/mo with $($t.EffectiveCoverage) detection(s). " +
+                                   "This table does not support the Auxiliary (Data Lake) plan; Basic is the lowest supported tier."
+                    EstSavingsUSD = $savings
+                    CurrentCost   = $t.EstMonthlyCostUSD
+                })
+            }
+            else {
+                Write-Verbose "$($t.TableName) is a data lake candidate but supports neither the Auxiliary nor the Basic plan; no tier recommendation."
+            }
+        }
+
+        # 12. Deprecated or legacy source still ingesting. Informational: migrating moves the
+        #     ingestion to the replacement table rather than removing it, so no savings are claimed.
+        if ($t.Status -in @('deprecated', 'legacy') -and $t.MonthlyGB -gt 0) {
+            $replacement = if (@($t.ReplacedBy).Count -gt 0) { "Replacement table(s): $(@($t.ReplacedBy) -join ', '). " } else { 'No direct replacement table is documented. ' }
+            $verb = if ($t.Status -eq 'deprecated') { 'is deprecated' } else { 'uses a legacy collection path' }
             $recommendations.Add([PSCustomObject]@{
-                Priority     = 'High'
-                Type         = 'DataLake'
-                TableName    = $t.TableName
-                Title        = "Move $($t.TableName) to Data Lake tier"
-                Detail       = "Secondary source ingesting $($t.MonthlyGB) GB/mo with $($t.EffectiveCoverage) detection(s). " +
-                               "Create summary rules to aggregate key events back to analytics tier."
-                EstSavingsUSD = $savings
+                Priority      = 'Medium'
+                Type          = 'DeprecatedSource'
+                TableName     = $t.TableName
+                Title         = "$($t.TableName) $verb"
+                Detail        = "Ingesting $($t.MonthlyGB) GB/mo (~`$$($t.EstMonthlyCostUSD)/mo) into a table whose connector $verb. " + $replacement +
+                                'Migrate detections to the replacement, then retire the old connector to avoid paying for both.'
+                EstSavingsUSD = 0
                 CurrentCost   = $t.EstMonthlyCostUSD
             })
         }
@@ -256,9 +354,10 @@ function Invoke-Analysis {
             })
         }
 
-        # 4. Missing coverage on primary sources
+        # 4. Missing coverage on primary sources (not platform tables, which are consumed by Sentinel itself)
         if ($t.Classification -eq 'primary' -and
             -not $t.IsFree -and
+            -not $t.IsPlatform -and
             $t.EffectiveCoverage -eq 0) {
             $recommendations.Add([PSCustomObject]@{
                 Priority     = 'Medium'
@@ -289,7 +388,7 @@ function Invoke-Analysis {
             })
         }
 
-        # 9. Split candidate — high-volume tables with some detections that could benefit from split
+        # 9. Split candidate - high-volume tables with some detections that could benefit from split
         if (-not $t.IsFree -and
             -not $t.IsSplitTable -and
             -not $t.HasTransform -and
@@ -362,7 +461,7 @@ function Invoke-Analysis {
             Priority      = 'High'
             Type          = 'RetentionShortfall'
             TableName     = '(workspace default)'
-            Title         = "Workspace default retention is $($WorkspaceRetentionDays)d — increase to at least 90d"
+            Title         = "Workspace default retention is $($WorkspaceRetentionDays)d - increase to at least 90d"
             Detail        = "The workspace default retention is $($WorkspaceRetentionDays) days. " +
                             "A 90-day minimum is recommended as a security baseline. " +
                             "Tables inheriting the default will not meet compliance requirements."
@@ -404,6 +503,22 @@ function Invoke-Analysis {
         })
     }
 
+    # 12. Interactive retention below the 90-day Sentinel baseline (total may still be compliant via archive)
+    foreach ($t in $tableAnalysis) {
+        if (-not $t.InteractiveBelowBaseline) { continue }
+
+        $recommendations.Add([PSCustomObject]@{
+            Priority      = 'Medium'
+            Type          = 'RetentionInteractiveBelowBaseline'
+            TableName     = $t.TableName
+            Title         = "$($t.TableName) interactive retention is $($t.ActualInteractiveRetentionDays)d"
+            Detail        = "Analytics-tier interactive retention is $($t.ActualInteractiveRetentionDays) days; Sentinel includes 90 days at no extra charge. " +
+                            "Total retention is $($t.ActualRetentionDays) days. Raise interactive retention to 90 days unless the shorter hot window is deliberate."
+            EstSavingsUSD = 0
+            CurrentCost   = $t.EstMonthlyCostUSD
+        })
+    }
+
     foreach ($rec in $detectionAnalyzer.Recommendations) {
         $recommendations.Add($rec)
     }
@@ -412,7 +527,8 @@ function Invoke-Analysis {
         $recommendations.Add($rec)
     }
 
-    $sortedRecs = $recommendations | Sort-Object EstSavingsUSD -Descending
+    # Single canonical order: High > Medium > Low, then savings descending
+    $sortedRecs = @(Get-SortedRecommendation -Recommendations $recommendations)
 
     # Build schema lookup for live tuning analysis
     $schemaLookup = @{}
@@ -529,6 +645,9 @@ function Invoke-Analysis {
             CoveragePercent        = $coveragePercent
             EstTotalSavings        = [math]::Round($totalSavings, 2)
             PricePerGB             = $PricePerGB
+            BasicPricePerGB        = $BasicPricePerGB
+            LakePricePerGB         = $LakePricePerGB
+            UsageObservedDays      = $(if ($TableUsage.Count -gt 0 -and $null -ne $TableUsage[0].ObservedDays) { [int]$TableUsage[0].ObservedDays } else { $null })
             WorkspaceRetentionDays = $WorkspaceRetentionDays
             RetentionCompliant     = $retentionCompliantCount
             RetentionNonCompliant  = $retentionNonCompliant
@@ -546,6 +665,38 @@ function Invoke-Analysis {
             XdrAdvisoryRetention   = $xdrChecker.Summary.AdvisoryRetentionDays
         }
     }
+}
+
+function Get-SortedRecommendation {
+    <#
+    .SYNOPSIS
+        Orders recommendations High > Medium > Low, then by estimated savings descending.
+        This is the only place recommendations are sorted; exports and the TUI keep this order.
+    #>
+    [CmdletBinding()]
+    param([array]$Recommendations)
+
+    $prioOrder = @{ 'High' = 0; 'Medium' = 1; 'Low' = 2 }
+    @($Recommendations | Sort-Object `
+        @{ Expression = { if ($prioOrder.ContainsKey("$($_.Priority)")) { $prioOrder["$($_.Priority)"] } else { 3 } } }, `
+        @{ Expression = { [double]($_.EstSavingsUSD ?? 0) }; Descending = $true })
+}
+
+function Get-TableStatusLabel {
+    <#
+    .SYNOPSIS
+        Short lifecycle label for a table analysis row ("deprecated, use X, Y"
+        or "legacy"), or $null when the source has no status.
+    #>
+    [CmdletBinding()]
+    param([object]$Table)
+
+    if ($null -eq $Table -or $Table.PSObject.Properties.Name -notcontains 'Status') { return $null }
+    $status = "$($Table.Status)".Trim().ToLowerInvariant()
+    if ($status -notin 'deprecated', 'legacy') { return $null }
+    $replacement = @()
+    if ($Table.PSObject.Properties.Name -contains 'ReplacedBy') { $replacement = @($Table.ReplacedBy | Where-Object { -not [string]::IsNullOrWhiteSpace("$_") }) }
+    if ($replacement.Count -gt 0) { "$status, use $($replacement -join ', ')" } else { $status }
 }
 
 function Get-Assessment {
@@ -610,12 +761,16 @@ function Get-DetectionAnalyzerData {
         }
     }
 
-    # Build a unified rule list: analytics rules first, then CDRs
+    # Build a unified rule list: analytics rules first, then CDRs.
+    # RuleKey is the stable bucket key: rule id when known, display name otherwise.
     $unifiedRules = [System.Collections.Generic.List[object]]::new()
 
     if ($Rules) {
         foreach ($rule in $Rules) {
+            $ruleId = if ($rule.PSObject.Properties.Name -contains 'RuleId' -and $rule.RuleId) { "$($rule.RuleId)" } else { $null }
             $unifiedRules.Add([PSCustomObject]@{
+                RuleKey  = if ($ruleId) { $ruleId } else { "name:$($rule.RuleName)" }
+                RuleId   = $ruleId
                 RuleName = $rule.RuleName
                 Kind     = $rule.Kind
                 Enabled  = $rule.Enabled
@@ -653,7 +808,10 @@ function Get-DetectionAnalyzerData {
                 }
             }
 
+            $cdrId = if ($cdr.PSObject.Properties.Name -contains 'id' -and $cdr.id) { "cdr:$($cdr.id)" } else { $null }
             $unifiedRules.Add([PSCustomObject]@{
+                RuleKey   = if ($cdrId) { $cdrId } else { "name:$displayName" }
+                RuleId    = $cdrId
                 RuleName  = $displayName
                 Kind      = 'CustomDetection'
                 Enabled   = $isEnabled
@@ -665,45 +823,75 @@ function Get-DetectionAnalyzerData {
         }
     }
 
-    # Build incident buckets keyed by rule name
+    # Lookups: GUID tail of the rule id -> keys, display name -> keys (duplicate names map to several keys)
     $incidentBuckets = @{}
+    $keysByGuid = @{}
+    $keysByName = [System.Collections.Generic.Dictionary[string, System.Collections.Generic.List[string]]]::new([StringComparer]::OrdinalIgnoreCase)
     foreach ($rule in $unifiedRules) {
-        $incidentBuckets[$rule.RuleName] = [System.Collections.Generic.List[object]]::new()
+        $incidentBuckets[$rule.RuleKey] = [System.Collections.Generic.List[object]]::new()
+        if ($rule.RuleId) {
+            $guid = ("$($rule.RuleId)" -split '/')[-1]
+            if (-not $keysByGuid.ContainsKey($guid)) { $keysByGuid[$guid] = [System.Collections.Generic.List[string]]::new() }
+            $keysByGuid[$guid].Add($rule.RuleKey)
+        }
+        if (-not [string]::IsNullOrWhiteSpace($rule.RuleName)) {
+            if (-not $keysByName.ContainsKey($rule.RuleName)) { $keysByName[$rule.RuleName] = [System.Collections.Generic.List[string]]::new() }
+            $keysByName[$rule.RuleName].Add($rule.RuleKey)
+        }
     }
 
     foreach ($incident in $Incidents) {
-        $candidateNames = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
-        foreach ($n in @($incident.RelatedAnalyticRuleNames)) {
-            if (-not [string]::IsNullOrWhiteSpace($n)) { [void]$candidateNames.Add($n) }
+        $candidateKeys = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+
+        # 1. Rule ids (most precise)
+        foreach ($id in @($incident.RelatedAnalyticRuleIds)) {
+            if ([string]::IsNullOrWhiteSpace($id)) { continue }
+            $guid = ("$id" -split '/')[-1]
+            if ($keysByGuid.ContainsKey($guid)) { foreach ($k in $keysByGuid[$guid]) { [void]$candidateKeys.Add($k) } }
         }
 
-        # Title heuristic fallback — works for both analytics and CDR rules
-        if ($candidateNames.Count -eq 0 -and -not [string]::IsNullOrWhiteSpace($incident.Title)) {
+        # 2. Rule names
+        if ($candidateKeys.Count -eq 0) {
+            foreach ($n in @($incident.RelatedAnalyticRuleNames)) {
+                if ([string]::IsNullOrWhiteSpace($n)) { continue }
+                if ($keysByName.ContainsKey($n)) { foreach ($k in $keysByName[$n]) { [void]$candidateKeys.Add($k) } }
+            }
+        }
+
+        # 3. Title heuristic fallback - works for both analytics and CDR rules
+        if ($candidateKeys.Count -eq 0 -and -not [string]::IsNullOrWhiteSpace($incident.Title)) {
             foreach ($rule in $unifiedRules) {
+                if ([string]::IsNullOrWhiteSpace($rule.RuleName)) { continue }
                 if ($incident.Title.IndexOf($rule.RuleName, [System.StringComparison]::OrdinalIgnoreCase) -ge 0) {
-                    [void]$candidateNames.Add($rule.RuleName)
+                    [void]$candidateKeys.Add($rule.RuleKey)
                 }
             }
         }
 
-        foreach ($ruleName in $candidateNames) {
-            if ($incidentBuckets.ContainsKey($ruleName)) {
-                $incidentBuckets[$ruleName].Add($incident)
+        foreach ($key in $candidateKeys) {
+            if ($incidentBuckets.ContainsKey($key)) {
+                $incidentBuckets[$key].Add($incident)
             }
         }
     }
 
+    # Automation rules that can close incidents, computed once
+    $enabledAutoCloseRules = @($AutomationRules | Where-Object {
+        ($_.IsCloseIncidentRule -or $_.HasPlaybookAction) -and $_.Enabled
+    })
+    $distinctAutoClosed = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+
     # Compute per-rule metrics
     $ruleMetrics = [System.Collections.Generic.List[object]]::new()
     foreach ($rule in $unifiedRules) {
-        $ruleIncidents = @($incidentBuckets[$rule.RuleName])
+        $ruleIncidents = @($incidentBuckets[$rule.RuleKey])
         $total = $ruleIncidents.Count
         $closed = @($ruleIncidents | Where-Object { $_.Status -eq 'Closed' })
-        $enabledAutoCloseRules = @($AutomationRules | Where-Object {
-            ($_.IsCloseIncidentRule -or $_.HasPlaybookAction) -and $_.Enabled
-        })
 
-        $autoClosed = @()
+        $autoClosed = [System.Collections.Generic.List[object]]::new()
+        $autoClosedIds = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+        $linkedAutomation = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+
         foreach ($inc in $closed) {
             $isAutoClose = $false
 
@@ -712,13 +900,14 @@ function Get-DetectionAnalyzerData {
                 $isAutoClose = $true
             }
 
-            # Fallback: automation rule condition matching
-            if (-not $isAutoClose) {
+            # Automation rule condition matching: fallback attribution, and the source of linked rule names
+            if ($enabledAutoCloseRules.Count -gt 0) {
                 $matched = @($enabledAutoCloseRules | Where-Object {
-                    Test-AutomationRuleIncidentMatch -AutomationRule $_ -IncidentTitle $inc.Title -IncidentRuleIds $inc.RelatedAnalyticRuleIds
+                    Test-AutomationRuleIncidentMatch -AutomationRule $_ -IncidentTitle $inc.Title -IncidentRuleIds $inc.RelatedAnalyticRuleIds -IncidentSeverity "$($inc.Severity)"
                 })
                 if ($matched.Count -gt 0) {
                     $isAutoClose = $true
+                    foreach ($m in $matched) { if ($m.DisplayName) { [void]$linkedAutomation.Add($m.DisplayName) } }
                 }
             }
 
@@ -732,11 +921,16 @@ function Get-DetectionAnalyzerData {
             }
 
             if ($isAutoClose) {
-                $autoClosed += $inc
+                $autoClosed.Add($inc)
+                $incKey = if ($inc.IncidentId) { "$($inc.IncidentId)" } elseif ($inc.IncidentNumber) { "num:$($inc.IncidentNumber)" } else { $null }
+                if ($incKey) { [void]$autoClosedIds.Add($incKey); [void]$distinctAutoClosed.Add($incKey) }
             }
         }
 
-        $manualClosed = @($closed | Where-Object { $_ -notin $autoClosed })
+        $manualClosed = @($closed | Where-Object {
+            $k = if ($_.IncidentId) { "$($_.IncidentId)" } elseif ($_.IncidentNumber) { "num:$($_.IncidentNumber)" } else { $null }
+            -not ($k -and $autoClosedIds.Contains($k))
+        })
         $falsePositive = @($closed | Where-Object { $_.Classification -eq 'FalsePositive' })
         $benignPositive = @($closed | Where-Object { $_.Classification -eq 'BenignPositive' })
         $truePositive = @($closed | Where-Object { $_.Classification -eq 'TruePositive' })
@@ -753,6 +947,8 @@ function Get-DetectionAnalyzerData {
         $benignRatio = if ($closed.Count -gt 0) { [math]::Round(($benignPositive.Count / $closed.Count), 4) } else { 0 }
 
         $ruleMetrics.Add([PSCustomObject]@{
+            RuleKey                 = $rule.RuleKey
+            RuleId                  = $rule.RuleId
             RuleName                = $rule.RuleName
             RuleKind                = $rule.Kind
             Enabled                 = $rule.Enabled
@@ -770,16 +966,16 @@ function Get-DetectionAnalyzerData {
             FalsePositiveRatio      = $falseRatio
             BenignPositiveRatio     = $benignRatio
             AvgCloseMinutes         = $avgClose
-            LinkedAutomationRules   = @($AutomationRules | Where-Object {
-                $_.IsCloseIncidentRule -and $_.Enabled -and $_.TitleFilters.Count -gt 0
-            } | ForEach-Object DisplayName | Select-Object -Unique)
+            LinkedAutomationRules   = @($linkedAutomation | Sort-Object)
         })
     }
 
-    # Noisiness scoring — only score rules that have incident data
+    # Noisiness scoring - only score rules that have incident data, and only when
+    # the population is large enough for a percentile to carry meaning.
     $scorableMetrics = @($ruleMetrics | Where-Object { $_.IncidentsTotal -gt 0 })
+    $minScorablePopulation = 3
 
-    if ($scorableMetrics.Count -gt 0) {
+    if ($scorableMetrics.Count -ge $minScorablePopulation) {
         $volumes = @($scorableMetrics | ForEach-Object IncidentsTotal)
         $autoRatios = @($scorableMetrics | ForEach-Object AutoCloseRatio)
         $falseRatios = @($scorableMetrics | ForEach-Object FalsePositiveRatio)
@@ -791,16 +987,19 @@ function Get-DetectionAnalyzerData {
 
             $score = [math]::Round(($volumePct * 0.35) + ($autoPct * 0.40) + ($falsePct * 0.25), 2)
             Add-Member -InputObject $metric -NotePropertyName NoisinessScore -NotePropertyValue $score
+            Add-Member -InputObject $metric -NotePropertyName ScoreStatus -NotePropertyValue 'Scored'
             Add-Member -InputObject $metric -NotePropertyName PercentileVolume -NotePropertyValue $volumePct
             Add-Member -InputObject $metric -NotePropertyName PercentileAutoClose -NotePropertyValue $autoPct
             Add-Member -InputObject $metric -NotePropertyName PercentileFalsePositive -NotePropertyValue $falsePct
         }
     }
 
-    # Rules with no incidents get null score (listing-only in UI)
+    # Rules without a score: no incidents, or too few scorable rules for a percentile
     foreach ($metric in $ruleMetrics) {
         if (-not ($metric.PSObject.Properties.Name -contains 'NoisinessScore')) {
+            $status = if ($metric.IncidentsTotal -gt 0) { 'InsufficientSample' } else { 'NoIncidents' }
             Add-Member -InputObject $metric -NotePropertyName NoisinessScore -NotePropertyValue $null
+            Add-Member -InputObject $metric -NotePropertyName ScoreStatus -NotePropertyValue $status
             Add-Member -InputObject $metric -NotePropertyName PercentileVolume -NotePropertyValue $null
             Add-Member -InputObject $metric -NotePropertyName PercentileAutoClose -NotePropertyValue $null
             Add-Member -InputObject $metric -NotePropertyName PercentileFalsePositive -NotePropertyValue $null
@@ -834,7 +1033,9 @@ function Get-DetectionAnalyzerData {
             RulesAnalyzed = $ruleMetrics.Count
             NoisyRules = $noisyRules.Count
             IncidentsAnalyzed = $Incidents.Count
-            AutoClosedIncidents = @($ruleMetrics | Measure-Object IncidentsAutoClosed -Sum).Sum
+            AutoClosedIncidents = $distinctAutoClosed.Count
+            ScorableRules = $scorableMetrics.Count
+            MinScorablePopulation = $minScorablePopulation
             CustomDetectionRules = $cdrMetrics.Count
             CDRCorrelatedIncidents = $cdrCorrelated
         }
@@ -960,6 +1161,12 @@ function Get-XdrCheckerData {
 }
 
 function Get-PercentileRank {
+    <#
+    .SYNOPSIS
+        Percentage of the population less than or equal to Value. Returns 0 when
+        the population is empty or flat (no relative signal), so a single rule or
+        an all-equal set is never ranked as noisy.
+    #>
     [CmdletBinding()]
     param(
         [double]$Value,
@@ -968,10 +1175,7 @@ function Get-PercentileRank {
 
     $clean = @($Population | Where-Object { $null -ne $_ } | ForEach-Object { [double]$_ })
     if ($clean.Count -eq 0) { return 0 }
-    if ($clean.Count -eq 1) { return 100 }
 
-    # If all values are identical, percentile carries no relative signal.
-    # Return 0 so rules are not falsely classified as noisy when everything is flat (for example all zeros).
     $min = ($clean | Measure-Object -Minimum).Minimum
     $max = ($clean | Measure-Object -Maximum).Maximum
     if ($min -eq $max) { return 0 }
@@ -981,51 +1185,107 @@ function Get-PercentileRank {
 }
 
 function Test-AutomationRuleIncidentMatch {
+    <#
+    .SYNOPSIS
+        Decides whether an automation rule's modelled conditions apply to an incident.
+    .DESCRIPTION
+        Sentinel ANDs all conditions on a rule, so analytic-rule-id, title and severity
+        groups must all match when present. A rule whose conditions are not modelled
+        here (status, tactics, entities) is treated as a match, the same as a rule with
+        no conditions at all.
+    #>
     [CmdletBinding()]
     param(
         [PSCustomObject]$AutomationRule,
         [string]$IncidentTitle,
-        [string[]]$IncidentRuleIds
+        [string[]]$IncidentRuleIds,
+        [string]$IncidentSeverity
     )
 
-    # Blanket close rule: no conditions at all means it matches everything
     if (-not $AutomationRule.HasConditions) { return $true }
 
-    # Check analytic rule ID conditions
-    $ruleIdFilters = @($AutomationRule.RuleIdFilters)
-    if ($ruleIdFilters.Count -gt 0 -and $IncidentRuleIds.Count -gt 0) {
+    $ruleIdFilters = @($AutomationRule.RuleIdFilters | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+    $titleConditions = @(Get-AutomationTitleConditions -AutomationRule $AutomationRule)
+    $severityConditions = @()
+    if ($AutomationRule.PSObject.Properties.Name -contains 'SeverityConditions') {
+        $severityConditions = @($AutomationRule.SeverityConditions | Where-Object { $_ -and @($_.Values).Count -gt 0 })
+    }
+
+    # Only unmodelled conditions (status, tactics, entities ...) - cannot exclude, so it applies
+    if ($ruleIdFilters.Count -eq 0 -and $titleConditions.Count -eq 0 -and $severityConditions.Count -eq 0) { return $true }
+
+    foreach ($sc in $severityConditions) {
+        # Unknown incident severity cannot satisfy an Equals condition and cannot be excluded by NotEquals
+        if ([string]::IsNullOrWhiteSpace($IncidentSeverity)) { if ("$($sc.Operator)" -ne 'NotEquals') { return $false } else { continue } }
+        $inSet = $IncidentSeverity -in @($sc.Values)
+        if ("$($sc.Operator)" -eq 'NotEquals') { if ($inSet) { return $false } }
+        elseif (-not $inSet) { return $false }
+    }
+
+    if ($ruleIdFilters.Count -gt 0) {
+        $idMatch = $false
         foreach ($filter in $ruleIdFilters) {
-            foreach ($incidentRuleId in $IncidentRuleIds) {
-                # Exact match or GUID-tail match for ARM resource IDs
-                if ($incidentRuleId -eq $filter) { return $true }
-                $filterGuid = ($filter -split '/')[-1]
+            $filterGuid = ($filter -split '/')[-1]
+            foreach ($incidentRuleId in @($IncidentRuleIds)) {
+                if ([string]::IsNullOrWhiteSpace($incidentRuleId)) { continue }
+                if ($incidentRuleId -eq $filter) { $idMatch = $true; break }
                 $incidentGuid = ($incidentRuleId -split '/')[-1]
-                if ($filterGuid -and $incidentGuid -and $filterGuid -eq $incidentGuid) { return $true }
+                if ($filterGuid -and $incidentGuid -and $filterGuid -eq $incidentGuid) { $idMatch = $true; break }
             }
+            if ($idMatch) { break }
         }
+        if (-not $idMatch) { return $false }
     }
 
-    # Check title conditions with operator awareness
-    if ([string]::IsNullOrWhiteSpace($IncidentTitle)) { return $false }
-
-    $titleFilters = @($AutomationRule.TitleFilters)
-    $titleOperators = @($AutomationRule.TitleOperators)
-    for ($i = 0; $i -lt $titleFilters.Count; $i++) {
-        $filter = $titleFilters[$i]
-        if ([string]::IsNullOrWhiteSpace($filter)) { continue }
-        $op = if ($i -lt $titleOperators.Count) { $titleOperators[$i] } else { 'Contains' }
-
-        switch ($op) {
-            'Equals'     { if ($IncidentTitle -eq $filter) { return $true } }
-            'StartsWith' { if ($IncidentTitle.StartsWith($filter, [System.StringComparison]::OrdinalIgnoreCase)) { return $true } }
-            'EndsWith'   { if ($IncidentTitle.EndsWith($filter, [System.StringComparison]::OrdinalIgnoreCase)) { return $true } }
-            default {
-                # Contains or unknown operator: substring match; also support wildcard patterns
-                $pattern = [regex]::Escape($filter).Replace('\*', '.*')
-                if ($IncidentTitle -match $pattern) { return $true }
+    if ($titleConditions.Count -gt 0) {
+        if ([string]::IsNullOrWhiteSpace($IncidentTitle)) { return $false }
+        $titleMatch = $false
+        foreach ($cond in $titleConditions) {
+            $filter = $cond.Value
+            switch ($cond.Operator) {
+                'Equals'     { if ($IncidentTitle -eq $filter) { $titleMatch = $true } }
+                'StartsWith' { if ($IncidentTitle.StartsWith($filter, [System.StringComparison]::OrdinalIgnoreCase)) { $titleMatch = $true } }
+                'EndsWith'   { if ($IncidentTitle.EndsWith($filter, [System.StringComparison]::OrdinalIgnoreCase)) { $titleMatch = $true } }
+                default {
+                    # Contains or unknown operator: substring match; also support wildcard patterns
+                    $pattern = [regex]::Escape($filter).Replace('\*', '.*')
+                    if ($IncidentTitle -match $pattern) { $titleMatch = $true }
+                }
             }
+            if ($titleMatch) { break }
         }
+        if (-not $titleMatch) { return $false }
     }
 
-    return $false
+    return $true
+}
+
+function Get-AutomationTitleConditions {
+    <#
+    .SYNOPSIS
+        Returns the rule's title conditions as (Value, Operator) pairs. Prefers the
+        TitleConditions property; falls back to zipping TitleFilters with TitleOperators
+        (missing operators default to Contains).
+    #>
+    [CmdletBinding()]
+    param([PSCustomObject]$AutomationRule)
+
+    $result = [System.Collections.Generic.List[object]]::new()
+    if ($AutomationRule.PSObject.Properties.Name -contains 'TitleConditions' -and $AutomationRule.TitleConditions) {
+        foreach ($c in @($AutomationRule.TitleConditions)) {
+            if ([string]::IsNullOrWhiteSpace("$($c.Value)")) { continue }
+            $op = if ([string]::IsNullOrWhiteSpace("$($c.Operator)")) { 'Contains' } else { "$($c.Operator)" }
+            $result.Add([PSCustomObject]@{ Value = "$($c.Value)"; Operator = $op })
+        }
+        return @($result)
+    }
+
+    $filters = @($AutomationRule.TitleFilters)
+    $operators = @($AutomationRule.TitleOperators)
+    for ($i = 0; $i -lt $filters.Count; $i++) {
+        if ([string]::IsNullOrWhiteSpace("$($filters[$i])")) { continue }
+        $op = if ($i -lt $operators.Count -and -not [string]::IsNullOrWhiteSpace("$($operators[$i])")) { "$($operators[$i])" } else { 'Contains' }
+        $result.Add([PSCustomObject]@{ Value = "$($filters[$i])"; Operator = $op })
+    }
+    @($result)
 }

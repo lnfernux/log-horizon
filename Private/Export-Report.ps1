@@ -1,9 +1,11 @@
-function Export-Report {
+﻿function Export-Report {
     <#
     .SYNOPSIS
         Exports the Log Horizon analysis report to JSON, Markdown, or static HTML.
         MD and HTML render identical sections via a shared section renderer.
         JSON is the complete data dump containing all analysis properties.
+    .OUTPUTS
+        The full path of the written file.
     #>
     [CmdletBinding()]
     param(
@@ -18,30 +20,14 @@ function Export-Report {
     $timestamp = Get-Date -Format 'yyyy-MM-dd_HHmm'
     $generatedStr = Get-Date -Format 'yyyy-MM-dd HH:mm:ss UTC' -AsUTC
 
-    # Validate output path — if directory, auto-generate timestamped filename
-    $resolvedPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($OutputPath)
-    if (Test-Path -Path $resolvedPath -PathType Container) {
-        $ext = if ($Format -in 'markdown', 'md') { 'md' } else { $Format }
-        $resolvedPath = Join-Path $resolvedPath "LogHorizon_Report_${timestamp}.$ext"
-        $OutputPath = $resolvedPath
-    }
-
-    if (-not (Test-Path -Path (Split-Path -Path $resolvedPath -Parent) -IsValid)) {
-        throw "Invalid output path: $OutputPath"
-    }
-
-    # --- Sanitisation helpers ---
-    function ConvertTo-SafeMarkdown([string]$Text) {
-        if ([string]::IsNullOrWhiteSpace($Text)) { return "" }
-        return $Text -replace '([\\`*_{}[\]()#+\-.!])', '\$1' -replace '<', '&lt;' -replace '>', '&gt;'
-    }
+    $OutputPath = Resolve-ReportOutputPath -OutputPath $OutputPath -Format $Format -Timestamp $timestamp
 
     function ConvertTo-HtmlSafe([string]$Text) {
         if ([string]::IsNullOrWhiteSpace($Text)) { return "" }
         return [System.Net.WebUtility]::HtmlEncode($Text)
     }
 
-    $safeWorkspaceMD   = ConvertTo-SafeMarkdown $WorkspaceName
+    $safeWorkspaceMD   = ConvertTo-SafeMarkdownText $WorkspaceName
     $safeWorkspaceHTML = ConvertTo-HtmlSafe $WorkspaceName
 
     switch ($Format) {
@@ -63,10 +49,13 @@ function Export-Report {
                 dataTransforms       = $Analysis.DataTransforms
                 detectionAnalyzer    = $Analysis.DetectionAnalyzer
                 xdrChecker           = $Analysis.XdrChecker
+                liveTuningAnalysis   = $Analysis.LiveTuningAnalysis
             }
             if ($DefenderXDR) {
                 $xdrStreamed = @($Analysis.TableAnalysis | Where-Object IsXDRStreaming)
                 $export.defenderXDR = [ordered]@{
+                    fetched          = $(if ($DefenderXDR.PSObject.Properties.Name -contains 'Fetched') { [bool]$DefenderXDR.Fetched } else { $true })
+                    fetchError       = $(if ($DefenderXDR.PSObject.Properties.Name -contains 'FetchError') { $DefenderXDR.FetchError } else { $null })
                     totalXDRRules    = $DefenderXDR.TotalXDRRules
                     xdrTableCoverage = $DefenderXDR.XDRTableCoverage
                     knownXDRTables   = $DefenderXDR.KnownXDRTables
@@ -77,7 +66,7 @@ function Export-Report {
             }
 
             $export | ConvertTo-Json -Depth 10 | Set-Content -Path $OutputPath -Encoding utf8
-            Write-Output "JSON report written to $OutputPath"
+            Write-Verbose "JSON report written to $OutputPath"
         }
 
         { $_ -in 'markdown', 'md' } {
@@ -96,7 +85,7 @@ function Export-Report {
             }
 
             $sb.ToString() | Set-Content -Path $OutputPath -Encoding utf8
-            Write-Output "Markdown report written to $OutputPath"
+            Write-Verbose "Markdown report written to $OutputPath"
         }
 
         'html' {
@@ -128,13 +117,63 @@ function Export-Report {
             $html = $html.Replace('__TAB_PANES__', $tabBody.ToString())
 
             $html | Set-Content -Path $OutputPath -Encoding utf8
-            Write-Output "HTML report written to $OutputPath"
+            Write-Verbose "HTML report written to $OutputPath"
         }
     }
+
+    $OutputPath
+}
+
+function Resolve-ReportOutputPath {
+    <#
+    .SYNOPSIS
+        Turns the user-supplied -OutputPath into a concrete file path. An existing
+        directory or a path ending in a separator gets a timestamped file name; a
+        file path without an extension gets the format's extension; missing parent
+        directories are created.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$OutputPath,
+        [Parameter(Mandatory)][string]$Format,
+        [string]$Timestamp = (Get-Date -Format 'yyyy-MM-dd_HHmm')
+    )
+
+    $resolved = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($OutputPath)
+    $ext = if ($Format -in 'markdown', 'md') { 'md' } else { $Format.ToLower() }
+    $endsWithSeparator = $OutputPath.TrimEnd() -match '[\\/]$'
+    $isDirectory = (Test-Path -LiteralPath $resolved -PathType Container) -or $endsWithSeparator
+
+    if ($isDirectory) {
+        if (-not (Test-Path -LiteralPath $resolved -PathType Container)) {
+            New-Item -ItemType Directory -Path $resolved -Force | Out-Null
+        }
+        return (Join-Path $resolved "LogHorizon_Report_${Timestamp}.$ext")
+    }
+
+    if ([string]::IsNullOrEmpty([IO.Path]::GetExtension($resolved))) { $resolved = "$resolved.$ext" }
+    $parent = Split-Path -Path $resolved -Parent
+    if (-not (Test-Path -Path $parent -IsValid)) { throw "Invalid output path: $OutputPath" }
+    if ($parent -and -not (Test-Path -LiteralPath $parent -PathType Container)) {
+        New-Item -ItemType Directory -Path $parent -Force | Out-Null
+    }
+    $resolved
+}
+
+function ConvertTo-SafeMarkdownText {
+    <#
+    .SYNOPSIS
+        Escapes Markdown syntax (including the table cell separator) and angle brackets.
+    #>
+    [CmdletBinding()]
+    param([string]$Text)
+
+    if ([string]::IsNullOrWhiteSpace($Text)) { return '' }
+    ($Text -replace '([\\`*_{}[\]()#+\-.!|])', '\$1' -replace '<', '&lt;' -replace '>', '&gt;') -replace '\r?\n', ' '
 }
 
 # ---------------------------------------------------------------------------
-# Shared section renderer — produces identical content for MD and HTML
+# Shared section renderer - produces identical content for MD and HTML
 # ---------------------------------------------------------------------------
 function ConvertTo-ReportSections {
     param(
@@ -143,10 +182,7 @@ function ConvertTo-ReportSections {
     )
 
     function hEnc([string]$Text) { [System.Net.WebUtility]::HtmlEncode($Text) }
-    function mdEsc([string]$Text) {
-        if ([string]::IsNullOrWhiteSpace($Text)) { return "" }
-        $Text -replace '([\\`*_{}[\]()#+\-.!])', '\$1' -replace '<', '&lt;' -replace '>', '&gt;'
-    }
+    function mdEsc([string]$Text) { ConvertTo-SafeMarkdownText -Text $Text }
 
     $sections = [System.Collections.Generic.List[PSCustomObject]]::new()
     $summary = $Analysis.Summary
@@ -197,9 +233,8 @@ function ConvertTo-ReportSections {
 
     # - 2. Recommendations -
     if ($Analysis.Recommendations.Count -gt 0) {
-        $sortedRecs = $Analysis.Recommendations | Sort-Object @{Expression={
-            switch ($_.Priority) { 'High' { 1 } 'Medium' { 2 } 'Low' { 3 } default { 4 } }
-        }}
+        # Already ordered by Invoke-Analysis (Get-SortedRecommendation)
+        $sortedRecs = @($Analysis.Recommendations)
 
         $mdSb = [System.Text.StringBuilder]::new()
         [void]$mdSb.AppendLine('## Recommendations')
@@ -207,16 +242,16 @@ function ConvertTo-ReportSections {
         $num = 1
         foreach ($rec in $sortedRecs) {
             $icon = switch ($rec.Priority) { 'High' { '🔴' } 'Medium' { '🟡' } 'Low' { '🔵' } }
-            [void]$mdSb.AppendLine("### $num. $icon $($rec.Title)")
+            [void]$mdSb.AppendLine("### $num. $icon $(mdEsc $rec.Title)")
             [void]$mdSb.AppendLine('')
-            [void]$mdSb.AppendLine("**Priority:** $($rec.Priority)  ")
-            [void]$mdSb.AppendLine("**Type:** $($rec.Type)  ")
+            [void]$mdSb.AppendLine("**Priority:** $(mdEsc $rec.Priority)  ")
+            [void]$mdSb.AppendLine("**Type:** $(mdEsc $rec.Type)  ")
             [void]$mdSb.AppendLine("**Current Cost:** `$$($rec.CurrentCost)/mo  ")
             if ($rec.EstSavingsUSD -gt 0) {
                 [void]$mdSb.AppendLine("**Est. Savings:** `$$($rec.EstSavingsUSD)/mo  ")
             }
             [void]$mdSb.AppendLine('')
-            [void]$mdSb.AppendLine($rec.Detail)
+            [void]$mdSb.AppendLine((mdEsc $rec.Detail))
             [void]$mdSb.AppendLine('')
             $num++
         }
@@ -246,9 +281,11 @@ function ConvertTo-ReportSections {
     [void]$mdSb.AppendLine('| --- | --- | --- | --- | ---: | ---: | ---: | ---: | --- |')
     foreach ($tableEntry in $sorted) {
         $costStr = if ($tableEntry.IsFree) { 'FREE' } else { "`$$($tableEntry.EstMonthlyCostUSD)" }
-        $configuredPlan = if ($tableEntry.TablePlan) { $tableEntry.TablePlan } else { '-' }
-        $observedPlans = if ($tableEntry.ObservedPlanSummary) { $tableEntry.ObservedPlanSummary } else { '-' }
-        [void]$mdSb.AppendLine("| $($tableEntry.TableName) | $($tableEntry.Classification) | $configuredPlan | $observedPlans | $($tableEntry.MonthlyGB) | $costStr | $($tableEntry.AnalyticsRules) | $($tableEntry.HuntingQueries) | $($tableEntry.Assessment) |")
+        $configuredPlan = if ($tableEntry.TablePlan) { mdEsc $tableEntry.TablePlan } else { '-' }
+        $observedPlans = if ($tableEntry.ObservedPlanSummary) { mdEsc $tableEntry.ObservedPlanSummary } else { '-' }
+        $statusNote = Get-TableStatusLabel -Table $tableEntry
+        $nameCell = if ($statusNote) { "$(mdEsc $tableEntry.TableName) ($(mdEsc $statusNote))" } else { mdEsc $tableEntry.TableName }
+        [void]$mdSb.AppendLine("| $nameCell | $(mdEsc $tableEntry.Classification) | $configuredPlan | $observedPlans | $($tableEntry.MonthlyGB) | $costStr | $($tableEntry.TotalCoverage) | $($tableEntry.HuntingQueries) | $(mdEsc $tableEntry.Assessment) |")
     }
     [void]$mdSb.AppendLine('')
 
@@ -261,7 +298,9 @@ function ConvertTo-ReportSections {
         $costStr = if ($tableEntry.IsFree) { '<span class="badge badge-savings">FREE</span>' } else { "`$$($tableEntry.EstMonthlyCostUSD)" }
         $configuredPlan = if ($tableEntry.TablePlan) { hEnc $tableEntry.TablePlan } else { '-' }
         $observedPlans = if ($tableEntry.ObservedPlanSummary) { hEnc $tableEntry.ObservedPlanSummary } else { '-' }
-        [void]$htmlSb.AppendLine("                <tr><td>$(hEnc $tableEntry.TableName)</td><td class=`"$classificationClass`">$($tableEntry.Classification.ToUpper())</td><td>$configuredPlan</td><td>$observedPlans</td><td class=`"num`">$($tableEntry.MonthlyGB)</td><td class=`"num`">$costStr</td><td class=`"num`">$($tableEntry.TotalCoverage)</td><td class=`"num`">$($tableEntry.HuntingQueries)</td><td>$(hEnc $tableEntry.Assessment)</td></tr>")
+        $statusNote = Get-TableStatusLabel -Table $tableEntry
+        $statusBadge = if ($statusNote) { " <span class=`"badge badge-status`">$(hEnc $statusNote)</span>" } else { '' }
+        [void]$htmlSb.AppendLine("                <tr><td>$(hEnc $tableEntry.TableName)$statusBadge</td><td class=`"$classificationClass`">$($tableEntry.Classification.ToUpper())</td><td>$configuredPlan</td><td>$observedPlans</td><td class=`"num`">$($tableEntry.MonthlyGB)</td><td class=`"num`">$costStr</td><td class=`"num`">$($tableEntry.TotalCoverage)</td><td class=`"num`">$($tableEntry.HuntingQueries)</td><td>$(hEnc $tableEntry.Assessment)</td></tr>")
     }
     [void]$htmlSb.AppendLine('                </tbody>')
     [void]$htmlSb.AppendLine('            </table></div>')
@@ -276,7 +315,7 @@ function ConvertTo-ReportSections {
         [void]$mdSb.AppendLine('| Table | Connector | Classification | Keyword |')
         [void]$mdSb.AppendLine('| --- | --- | --- | --- |')
         foreach ($kg in $Analysis.KeywordGaps) {
-            [void]$mdSb.AppendLine("| $($kg.TableName) | $($kg.Connector) | $($kg.Classification) | $($kg.MatchedKeyword) |")
+            [void]$mdSb.AppendLine("| $(mdEsc $kg.TableName) | $(mdEsc $kg.Connector) | $(mdEsc $kg.Classification) | $(mdEsc $kg.MatchedKeyword) |")
         }
         [void]$mdSb.AppendLine('')
 
@@ -304,7 +343,7 @@ function ConvertTo-ReportSections {
         [void]$mdSb.AppendLine('')
 
         if ($summary.WorkspaceRetentionDays -gt 0 -and $summary.WorkspaceRetentionDays -lt 90) {
-            [void]$mdSb.AppendLine("> **Warning:** Workspace default retention is $($summary.WorkspaceRetentionDays)d — increase to at least 90d.  ")
+            [void]$mdSb.AppendLine("> **Warning:** Workspace default retention is $($summary.WorkspaceRetentionDays)d - increase to at least 90d.  ")
             [void]$mdSb.AppendLine('')
         }
 
@@ -316,7 +355,7 @@ function ConvertTo-ReportSections {
             foreach ($tableEntry in $nonCompliant) {
                 $shortfall = 90 - $tableEntry.ActualRetentionDays
                 $plan = if ($tableEntry.TablePlan) { $tableEntry.TablePlan } else { '-' }
-                [void]$mdSb.AppendLine("| $($tableEntry.TableName) | $plan | $($tableEntry.ActualRetentionDays)d | 90d | +${shortfall}d |")
+                [void]$mdSb.AppendLine("| $(mdEsc $tableEntry.TableName) | $plan | $($tableEntry.ActualRetentionDays)d | 90d | +${shortfall}d |")
             }
             [void]$mdSb.AppendLine('')
         }
@@ -328,14 +367,14 @@ function ConvertTo-ReportSections {
             [void]$mdSb.AppendLine('| --- | --- | ---: | ---: |')
             foreach ($tableEntry in $improvable) {
                 $currentStr = if ($null -ne $tableEntry.ActualRetentionDays) { "$($tableEntry.ActualRetentionDays)d" } else { '-' }
-                [void]$mdSb.AppendLine("| $($tableEntry.TableName) | $($tableEntry.Category) | $currentStr | $($tableEntry.RecommendedRetentionDays)d |")
+                [void]$mdSb.AppendLine("| $(mdEsc $tableEntry.TableName) | $(mdEsc $tableEntry.Category) | $currentStr | $($tableEntry.RecommendedRetentionDays)d |")
             }
             [void]$mdSb.AppendLine('')
         }
 
         $htmlSb = [System.Text.StringBuilder]::new()
         if ($summary.WorkspaceRetentionDays -gt 0 -and $summary.WorkspaceRetentionDays -lt 90) {
-            [void]$htmlSb.AppendLine("            <p class=`"warning`">⚠ Workspace default retention is $($summary.WorkspaceRetentionDays)d — increase to at least 90d.</p>")
+            [void]$htmlSb.AppendLine("            <p class=`"warning`">⚠ Workspace default retention is $($summary.WorkspaceRetentionDays)d - increase to at least 90d.</p>")
         }
 
         if ($nonCompliant.Count -gt 0) {
@@ -383,7 +422,7 @@ function ConvertTo-ReportSections {
             [void]$mdSb.AppendLine('| --- | --- | ---: | --- |')
             foreach ($t in $splitTables) {
                 $plan = if ($t.TablePlan) { $t.TablePlan } else { 'Data Lake' }
-                [void]$mdSb.AppendLine("| $($t.TableName) | $($t.ParentTable) | $($t.MonthlyGB) | $plan |")
+                [void]$mdSb.AppendLine("| $(mdEsc $t.TableName) | $(mdEsc $t.ParentTable) | $($t.MonthlyGB) | $plan |")
             }
             [void]$mdSb.AppendLine('')
         }
@@ -395,8 +434,9 @@ function ConvertTo-ReportSections {
             [void]$mdSb.AppendLine('| --- | --- | --- |')
             foreach ($tr in $transforms.Transforms) {
                 $kqlPreview = $tr.TransformKql -replace '\r?\n', ' ' -replace '\s+', ' '
-                $kqlPreview = $kqlPreview -replace '\|', '&#124;'
-                [void]$mdSb.AppendLine("| $($tr.OutputTable) | $($tr.TransformType) | <code>$kqlPreview</code> |")
+                # Inside <code> the content is inline HTML, so encode markup characters and the table separator
+                $kqlPreview = ([System.Net.WebUtility]::HtmlEncode($kqlPreview)) -replace '\|', '&#124;'
+                [void]$mdSb.AppendLine("| $(mdEsc $tr.OutputTable) | $(mdEsc $tr.TransformType) | <code>$kqlPreview</code> |")
             }
             [void]$mdSb.AppendLine('')
         }
@@ -457,7 +497,7 @@ function ConvertTo-ReportSections {
 
             foreach ($lt in ($liveTuning | Sort-Object EstMonthlyCostUSD -Descending)) {
                 if ($lt.FilterKql -or $lt.ProjectKql) {
-                    [void]$mdSb.AppendLine("#### $($lt.TableName)")
+                    [void]$mdSb.AppendLine("#### $(mdEsc $lt.TableName)")
                     [void]$mdSb.AppendLine('')
                     if ($lt.FilterKql) {
                         [void]$mdSb.AppendLine('**Filter KQL:**')
@@ -484,9 +524,9 @@ function ConvertTo-ReportSections {
 
             foreach ($rec in $splitRecs) {
                 $ss = $rec.SplitSuggestion
-                [void]$mdSb.AppendLine("#### $($rec.TableName)")
+                [void]$mdSb.AppendLine("#### $(mdEsc $rec.TableName)")
                 [void]$mdSb.AppendLine('')
-                [void]$mdSb.AppendLine("**Source:** $($ss.Source) | **Rules:** $($ss.RuleCount) | **Est. Savings:** `$$($rec.EstSavingsUSD)/mo  ")
+                [void]$mdSb.AppendLine("**Source:** $(mdEsc $ss.Source) | **Rules:** $($ss.RuleCount) | **Est. Savings:** `$$($rec.EstSavingsUSD)/mo  ")
                 [void]$mdSb.AppendLine('')
                 if ($ss.SplitKql) {
                     [void]$mdSb.AppendLine('**Split KQL:**')
@@ -563,8 +603,8 @@ function ConvertTo-ReportSections {
             [void]$mdSb.AppendLine('| Rule | Kind | Tables |')
             [void]$mdSb.AppendLine('| --- | --- | --- |')
             foreach ($cr in $corrExcluded) {
-                $tables = if ($cr.Tables) { ($cr.Tables -join ', ') } else { '-' }
-                [void]$mdSb.AppendLine("| $(mdEsc $cr.RuleName) | $($cr.Kind) | $tables |")
+                $tables = if ($cr.Tables) { mdEsc ($cr.Tables -join ', ') } else { '-' }
+                [void]$mdSb.AppendLine("| $(mdEsc $cr.RuleName) | $(mdEsc $cr.Kind) | $tables |")
             }
             [void]$mdSb.AppendLine('')
         }
@@ -575,8 +615,8 @@ function ConvertTo-ReportSections {
             [void]$mdSb.AppendLine('| Rule | Kind | Tables |')
             [void]$mdSb.AppendLine('| --- | --- | --- |')
             foreach ($cr in $corrIncluded) {
-                $tables = if ($cr.Tables) { ($cr.Tables -join ', ') } else { '-' }
-                [void]$mdSb.AppendLine("| $(mdEsc $cr.RuleName) | $($cr.Kind) | $tables |")
+                $tables = if ($cr.Tables) { mdEsc ($cr.Tables -join ', ') } else { '-' }
+                [void]$mdSb.AppendLine("| $(mdEsc $cr.RuleName) | $(mdEsc $cr.Kind) | $tables |")
             }
             [void]$mdSb.AppendLine('')
         }
@@ -638,7 +678,7 @@ function ConvertTo-ReportSections {
             [void]$mdSb.AppendLine('### XDR Optimization Opportunities')
             [void]$mdSb.AppendLine('')
             foreach ($xr in $xdrRecs) {
-                [void]$mdSb.AppendLine("- **$($xr.Title):** $($xr.Detail)")
+                [void]$mdSb.AppendLine("- **$(mdEsc $xr.Title):** $(mdEsc $xr.Detail)")
             }
             [void]$mdSb.AppendLine('')
         }
@@ -688,6 +728,9 @@ function ConvertTo-ReportSections {
         [void]$mdSb.AppendLine("**Rules analyzed:** $($daSummary.RulesAnalyzed)  ")
         [void]$mdSb.AppendLine("**Noisy rules (score >= 70):** $($daSummary.NoisyRules)  ")
         [void]$mdSb.AppendLine("**Incidents analyzed:** $($daSummary.IncidentsAnalyzed)  ")
+        if ($daSummary.ScorableRules -gt 0 -and $daSummary.ScorableRules -lt $daSummary.MinScorablePopulation) {
+            [void]$mdSb.AppendLine("**Note:** only $($daSummary.ScorableRules) rule(s) have incidents; noisiness scores need at least $($daSummary.MinScorablePopulation) rules to compare against, so scores are N/A.  ")
+        }
         if ($daSummary.CustomDetectionRules -gt 0) {
             [void]$mdSb.AppendLine("**Custom Detection Rules:** $($daSummary.CustomDetectionRules) ($($daSummary.CDRCorrelatedIncidents) with incidents)  ")
         }
@@ -696,7 +739,7 @@ function ConvertTo-ReportSections {
         [void]$mdSb.AppendLine('| --- | --- | ---: | ---: | ---: | ---: |')
         foreach ($r in ($sortedMetrics | Select-Object -First 25)) {
             $scoreStr = if ($null -eq $r.NoisinessScore) { 'N/A' } else { $r.NoisinessScore }
-            [void]$mdSb.AppendLine("| $($r.RuleName) | $($r.RuleKind) | $($r.IncidentsTotal) | $([math]::Round($r.AutoCloseRatio * 100, 1)) | $([math]::Round($r.FalsePositiveRatio * 100, 1)) | $scoreStr |")
+            [void]$mdSb.AppendLine("| $(mdEsc $r.RuleName) | $(mdEsc $r.RuleKind) | $($r.IncidentsTotal) | $([math]::Round($r.AutoCloseRatio * 100, 1)) | $([math]::Round($r.FalsePositiveRatio * 100, 1)) | $scoreStr |")
         }
         [void]$mdSb.AppendLine('')
         [void]$mdSb.AppendLine('**Scoring:** Score = (Volume_percentile x 35%) + (AutoClose_percentile x 40%) + (FalsePos_percentile x 25%). >= 70 = noisy, >= 50 = watch, < 50 = healthy.  ')
@@ -746,7 +789,7 @@ function ConvertTo-ReportSections {
         [void]$mdSb.AppendLine('| Table | Type | Severity | Detail |')
         [void]$mdSb.AppendLine('| --- | --- | --- | --- |')
         foreach ($f in $Analysis.XdrChecker.Findings) {
-            [void]$mdSb.AppendLine("| $($f.TableName) | $($f.Type) | $($f.Severity) | $($f.Detail) |")
+            [void]$mdSb.AppendLine("| $(mdEsc $f.TableName) | $(mdEsc $f.Type) | $(mdEsc $f.Severity) | $(mdEsc $f.Detail) |")
         }
         [void]$mdSb.AppendLine('')
 

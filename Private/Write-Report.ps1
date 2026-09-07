@@ -23,12 +23,12 @@
     # Auto-export when -Output was specified (before showing menu)
     if ($ExportFormat) {
         if (-not $ExportPath) { $ExportPath = $PWD.Path }
-        Export-Report -Analysis $Analysis `
+        $written = Export-Report -Analysis $Analysis `
                       -Format $ExportFormat `
                       -OutputPath $ExportPath `
                       -WorkspaceName $WorkspaceName `
                       -DefenderXDR $DefenderXDR
-        Write-SpectreHost "[green]Report exported to [bold]$(Get-SafeEscapedText $ExportPath)[/][/]"
+        Write-SpectreHost "[green]Report exported to [bold]$(Get-SafeEscapedText "$written")[/][/]"
         Write-SpectreHost ""
     }
 
@@ -43,6 +43,61 @@ function Get-ConsoleWidth {
     [CmdletBinding()]
     param()
     try { $Host.UI.RawUI.WindowSize.Width } catch { Write-Verbose 'Unable to determine console width. Falling back to 120.'; 120 }
+}
+
+function Sync-ConsoleSize {
+    <#
+    .SYNOPSIS
+        Aligns every width Spectre may read with the live window. PwshSpectreConsole
+        renders tables and panels on a private console sized from
+        $Host.UI.RawUI.BufferSize.Width, which conhost leaves at the old value after
+        a resize, and the global AnsiConsole caches the width it first saw. Called at
+        the top of every view and after every menu prompt.
+    #>
+    [CmdletBinding()]
+    param()
+
+    try {
+        $raw = $Host.UI.RawUI
+        $size = $raw.WindowSize
+        if ($size.Width -gt 0 -and $raw.BufferSize.Width -ne $size.Width) {
+            try {
+                $buf = $raw.BufferSize
+                $buf.Width = $size.Width
+                $raw.BufferSize = $buf
+            }
+            catch { Write-Verbose "Buffer width could not be aligned to the window: $($_.Exception.Message)" }
+        }
+        $spectreProfile = [Spectre.Console.AnsiConsole]::Console.Profile
+        if ($size.Width -gt 0 -and $spectreProfile.Width -ne $size.Width) { $spectreProfile.Width = $size.Width }
+        if ($size.Height -gt 0 -and $spectreProfile.Height -ne $size.Height) { $spectreProfile.Height = $size.Height }
+        [PSCustomObject]@{ Width = $size.Width; Height = $size.Height }
+    }
+    catch {
+        Write-Verbose "Unable to sync console size: $($_.Exception.Message)"
+        $null
+    }
+}
+
+function Read-LogHorizonSelection {
+    <#
+    .SYNOPSIS
+        Read-SpectreSelection with a console size sync after the pick, so whatever
+        renders next uses the window size the user has now.
+    #>
+    [CmdletBinding()]
+    param(
+        [string]$Title,
+        [Parameter(Mandatory)][object[]]$Choices,
+        [object]$Color = 'DodgerBlue2',
+        [switch]$EnableSearch
+    )
+
+    $splat = @{ Title = $Title; Choices = $Choices; Color = $Color }
+    if ($EnableSearch) { $splat.EnableSearch = $true }
+    $pick = Read-SpectreSelection @splat
+    $null = Sync-ConsoleSize
+    $pick
 }
 
 function Test-ConsoleSize {
@@ -68,6 +123,7 @@ function Invoke-ConsoleSizeCheck {
     )
 
     if (Test-ConsoleSize -MinimumWidth $MinimumWidth -MinimumHeight $MinimumHeight) {
+        $null = Sync-ConsoleSize
         return
     }
 
@@ -80,6 +136,7 @@ function Invoke-ConsoleSizeCheck {
     Write-SpectreHost "[yellow]:warning: Terminal is $currentWidth x $currentHeight. Recommended minimum is $MinimumWidth x $MinimumHeight for clean table/menu rendering.[/]"
     Write-SpectreHost "[dim]Resize the terminal, then press Enter to continue.[/]"
     Read-SpectrePause -Message ""
+    $null = Sync-ConsoleSize
 }
 
 function Get-SafeEscapedText {
@@ -87,6 +144,45 @@ function Get-SafeEscapedText {
     param([string]$Value)
     if ([string]::IsNullOrEmpty($Value)) { return '-' }
     Get-SpectreEscapedText $Value
+}
+
+function Get-TableNameMarkup {
+    <#
+    .SYNOPSIS
+        Escaped table name with a lifecycle badge when the source is deprecated or legacy.
+    #>
+    [CmdletBinding()]
+    param([Parameter(Mandatory)][PSCustomObject]$Table)
+
+    $name = Get-SafeEscapedText $Table.TableName
+    $label = Get-TableStatusLabel -Table $Table
+    if (-not $label) { return $name }
+    $status = ($label -split ',')[0]
+    "$name [orange3]($(Get-SafeEscapedText $status))[/]"
+}
+
+function ConvertTo-TransposedMatrix {
+    <#
+    .SYNOPSIS
+        Pivots a wide table (one row per key, one column per measure) into a tall
+        one (one row per measure, one column per key) for narrow consoles.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][AllowEmptyCollection()][object[]]$Rows,
+        [Parameter(Mandatory)][string]$KeyColumn,
+        [string]$RowLabel = 'Measure'
+    )
+
+    $rows = @($Rows)
+    if ($rows.Count -eq 0) { return @() }
+    $measures = @($rows[0].PSObject.Properties.Name | Where-Object { $_ -ne $KeyColumn })
+    foreach ($m in $measures) {
+        $out = [ordered]@{ $RowLabel = "[bold]$m[/]" }
+        # Key values may carry Spectre markup; headers are plain property names
+        foreach ($r in $rows) { $out[("$($r.$KeyColumn)" -replace '\[[^\]]*\]', '')] = $r.$m }
+        [PSCustomObject]$out
+    }
 }
 
 function Get-TablePlanDisplay {
@@ -155,6 +251,7 @@ function Write-Dashboard {
         [string]$WorkspaceName,
         [PSCustomObject]$DefenderXDR
     )
+    $null = Sync-ConsoleSize
 
     $summary = $Analysis.Summary
 
@@ -218,7 +315,12 @@ function Write-Dashboard {
         $tierDetail = if ($tierParts.Count -gt 0) { " ($($tierParts -join ', '))" } else { '' }
         $notStreamedCount = $Analysis.XdrChecker.Summary.NotStreamedCount
         $notStreamedPart = if ($notStreamedCount -gt 0) { " | [dim]$notStreamedCount not streamed[/]" } else { '' }
-        $overviewLines += "[bold]Defender XDR:[/]     [deepskyblue1]$($DefenderXDR.TotalXDRRules) custom detections[/]${cdrCorrelated} | [dim]$xdrStreamingCount streaming tables${tierDetail}[/]${notStreamedPart}"
+        $rulesPart = if ($DefenderXDR.PSObject.Properties.Name -contains 'Fetched' -and -not $DefenderXDR.Fetched) {
+            '[yellow]custom detections unavailable (Graph fetch failed)[/]'
+        } else {
+            "[deepskyblue1]$($DefenderXDR.TotalXDRRules) custom detections[/]${cdrCorrelated}"
+        }
+        $overviewLines += "[bold]Defender XDR:[/]     ${rulesPart} | [dim]$xdrStreamingCount streaming tables${tierDetail}[/]${notStreamedPart}"
     }
 
     $overviewText = $overviewLines -join "`n"
@@ -250,6 +352,7 @@ function Write-Dashboard {
             'Low Value'        { '[red]Low Value[/]' }
             'Underutilized'    { '[grey]Underutilized[/]' }
             'Free Tier'        { '[deepskyblue1]Free[/]' }
+            'Platform'         { '[deepskyblue1]Platform[/]' }
             default            { '[grey]-[/]' }
         }
 
@@ -257,7 +360,7 @@ function Write-Dashboard {
 
         $table += [PSCustomObject]@{
             '#'          = $rank
-            'Table'      = Get-SafeEscapedText $t.TableName
+            'Table'      = Get-TableNameMarkup -Table $t
             'Plans'      = Get-TablePlanDisplay -Table $t
             'GB/mo'      = $t.MonthlyGB
             'Cost/mo'    = $costStr
@@ -300,6 +403,7 @@ function Write-InteractiveMenu {
         $menuItems['Manage table retention and type'] = 'manageretention'
     }
 
+    $menuItems['Dictionary']          = 'dictionary'
     $menuItems['Export Report']       = 'export'
     $menuItems['Quit']                = 'quit'
 
@@ -324,7 +428,7 @@ function Write-InteractiveMenu {
         Write-SpectreRule -Title "[dodgerblue2]MENU[/]" -Color DodgerBlue2
         Write-SpectreHost ""
 
-        $choice = Read-SpectreSelection -Title "Select a view:" `
+        $choice = Read-LogHorizonSelection -Title "Select a view:" `
                     -Choices @($menuItems.Keys) `
                     -Color DodgerBlue2
 
@@ -342,6 +446,7 @@ function Write-InteractiveMenu {
             'logtuning'       { Write-LogTuningMenu -Analysis $Analysis -Context $Context }
             'tables'          { Write-TableInventory -Analysis $Analysis }
             'manageretention' { Invoke-ManageRetentionWizard -Analysis $Analysis -Context $Context }
+            'dictionary'      { Write-DictionaryView }
             'export'          {
                 Invoke-ExportFromMenu -Analysis $Analysis `
                                       -WorkspaceName $WorkspaceName `
@@ -362,16 +467,15 @@ function Write-InteractiveMenu {
 # Recommendations
 function Write-RecommendationView {
     param([PSCustomObject]$Analysis)
+    $null = Sync-ConsoleSize
 
     if ($Analysis.Recommendations.Count -eq 0) {
         Write-SpectreHost "[green]No recommendations - your workspace looks well-optimized![/]"
         return
     }
 
-    # High first, then Medium, then Low, savings desc within each
-    $prioOrder = @{ 'High' = 0; 'Medium' = 1; 'Low' = 2 }
-    $sorted = $Analysis.Recommendations |
-        Sort-Object { $prioOrder[$_.Priority] }, { -$_.EstSavingsUSD }
+    # Recommendations arrive already ordered High > Medium > Low, savings desc (Get-SortedRecommendation)
+    $sorted = @($Analysis.Recommendations)
 
     $initialMax = 10
     $showCount = [math]::Min($initialMax, $sorted.Count)
@@ -406,7 +510,7 @@ function Write-RecommendationView {
     # Offer to expand if there are more
     if ($remaining -gt 0) {
         Write-SpectreHost ""
-        $pick = Read-SpectreSelection -Title "[deepskyblue1]Show all recommendations?[/]" -Choices @("Show all $($sorted.Count) recommendations", 'Back') -Color DodgerBlue2
+        $pick = Read-LogHorizonSelection -Title "[deepskyblue1]Show all recommendations?[/]" -Choices @('Back', "Show all $($sorted.Count) recommendations") -Color DodgerBlue2
 
         if ($pick -ne 'Back') {
             $allLines = @("[bold]All Recommendations[/] [dim]($($sorted.Count) total)[/]", "")
@@ -437,9 +541,10 @@ function Write-RecommendationView {
 # Detection assessment
 function Write-DetectionAssessment {
     param([PSCustomObject]$Analysis)
+    $null = Sync-ConsoleSize
 
     # Cost-value matrix: classification rows x assessment columns
-    $assessmentOrder = @('High Value', 'Good Value', 'Missing Coverage', 'Optimize', 'Low Value', 'Underutilized', 'Free Tier')
+    $assessmentOrder = @('High Value', 'Good Value', 'Missing Coverage', 'Optimize', 'Low Value', 'Underutilized', 'Free Tier', 'Platform')
     $classRows = @('primary', 'secondary')
     $matrixTable = @()
 
@@ -452,7 +557,7 @@ function Write-DetectionAssessment {
             $count = ($subset | Where-Object { $_.Assessment -eq $assess }).Count
             $cellValue = if ($count -eq 0) { '[dim]-[/]' }
                 elseif ($assess -in @('Missing Coverage', 'Low Value', 'Optimize')) { "[yellow]$count[/]" }
-                elseif ($assess -in @('High Value', 'Good Value', 'Free Tier')) { "[green]$count[/]" }
+                elseif ($assess -in @('High Value', 'Good Value', 'Free Tier', 'Platform')) { "[green]$count[/]" }
                 else { "$count" }
             $row[$assess] = $cellValue
         }
@@ -471,7 +576,9 @@ function Write-DetectionAssessment {
     $totalsRow['Total'] = "[bold]$(($allTables | Measure-Object).Count)[/]"
     $matrixTable += [PSCustomObject]$totalsRow
 
-    $matrixTable | Format-SpectreTable -Border Rounded -Color DodgerBlue2 -HeaderColor DodgerBlue2 -AllowMarkup
+    # 10 columns need ~130 chars; below that Spectre wraps header cells mid-word, so pivot to assessment rows
+    $matrix = if ((Get-ConsoleWidth) -ge 132) { $matrixTable } else { ConvertTo-TransposedMatrix -Rows $matrixTable -KeyColumn 'Classification' -RowLabel 'Assessment' }
+    $matrix | Format-SpectreTable -Border Rounded -Color DodgerBlue2 -HeaderColor DodgerBlue2 -AllowMarkup
     Write-SpectreHost ""
 
     $lines = @()
@@ -544,8 +651,8 @@ function Write-DetectionAssessment {
     # Submenu loop for drill-down tables
     $submenuContinue = $true
     while ($submenuContinue) {
-        $choices = @('Show primary tables', 'Show secondary tables', 'Back')
-        $pick = Read-SpectreSelection -Title "[deepskyblue1]Select an option:[/]" `
+        $choices = @('Back', 'Show primary tables', 'Show secondary tables')
+        $pick = Read-LogHorizonSelection -Title "[deepskyblue1]Select an option:[/]" `
                     -Choices $choices `
                     -Color DodgerBlue2
 
@@ -564,6 +671,7 @@ function Write-DetectionAssessmentTable {
         [array]$TableAnalysis,
         [string]$Classification
     )
+    $null = Sync-ConsoleSize
 
     $width = Get-ConsoleWidth
     $showHunting = ($width -ge 120)
@@ -590,6 +698,7 @@ function Write-DetectionAssessmentTable {
             'Low Value'        { '[red]Low Value[/]' }
             'Underutilized'    { '[grey]Underutilized[/]' }
             'Free Tier'        { '[deepskyblue1]Free[/]' }
+            'Platform'         { '[deepskyblue1]Platform[/]' }
             default            { '[grey]-[/]' }
         }
 
@@ -597,7 +706,7 @@ function Write-DetectionAssessmentTable {
 
         $row = [ordered]@{
             '#'              = $rank
-            'Table'          = Get-SafeEscapedText $t.TableName
+            'Table'          = Get-TableNameMarkup -Table $t
             'GB/mo'          = $t.MonthlyGB
             'Cost/mo'        = $costStr
             'Cost Tier'      = $t.CostTier
@@ -615,9 +724,78 @@ function Write-DetectionAssessmentTable {
     Write-SpectreHost "[dim]  $($filtered.Count) $label tables.[/]"
 }
 
+# Dictionary: the terms behind classification, tiers, assessments and recommendations
+function Write-DictionaryView {
+    [CmdletBinding()]
+    param([PSCustomObject]$Dictionary = (Get-LogHorizonDictionary))
+    $null = Sync-ConsoleSize
+
+    $sections = @($Dictionary.Sections)
+    if ($sections.Count -eq 0) {
+        Write-SpectreHost "[dim]No dictionary entries available (Data/dictionary.json missing or empty).[/]"
+        return
+    }
+
+    $continue = $true
+    while ($continue) {
+        $choices = @('Back') + @($sections | ForEach-Object { $_.Name })
+        $pick = Read-LogHorizonSelection -Title "[deepskyblue1]Select a topic:[/]" -Choices $choices -Color DodgerBlue2
+        if ($pick -eq 'Back') { $continue = $false; continue }
+
+        $section = $sections | Where-Object { $_.Name -eq $pick } | Select-Object -First 1
+        if (-not $section) { continue }
+
+        Write-SpectreHost ""
+        Write-SpectreRule -Title "[dodgerblue2]$(Get-SafeEscapedText $section.Name)[/]" -Color DodgerBlue2
+        if (-not [string]::IsNullOrWhiteSpace($section.Description)) {
+            Write-SpectreHost "[dim]$(Get-SafeEscapedText $section.Description)[/]"
+        }
+        Write-SpectreHost ""
+
+        $rows = foreach ($t in @($section.Terms)) {
+            [PSCustomObject]@{
+                'Term'       = "[bold]$(Get-SafeEscapedText $t.Term)[/]"
+                'Definition' = Get-SafeEscapedText $t.Definition
+            }
+        }
+        Write-DefinitionTable -Rows @($rows)
+        Write-SpectreHost ""
+    }
+}
+
+function Write-DefinitionTable {
+    <#
+    .SYNOPSIS
+        Two-column Term | Definition table where the term column never wraps
+        mid-word and rows are separated so long definitions stay aligned.
+        Format-SpectreTable has no per-column NoWrap, so this uses the Spectre
+        table type directly.
+    #>
+    [CmdletBinding()]
+    param([Parameter(Mandatory)][AllowEmptyCollection()][object[]]$Rows)
+
+    $table = [Spectre.Console.Table]::new()
+    $termCol = [Spectre.Console.TableColumn]::new('[dodgerblue2]Term[/]')
+    $termCol.NoWrap = $true
+    [void]$table.AddColumn($termCol)
+    [void]$table.AddColumn([Spectre.Console.TableColumn]::new('[dodgerblue2]Definition[/]'))
+    foreach ($r in @($Rows)) {
+        $cells = [Spectre.Console.Rendering.IRenderable[]]@(
+            [Spectre.Console.Markup]::new("$($r.Term)"),
+            [Spectre.Console.Markup]::new("$($r.Definition)")
+        )
+        [void][Spectre.Console.TableExtensions]::AddRow($table, $cells)
+    }
+    $table.Border = [Spectre.Console.TableBorder]::Rounded
+    $table.BorderStyle = [Spectre.Console.Style]::Parse('dodgerblue2')
+    $table.ShowRowSeparators = $true
+    $table | Out-SpectreHost
+}
+
 # SOC optimization
 function Write-SocOptimization {
     param([PSCustomObject]$Analysis)
+    $null = Sync-ConsoleSize
 
     if (-not $Analysis.SocRecommendations -or $Analysis.SocRecommendations.Count -eq 0) {
         Write-SpectreHost "[dim]No SOC optimization recommendations available.[/]"
@@ -662,8 +840,9 @@ function Write-SocOptimization {
     Write-SpectreHost ""
 
     # Drill-down menu
-    $choices = @('Back', 'Show inactive') + (1..$active.Count | ForEach-Object { "$_" })
-    $pick = Read-SpectreSelection -Title "[deepskyblue1]Enter a number for details, Show inactive, or Back:[/]" -Choices $choices
+    $choices = @('Back', 'Show inactive')
+    if ($active.Count -gt 0) { $choices += @(1..$active.Count | ForEach-Object { "$_" }) }
+    $pick = Read-LogHorizonSelection -Title "[deepskyblue1]Enter a number for details, Show inactive, or Back:[/]" -Choices $choices
 
     if ($pick -eq 'Show inactive' -and $inactive.Count -gt 0) {
         Write-SpectreHost ""
@@ -711,6 +890,7 @@ function Get-SocRecommendationDetail {
 
 function Write-SocRecommendationDrillDown {
     param([PSCustomObject]$Recommendation)
+    $null = Sync-ConsoleSize
 
     $rec = $Recommendation
     Write-SpectreHost ""
@@ -745,6 +925,7 @@ function Write-SocRecommendationDrillDown {
 # Data transforms
 function Write-DataTransformView {
     param([PSCustomObject]$Analysis)
+    $null = Sync-ConsoleSize
 
     $transforms = $Analysis.DataTransforms
     $tablesWithTransforms = @($Analysis.TableAnalysis | Where-Object { $_.HasTransform })
@@ -802,14 +983,16 @@ function Write-DataTransformView {
                 $kqlPreview = $kqlPreview.Substring(0, 77) + '...'
             }
 
-            $typeMarkup = switch ($t.TransformType) {
-                'Filter'        { '[red]Filter[/]' }
-                'ColumnRemoval' { '[yellow]ColumnRemoval[/]' }
-                'Projection'    { '[yellow]Projection[/]' }
-                'Enrichment'    { '[green]Enrichment[/]' }
-                'Aggregation'   { '[deepskyblue1]Aggregation[/]' }
-                default         { '[grey]Custom[/]' }
-            }
+            $typeMarkup = (@("$($t.TransformType)" -split '\+') | ForEach-Object {
+                switch ($_) {
+                    'Filter'        { '[red]Filter[/]' }
+                    'ColumnRemoval' { '[yellow]ColumnRemoval[/]' }
+                    'Projection'    { '[yellow]Projection[/]' }
+                    'Enrichment'    { '[green]Enrichment[/]' }
+                    'Aggregation'   { '[deepskyblue1]Aggregation[/]' }
+                    default         { '[grey]Custom[/]' }
+                }
+            }) -join '+'
 
             $table += [PSCustomObject]@{
                 'Table'     = Get-SafeEscapedText $t.OutputTable
@@ -827,13 +1010,13 @@ function Write-DataTransformView {
     # Drill-down submenu
     if ($transforms.Transforms.Count -gt 0) {
         $choices = @('Back') + @($transforms.Transforms | ForEach-Object { $_.OutputTable } | Select-Object -Unique | Sort-Object)
-        $pick = Read-SpectreSelection -Title "[deepskyblue1]Select a table for full KQL, or Back:[/]" -Choices $choices -Color DodgerBlue2
+        $pick = Read-LogHorizonSelection -Title "[deepskyblue1]Select a table for full KQL, or Back:[/]" -Choices $choices -Color DodgerBlue2
 
         if ($pick -ne 'Back') {
             $tableTransforms = @($transforms.Transforms | Where-Object { $_.OutputTable -eq $pick })
             foreach ($tt in $tableTransforms) {
                 Write-SpectreHost ""
-                Write-SpectreHost "[dodgerblue2][bold]$($tt.OutputTable)[/] — $($tt.TransformType) via $(Get-SafeEscapedText $tt.DCRName)[/]"
+                Write-SpectreHost "[dodgerblue2][bold]$($tt.OutputTable)[/] - $($tt.TransformType) via $(Get-SafeEscapedText $tt.DCRName)[/]"
                 Write-SpectreHost ""
                 Write-SpectreHost "[deepskyblue1]KQL:[/]"
                 Write-SpectreHost "[dim]$(Get-SafeEscapedText $tt.TransformKql)[/]"
@@ -848,6 +1031,7 @@ function Write-LogTuningMenu {
         [PSCustomObject]$Analysis,
         [PSCustomObject]$Context
     )
+    $null = Sync-ConsoleSize
 
     # Help text explaining the three transform types
     $helpLines = @(
@@ -873,13 +1057,13 @@ function Write-LogTuningMenu {
     $subContinue = $true
     while ($subContinue) {
         $subMenu = [ordered]@{
+            'Back'                                     = 'back'
             'Log tuning suggestions (live data)'      = 'live'
             'Log tuning suggestions (knowledge base)'  = 'kb'
             'Evaluate specific table'                  = 'evaluate'
-            'Back'                                     = 'back'
         }
 
-        $subChoice = Read-SpectreSelection -Title "[deepskyblue1]Select a tuning mode:[/]" `
+        $subChoice = Read-LogHorizonSelection -Title "[deepskyblue1]Select a tuning mode:[/]" `
                         -Choices @($subMenu.Keys) `
                         -Color DodgerBlue2
 
@@ -898,6 +1082,7 @@ function Write-LogTuningMenu {
 # Live data tuning suggestions
 function Write-LiveTuningView {
     param([PSCustomObject]$Analysis)
+    $null = Sync-ConsoleSize
 
     $liveTuning = @($Analysis.LiveTuningAnalysis | Where-Object { $_.RuleCount -gt 0 })
 
@@ -940,7 +1125,7 @@ function Write-LiveTuningView {
 
     # Drill-down
     $choices = @('Back') + @($liveTuning | Sort-Object EstMonthlyCostUSD -Descending | ForEach-Object { $_.TableName })
-    $pick = Read-SpectreSelection -Title "[deepskyblue1]Select a table for tuning KQL, or Back:[/]" -Choices $choices -Color DodgerBlue2 -EnableSearch
+    $pick = Read-LogHorizonSelection -Title "[deepskyblue1]Select a table for tuning KQL, or Back:[/]" -Choices $choices -Color DodgerBlue2 -EnableSearch
 
     if ($pick -ne 'Back') {
         $lt = $liveTuning | Where-Object { $_.TableName -eq $pick } | Select-Object -First 1
@@ -950,30 +1135,30 @@ function Write-LiveTuningView {
 
 function Write-LiveTuningDetail {
     param([PSCustomObject]$TuningEntry)
+    $null = Sync-ConsoleSize
 
     $lt = $TuningEntry
     Write-SpectreHost ""
-    Write-SpectreHost "[dodgerblue2][bold]$($lt.TableName)[/] — Live Data Tuning[/]"
+    Write-SpectreHost "[dodgerblue2][bold]$($lt.TableName)[/] - Live Data Tuning[/]"
     Write-SpectreHost "[dim]Based on $($lt.RuleCount) deployed rule(s) and hunting queries[/]"
     Write-SpectreHost ""
 
     # Per-table sub-menu
     $detailContinue = $true
     while ($detailContinue) {
-        $detailMenu = [ordered]@{}
+        $detailMenu = [ordered]@{ 'Back' = 'back' }
         if ($lt.FilterKql)   { $detailMenu['View WHERE filter KQL'] = 'filter' }
         if ($lt.ProjectKql)  { $detailMenu['View column reduction KQL'] = 'project' }
         if ($lt.CombinedKql) { $detailMenu['View combined KQL'] = 'combined' }
         $detailMenu['View field-by-rule breakdown'] = 'fields'
-        $detailMenu['Back'] = 'back'
 
-        $detailChoice = Read-SpectreSelection -Title "[deepskyblue1]Select a view:[/]" -Choices @($detailMenu.Keys) -Color DodgerBlue2
+        $detailChoice = Read-LogHorizonSelection -Title "[deepskyblue1]Select a view:[/]" -Choices @($detailMenu.Keys) -Color DodgerBlue2
         $detailAction = $detailMenu[$detailChoice]
         Write-SpectreHost ""
 
         switch ($detailAction) {
             'filter' {
-                Write-SpectreHost "[bold]Row Filter KQL[/] [dim](condition-only — portal prepends 'source | where')[/]"
+                Write-SpectreHost "[bold]Row Filter KQL[/] [dim](condition-only - portal prepends 'source | where')[/]"
                 Write-SpectreHost "[deepskyblue1]$(Get-SafeEscapedText $lt.FilterKql)[/]"
                 if ($lt.EstFilterSavings -gt 0) {
                     Write-SpectreHost "[dim]Estimated savings: ~`$$($lt.EstFilterSavings)/mo[/]"
@@ -1036,12 +1221,13 @@ function Write-TableEvaluation {
         [PSCustomObject]$Analysis,
         [PSCustomObject]$Context
     )
+    $null = Sync-ConsoleSize
 
     $allTables = @($Analysis.TableAnalysis | Sort-Object TableName)
     if ($allTables.Count -eq 0) { return }
 
     $choices = @('Back') + @($allTables | ForEach-Object { $_.TableName })
-    $pick = Read-SpectreSelection -Title "Type to search or select a table to evaluate:" `
+    $pick = Read-LogHorizonSelection -Title "Type to search or select a table to evaluate:" `
                                   -Choices $choices `
                                   -Color DodgerBlue2 `
                                   -EnableSearch
@@ -1055,7 +1241,7 @@ function Write-TableEvaluation {
     $liveEntry = $Analysis.LiveTuningAnalysis | Where-Object { $_.TableName -eq $pick } | Select-Object -First 1
 
     Write-SpectreHost ""
-    Write-SpectreHost "[dodgerblue2][bold]$($table.TableName)[/] — Comprehensive Table Evaluation[/]"
+    Write-SpectreHost "[dodgerblue2][bold]$($table.TableName)[/] - Comprehensive Table Evaluation[/]"
     Write-SpectreHost ""
 
     # Overview info
@@ -1127,13 +1313,13 @@ function Write-TableEvaluation {
     $recommendation = 'No automated tuning recommendation available for this table.'
     if ($liveEntry) {
         if ($liveEntry.ConditionCount -gt 0 -and $liveEntry.UnusedFieldCount -gt 5) {
-            $recommendation = "[bold green]Recommended: Combined (filter + project)[/] — $($liveEntry.ConditionCount) filter condition(s) available and $($liveEntry.UnusedFieldCount) unused columns can be removed."
+            $recommendation = "[bold green]Recommended: Combined (filter + project)[/] - $($liveEntry.ConditionCount) filter condition(s) available and $($liveEntry.UnusedFieldCount) unused columns can be removed."
         }
         elseif ($liveEntry.ConditionCount -gt 0) {
-            $recommendation = "[bold yellow]Recommended: Row splitting (WHERE)[/] — $($liveEntry.ConditionCount) filter condition(s) from deployed rules."
+            $recommendation = "[bold yellow]Recommended: Row splitting (WHERE)[/] - $($liveEntry.ConditionCount) filter condition(s) from deployed rules."
         }
         elseif ($liveEntry.UnusedFieldCount -gt 5) {
-            $recommendation = "[bold yellow]Recommended: Column reduction (PROJECT)[/] — $($liveEntry.UnusedFieldCount) unused columns can be removed."
+            $recommendation = "[bold yellow]Recommended: Column reduction (PROJECT)[/] - $($liveEntry.UnusedFieldCount) unused columns can be removed."
         }
         else {
             $recommendation = "[dim]Low tuning potential for this table based on current rule coverage.[/]"
@@ -1150,7 +1336,7 @@ function Write-TableEvaluation {
     # KQL generation sub-menu
     $evalContinue = $true
     while ($evalContinue) {
-        $evalMenu = [ordered]@{}
+        $evalMenu = [ordered]@{ 'Back' = 'back' }
 
         # Prefer live tuning KQL if available
         $kqlSource = if ($liveEntry) { $liveEntry } else { $null }
@@ -1171,20 +1357,18 @@ function Write-TableEvaluation {
             $evalMenu['Manage retention/type for this table'] = 'updateretention'
         }
 
-        $evalMenu['Back'] = 'back'
-
         if ($evalMenu.Count -le 1) {
             Write-SpectreHost "[dim]No KQL suggestions could be automatically generated for this table.[/]"
             break
         }
 
-        $evalChoice = Read-SpectreSelection -Title "[deepskyblue1]Select a view:[/]" -Choices @($evalMenu.Keys) -Color DodgerBlue2
+        $evalChoice = Read-LogHorizonSelection -Title "[deepskyblue1]Select a view:[/]" -Choices @($evalMenu.Keys) -Color DodgerBlue2
         $evalAction = $evalMenu[$evalChoice]
         Write-SpectreHost ""
 
         switch ($evalAction) {
             'filter' {
-                Write-SpectreHost "[bold]Row Filter KQL[/] [dim](condition-only — portal prepends 'source | where')[/]"
+                Write-SpectreHost "[bold]Row Filter KQL[/] [dim](condition-only - portal prepends 'source | where')[/]"
                 Write-SpectreHost "[deepskyblue1]$(Get-SafeEscapedText $kqlSource.FilterKql)[/]"
                 Write-SpectreHost ""
             }
@@ -1228,6 +1412,7 @@ function Write-TableEvaluation {
 # Split KQL suggestions (knowledge base path)
 function Write-SplitKqlSuggestionView {
     param([PSCustomObject]$Analysis)
+    $null = Sync-ConsoleSize
 
     $splitRecs = @($Analysis.Recommendations | Where-Object { $_.Type -eq 'SplitCandidate' -and $_.SplitSuggestion })
 
@@ -1280,14 +1465,14 @@ function Write-SplitKqlSuggestionView {
 
     # Drill-down
     $choices = @('Back') + @($splitRecs | ForEach-Object { $_.TableName })
-    $pick = Read-SpectreSelection -Title "[deepskyblue1]Select a table for tuning KQL, or Back:[/]" -Choices $choices -Color DodgerBlue2
+    $pick = Read-LogHorizonSelection -Title "[deepskyblue1]Select a table for tuning KQL, or Back:[/]" -Choices $choices -Color DodgerBlue2
 
     if ($pick -ne 'Back') {
         $rec = $splitRecs | Where-Object { $_.TableName -eq $pick } | Select-Object -First 1
         $splitSuggestion = $rec.SplitSuggestion
 
         Write-SpectreHost ""
-        Write-SpectreHost "[dodgerblue2][bold]$($rec.TableName)[/] — Knowledge Base Tuning[/]"
+        Write-SpectreHost "[dodgerblue2][bold]$($rec.TableName)[/] - Knowledge Base Tuning[/]"
 
         if ($splitSuggestion.Description) {
             Write-SpectreHost "[dim]$(Get-SafeEscapedText $splitSuggestion.Description)[/]"
@@ -1297,19 +1482,18 @@ function Write-SplitKqlSuggestionView {
         # Sub-menu for KB drill-down
         $kbContinue = $true
         while ($kbContinue) {
-            $kbMenu = [ordered]@{}
+            $kbMenu = [ordered]@{ 'Back' = 'back' }
             if ($splitSuggestion.SplitKql)   { $kbMenu['View WHERE filter KQL'] = 'filter' }
             if ($splitSuggestion.ProjectKql) { $kbMenu['View column reduction KQL'] = 'project' }
             $kbMenu['View field analysis'] = 'fields'
-            $kbMenu['Back'] = 'back'
 
-            $kbChoice = Read-SpectreSelection -Title "[deepskyblue1]Select a view:[/]" -Choices @($kbMenu.Keys) -Color DodgerBlue2
+            $kbChoice = Read-LogHorizonSelection -Title "[deepskyblue1]Select a view:[/]" -Choices @($kbMenu.Keys) -Color DodgerBlue2
             $kbAction = $kbMenu[$kbChoice]
             Write-SpectreHost ""
 
             switch ($kbAction) {
                 'filter' {
-                    Write-SpectreHost "[bold]Split Transform KQL[/] [dim](condition-only — the portal prepends 'source | where' automatically)[/]"
+                    Write-SpectreHost "[bold]Split Transform KQL[/] [dim](condition-only - the portal prepends 'source | where' automatically)[/]"
                     Write-SpectreHost "[deepskyblue1]$(Get-SafeEscapedText $splitSuggestion.SplitKql)[/]"
                     if ($rec.EstSavingsUSD -gt 0) {
                         Write-SpectreHost "[dim]Estimated savings: ~`$$($rec.EstSavingsUSD)/mo[/]"
@@ -1352,72 +1536,10 @@ function Write-SplitKqlSuggestionView {
     }
 }
 
-# Generate KQL for specific table
-function Write-TableKqlSuggestion {
-    param([PSCustomObject]$Analysis)
-
-    $allTables = @($Analysis.TableAnalysis | Sort-Object TableName)
-    if ($allTables.Count -eq 0) { return }
-
-    $choices = @('Back') + @($allTables | ForEach-Object { $_.TableName })
-    $pick = Read-SpectreSelection -Title "Type to search or select a table to evaluate KQL suggestions:" `
-                                  -Choices $choices `
-                                  -Color DodgerBlue2 `
-                                  -EnableSearch
-
-    if ($pick -ne 'Back') {
-        $table = $allTables | Where-Object { $_.TableName -eq $pick } | Select-Object -First 1
-        $splitSuggestion = $table.SplitSuggestion
-
-        Write-SpectreHost ""
-        Write-SpectreHost "[dodgerblue2][bold]$($table.TableName)[/] — Target Field and KQL Evaluation[/]"
-
-        if (-not $splitSuggestion -or $splitSuggestion.Source -eq 'none') {
-            Write-SpectreHost "[dim]No KQL suggestions could be automatically generated for this table (no knowledge-base hits or mapped analytics rules).[/]"
-            return
-        }
-
-        if ($splitSuggestion.Description) {
-            Write-SpectreHost "[dim]$(Get-SafeEscapedText $splitSuggestion.Description)[/]"
-        }
-        Write-SpectreHost ""
-
-        # Show split KQL
-        if ($splitSuggestion.SplitKql) {
-            Write-SpectreHost "[bold]Split Transform KQL[/] [dim](condition-only — the portal prepends 'source | where' automatically)[/]"
-            Write-SpectreHost "[deepskyblue1]$(Get-SafeEscapedText $splitSuggestion.SplitKql)[/]"
-            Write-SpectreHost ""
-        }
-
-        # Show projection KQL
-        if ($splitSuggestion.ProjectKql) {
-            Write-SpectreHost "[bold]Column Reduction KQL[/] [dim](keeps only detection-relevant fields)[/]"
-            Write-SpectreHost "[deepskyblue1]$(Get-SafeEscapedText $splitSuggestion.ProjectKql)[/]"
-            Write-SpectreHost ""
-        }
-
-        # Show field analysis
-        if ($splitSuggestion.RuleFields.Count -gt 0) {
-            $ruleFieldStr = ($splitSuggestion.RuleFields | Sort-Object) -join ', '
-            Write-SpectreHost "[bold]Fields from analytics rules ($($splitSuggestion.RuleFields.Count)):[/]"
-            Write-SpectreHost "  [white]$(Get-SafeEscapedText $ruleFieldStr)[/]"
-            Write-SpectreHost ""
-        }
-
-        if ($splitSuggestion.HighValueFields.Count -gt 0) {
-            $hvFieldStr = ($splitSuggestion.HighValueFields | Sort-Object) -join ', '
-            Write-SpectreHost "[bold]Fields from knowledge base ($($splitSuggestion.HighValueFields.Count)):[/]"
-            Write-SpectreHost "  [white]$(Get-SafeEscapedText $hvFieldStr)[/]"
-            Write-SpectreHost ""
-        }
-
-        Write-SpectreHost "[dim]Source: $($splitSuggestion.Source) | $($splitSuggestion.RuleCount) mapped rule(s) | $($splitSuggestion.ConditionCount) condition(s) extracted[/]"
-    }
-}
-
 # All tables
 function Write-TableInventory {
     param([PSCustomObject]$Analysis)
+    $null = Sync-ConsoleSize
 
     $width = Get-ConsoleWidth
     $showRetention = ($width -ge 140)
@@ -1444,6 +1566,7 @@ function Write-TableInventory {
             'Low Value'        { '[red]Low Value[/]' }
             'Underutilized'    { '[grey]Underutilized[/]' }
             'Free Tier'        { '[deepskyblue1]Free[/]' }
+            'Platform'         { '[deepskyblue1]Platform[/]' }
             default            { '[grey]-[/]' }
         }
 
@@ -1464,7 +1587,7 @@ function Write-TableInventory {
 
         $row = [ordered]@{
             '#'          = $rank
-            'Table'      = Get-SafeEscapedText $t.TableName
+            'Table'      = Get-TableNameMarkup -Table $t
             'Plans'      = Get-TablePlanDisplay -Table $t
             'GB/mo'      = $t.MonthlyGB
             'Cost/mo'    = $costStr
@@ -1480,11 +1603,43 @@ function Write-TableInventory {
 
     $table | Format-SpectreTable -Border Rounded -Color DodgerBlue2 -HeaderColor DodgerBlue2 -AllowMarkup
     Write-SpectreHost "[dim]  $($sorted.Count) total tables.[/]"
+    Write-SpectreHost ""
+
+    # Hold the screen; the main loop redraws the dashboard as soon as this returns
+    $choices = @('Back') + @($sorted | ForEach-Object { $_.TableName })
+    $pick = Read-LogHorizonSelection -Title "[deepskyblue1]Select a table for details, or Back:[/]" -Choices $choices -Color DodgerBlue2 -EnableSearch
+    if ($pick -ne 'Back') {
+        $t = $sorted | Where-Object { $_.TableName -eq $pick } | Select-Object -First 1
+        if ($t) {
+            $lines = @(
+                "[bold]Classification:[/] $(Get-SafeEscapedText $t.Classification) ($(Get-SafeEscapedText $t.Category))"
+                "[bold]Volume:[/]         $($t.MonthlyGB) GB/mo, $(if ($t.IsFree) { 'free' } else { "`$$($t.EstMonthlyCostUSD)/mo" }) ($($t.CostTier) cost tier)"
+                "[bold]Coverage:[/]       $($t.AnalyticsRules) rule(s), $($t.HuntingQueries) hunting, $($t.XDRRules) XDR, $($t.ImplicitRules) implicit ($($t.DetectionTier) tier, source $($t.CoverageSource))"
+                "[bold]Plan:[/]           $(Get-TablePlanDisplay -Table $t)$(if ($t.SupportsAuxiliaryPlan) { ' [dim](Auxiliary supported)[/]' })"
+                "[bold]Retention:[/]      $(if ($null -ne $t.ActualInteractiveRetentionDays) { "$($t.ActualInteractiveRetentionDays)d interactive, " })$(if ($null -ne $t.ActualRetentionDays) { "$($t.ActualRetentionDays)d total" } else { 'unknown' }), recommended $($t.RecommendedRetentionDays)d"
+                "[bold]Assessment:[/]     $(Get-SafeEscapedText $t.Assessment)"
+            )
+            $status = Get-TableStatusLabel -Table $t
+            if ($status) { $lines += "[bold]Status:[/]         [orange3]$(Get-SafeEscapedText $status)[/]" }
+            if ($t.HasTransform) { $lines += "[bold]Transforms:[/]     $(Get-SafeEscapedText ($t.TransformTypes -join ', '))" }
+            $recs = @($Analysis.Recommendations | Where-Object TableName -eq $t.TableName)
+            if ($recs.Count -gt 0) {
+                $lines += ''
+                $lines += '[bold]Recommendations:[/]'
+                foreach ($r in $recs) { $lines += "  [$(switch ($r.Priority) { 'High' { 'red' } 'Medium' { 'yellow' } default { 'deepskyblue1' } })]$($r.Priority)[/] $(Get-SafeEscapedText $r.Title)" }
+            }
+            Write-SpectreHost ""
+            ($lines -join "`n") | Format-SpectrePanel -Header "[dodgerblue2] $(Get-SafeEscapedText $t.TableName) [/]" -Border Rounded -Color DodgerBlue2
+            Write-SpectreHost ""
+            Read-LogHorizonSelection -Title "[deepskyblue1]Return:[/]" -Choices @('Back') -Color DodgerBlue2 | Out-Null
+        }
+    }
 }
 
 # Retention assessment
 function Write-RetentionAssessment {
     param([PSCustomObject]$Analysis)
+    $null = Sync-ConsoleSize
 
     $summary = $Analysis.Summary
     if ($summary.RetentionChecked -eq 0) {
@@ -1505,7 +1660,7 @@ function Write-RetentionAssessment {
         $_.ActualRetentionDays -lt 365
     })
 
-    # XDR streaming tables with no data lake forwarding at all (skip Auxiliary — already in data lake)
+    # XDR streaming tables with no data lake forwarding at all (skip Auxiliary - already in data lake)
     $xdrNoDataLake = @($Analysis.TableAnalysis | Where-Object {
         $_.IsXDRStreaming -and
         $_.XDRState -ne 'Auxiliary' -and
@@ -1534,7 +1689,7 @@ function Write-RetentionAssessment {
     if ($totalExtended -gt 0) {
         $lines += "[bold]Extended (>90d):[/]  [deepskyblue1]$totalExtended[/] table(s) recommended for extended retention"
         if ($xdrAdvisoryTables.Count -gt 0) {
-            $lines += "                    [dim]includes $($xdrAdvisoryTables.Count) XDR streaming table(s) — advisory target: 365d[/]"
+            $lines += "                    [dim]includes $($xdrAdvisoryTables.Count) XDR streaming table(s) - advisory target: 365d[/]"
         }
         if ($xdrNotStreamed.Count -gt 0) {
             $lines += "                    [dim]includes $($xdrNotStreamed.Count) XDR table(s) not yet streamed to Sentinel[/]"
@@ -1581,10 +1736,10 @@ function Write-RetentionAssessment {
     # Submenu
     $choices = @('Back')
     if ($totalExtended -gt 0) {
-        $choices = @("Show extended retention recommendations ($totalExtended tables)", 'Back')
+        $choices = @('Back', "Show extended retention recommendations ($totalExtended tables)")
     }
 
-    $pick = Read-SpectreSelection -Title "[deepskyblue1]Select an option:[/]" -Choices $choices -Color DodgerBlue2
+    $pick = Read-LogHorizonSelection -Title "[deepskyblue1]Select an option:[/]" -Choices $choices -Color DodgerBlue2
 
     if ($pick -ne 'Back') {
         Write-SpectreHost ""
@@ -1655,6 +1810,7 @@ function Write-RetentionAssessment {
 
 function Write-DetectionAnalyzer {
     param([PSCustomObject]$Analysis)
+    $null = Sync-ConsoleSize
 
     if (-not $Analysis.DetectionAnalyzer -or $Analysis.DetectionAnalyzer.RuleMetrics.Count -eq 0) {
         Write-SpectreHost "[dim]Detection Analyzer data not available. Re-run with -IncludeDetectionAnalyzer.[/]"
@@ -1728,6 +1884,12 @@ function Write-DetectionAnalyzer {
     $unscored = @($Analysis.DetectionAnalyzer.RuleMetrics | Where-Object { $null -eq $_.NoisinessScore })
     $metrics = @($scored) + @($unscored)
     $displayMetrics = @($metrics | Select-Object -First 15)
+
+    $daSummary = $Analysis.DetectionAnalyzer.Summary
+    if ($daSummary.ScorableRules -gt 0 -and $daSummary.ScorableRules -lt $daSummary.MinScorablePopulation) {
+        Write-SpectreHost "[yellow]Only $($daSummary.ScorableRules) rule(s) have incidents; noisiness scores need at least $($daSummary.MinScorablePopulation) to compare against. Scores shown as N/A.[/]"
+        Write-SpectreHost ""
+    }
 
     $width = Get-ConsoleWidth
     $showKind = ($width -ge 100)
@@ -1803,7 +1965,7 @@ function Write-DetectionAnalyzer {
         }
         $choices += 'Browse rule details'
 
-        $pick = Read-SpectreSelection -Title "[deepskyblue1]Select an option:[/]" `
+        $pick = Read-LogHorizonSelection -Title "[deepskyblue1]Select an option:[/]" `
                                       -Choices $choices `
                                       -Color DodgerBlue2
 
@@ -1856,22 +2018,29 @@ function Write-DetectionAnalyzer {
             'Browse rule details' {
                 $browseContinue = $true
                 while ($browseContinue) {
-                    $ruleChoiceMap = @{}
+                    # Keyed by rule key so duplicate display names stay distinct; display text is escaped for Spectre
+                    $ruleChoiceMap = [ordered]@{}
+                    $seen = @{}
                     foreach ($r in $metrics) {
-                        $display = Get-SafeEscapedText $r.RuleName
-                        $ruleChoiceMap[$display] = $r.RuleName
+                        $display = Get-SafeEscapedText "$($r.RuleName)"
+                        if ([string]::IsNullOrWhiteSpace($display)) { $display = '(unnamed rule)' }
+                        if ($seen.ContainsKey($display)) {
+                            $seen[$display]++
+                            $display = "$display [dim]#$($seen[$display])[/]"
+                        } else { $seen[$display] = 1 }
+                        $ruleChoiceMap[$display] = $r
                     }
 
                     $ruleChoices = @('Back') + @($ruleChoiceMap.Keys)
-                    $rulePick = Read-SpectreSelection -Title "[deepskyblue1]Select a rule for details:[/]" `
+                    $rulePick = Read-LogHorizonSelection -Title "[deepskyblue1]Select a rule for details:[/]" `
                                                       -Choices $ruleChoices `
-                                                      -Color DodgerBlue2
+                                                      -Color DodgerBlue2 `
+                                                      -EnableSearch
 
                     if ($rulePick -eq 'Back') {
                         $browseContinue = $false
                     } else {
-                        $selectedRuleName = $ruleChoiceMap[$rulePick]
-                        $selected = $metrics | Where-Object { $_.RuleName -eq $selectedRuleName } | Select-Object -First 1
+                        $selected = $ruleChoiceMap[$rulePick]
                         if ($selected) {
                             Write-DetectionAnalyzerRuleDetail -RuleMetric $selected
                         }
@@ -1884,6 +2053,7 @@ function Write-DetectionAnalyzer {
 
 function Write-DetectionAnalyzerRuleDetail {
     param([PSCustomObject]$RuleMetric)
+    $null = Sync-ConsoleSize
 
     $selected = $RuleMetric
     Write-SpectreHost ""
@@ -1942,11 +2112,12 @@ function Invoke-ExportFromMenu {
         [string]$ExportFormat,
         [string]$ExportPath
     )
+    $null = Sync-ConsoleSize
 
     # If format wasn't pre-selected, ask the user
     if (-not $ExportFormat) {
-        $formatChoice = Read-SpectreSelection -Title "Export format:" `
-                          -Choices @('JSON', 'Markdown', 'HTML', 'Cancel') `
+        $formatChoice = Read-LogHorizonSelection -Title "Export format:" `
+                          -Choices @('Cancel', 'JSON', 'Markdown', 'HTML') `
                           -Color DodgerBlue2
 
         if ($formatChoice -eq 'Cancel') { return }
@@ -1954,16 +2125,25 @@ function Invoke-ExportFromMenu {
     }
 
     if (-not $ExportPath) {
-        $ExportPath = $PWD.Path
+        # Ask where to write; an empty answer keeps the working directory. Directory, trailing
+        # separator and extensionless semantics are those of Resolve-ReportOutputPath.
+        $ExportPath = Read-LogHorizonTextInput -Prompt 'Output path (directory or file; Enter for current directory)' -DefaultAnswer $PWD.Path
+        if ([string]::IsNullOrWhiteSpace($ExportPath)) { $ExportPath = $PWD.Path }
     }
 
-    Export-Report -Analysis $Analysis `
-                  -Format $ExportFormat `
-                  -OutputPath $ExportPath `
-                  -WorkspaceName $WorkspaceName `
-                  -DefenderXDR $DefenderXDR
+    try {
+        $written = Export-Report -Analysis $Analysis `
+                      -Format $ExportFormat `
+                      -OutputPath $ExportPath `
+                      -WorkspaceName $WorkspaceName `
+                      -DefenderXDR $DefenderXDR
+    }
+    catch {
+        Write-SpectreHost "[red]Export failed: $(Get-SafeEscapedText $_.Exception.Message)[/]"
+        return
+    }
 
-    Write-SpectreHost "[green]Report exported to [bold]$(Get-SafeEscapedText $ExportPath)[/][/]"
+    Write-SpectreHost "[green]Report exported to [bold]$(Get-SafeEscapedText "$written")[/][/]"
 }
 
 # Interactive wizard input helpers.
@@ -2073,6 +2253,7 @@ function Show-LogHorizonManagedTableList {
         [Parameter(Mandatory)][PSCustomObject[]]$Tables,
         [string]$Title = 'Selected table(s)'
     )
+    $null = Sync-ConsoleSize
 
     if ($Tables.Count -eq 0) {
         Write-SpectreHost "[yellow]No tables selected.[/]"
@@ -2109,7 +2290,7 @@ function Select-LogHorizonTablesFromList {
     while ($selecting) {
         Clear-LogHorizonScreen
 
-        $menu = [ordered]@{}
+        $menu = [ordered]@{ 'Cancel' = 'cancel' }
         $remaining = @($Tables | Where-Object { $_.TableName -notin $selectedNames })
         if ($remaining.Count -gt 0) {
             $menu['Add a table'] = 'add'
@@ -2118,21 +2299,20 @@ function Select-LogHorizonTablesFromList {
             $menu['Remove a table'] = 'remove'
             $menu['Done'] = 'done'
         }
-        $menu['Cancel'] = 'cancel'
 
         Write-SpectreHost "[dim]Current selection: $(if ($selectedNames.Count -gt 0) { $selectedNames -join ', ' } else { '(none)' })[/]"
-        $choice = Read-SpectreSelection -Title $Title -Choices @($menu.Keys) -Color DodgerBlue2
+        $choice = Read-LogHorizonSelection -Title $Title -Choices @($menu.Keys) -Color DodgerBlue2
         switch ($menu[$choice]) {
             'add' {
-                $addChoices = @($remaining | ForEach-Object { $_.TableName }) + @('Back')
-                $addChoice = Read-SpectreSelection -Title '[deepskyblue1]Add table:[/]' -Choices $addChoices -Color DodgerBlue2 -EnableSearch
+                $addChoices = @('Back') + @($remaining | ForEach-Object { $_.TableName })
+                $addChoice = Read-LogHorizonSelection -Title '[deepskyblue1]Add table:[/]' -Choices $addChoices -Color DodgerBlue2 -EnableSearch
                 if ($addChoice -and $addChoice -ne 'Back' -and $addChoice -notin $selectedNames) {
                     $selectedNames.Add($addChoice) | Out-Null
                 }
             }
             'remove' {
-                $removeChoices = @($selectedNames) + @('Back')
-                $removeChoice = Read-SpectreSelection -Title '[deepskyblue1]Remove table:[/]' -Choices $removeChoices -Color DodgerBlue2 -EnableSearch
+                $removeChoices = @('Back') + @($selectedNames)
+                $removeChoice = Read-LogHorizonSelection -Title '[deepskyblue1]Remove table:[/]' -Choices $removeChoices -Color DodgerBlue2 -EnableSearch
                 if ($removeChoice -and $removeChoice -ne 'Back') {
                     $selectedNames.Remove($removeChoice) | Out-Null
                 }
@@ -2167,6 +2347,7 @@ function Invoke-LogHorizonManagedTableUpdate {
         [Nullable[int]]$TotalRetentionInDays,
         [Nullable[int]]$RetentionInDays
     )
+    $null = Sync-ConsoleSize
 
     $changeSetParams = @{ Tables = $Tables }
     if ($PSBoundParameters.ContainsKey('TargetPlan')) { $changeSetParams['TargetPlan'] = $TargetPlan }
@@ -2177,7 +2358,7 @@ function Invoke-LogHorizonManagedTableUpdate {
         $changeSet = @(Get-TableRetentionChangeSet @changeSetParams)
     }
     catch {
-        Write-SpectreHost "[red]Validation failed: $($_.Exception.Message)[/]"
+        Write-SpectreHost "[red]Validation failed: $(Get-SafeEscapedText $_.Exception.Message)[/]"
         return
     }
 
@@ -2191,7 +2372,7 @@ function Invoke-LogHorizonManagedTableUpdate {
         return
     }
 
-    $confirm = Read-SpectreSelection -Title "Apply $pending change(s)?" -Choices @('No, cancel', "Yes, apply $pending change(s)") -Color DodgerBlue2
+    $confirm = Read-LogHorizonSelection -Title "Apply $pending change(s)?" -Choices @('No, cancel', "Yes, apply $pending change(s)") -Color DodgerBlue2
     if ($confirm -notlike 'Yes*') {
         Write-SpectreHost "[dim]Cancelled.[/]"
         return
@@ -2203,10 +2384,10 @@ function Invoke-LogHorizonManagedTableUpdate {
 
     $resultRows = foreach ($r in $results) {
         [PSCustomObject]@{
-            'Table'    = $r.TableName
+            'Table'    = Get-SafeEscapedText "$($r.TableName)"
             'Action'   = if ($r.Success) { '[green]' + $r.Action + '[/]' } else { '[red]' + $r.Action + '[/]' }
             'Fallback' = if ($r.Fallback) { 'yes' } else { '' }
-            'Detail'   = if ($r.Error) { $r.Error } else { '' }
+            'Detail'   = if ($r.Error) { Get-SafeEscapedText "$($r.Error)" } else { '' }
         }
     }
     $resultRows | Format-SpectreTable -Border Rounded -Color DodgerBlue2 -HeaderColor DodgerBlue2 -AllowMarkup
@@ -2238,7 +2419,7 @@ function Invoke-LogHorizonManagedTableUpdate {
             Write-SpectreHost "[dim]In-memory analysis refreshed for $($affected.Count) table(s).[/]"
         }
         catch {
-            Write-SpectreHost "[yellow]Could not refresh post-apply state: $($_.Exception.Message)[/]"
+            Write-SpectreHost "[yellow]Could not refresh post-apply state: $(Get-SafeEscapedText $_.Exception.Message)[/]"
         }
     }
 
@@ -2254,6 +2435,7 @@ function Invoke-ManageTableRetentionFlow {
         [Parameter(Mandatory)][PSCustomObject[]]$AllTables,
         [PSCustomObject[]]$PreselectedTables
     )
+    $null = Sync-ConsoleSize
 
     Clear-LogHorizonScreen
 
@@ -2263,12 +2445,12 @@ function Invoke-ManageTableRetentionFlow {
     }
     else {
         $retentionMenu = [ordered]@{
+            'Back' = 'back'
             'Select all Analytics tables with retention under 90 days' = 'under90'
             'Select all Analytics tables' = 'analytics'
             'Select table(s) from list' = 'list'
-            'Back' = 'back'
         }
-        $choice = Read-SpectreSelection -Title '[deepskyblue1]Change retention for table(s):[/]' -Choices @($retentionMenu.Keys) -Color DodgerBlue2
+        $choice = Read-LogHorizonSelection -Title '[deepskyblue1]Change retention for table(s):[/]' -Choices @($retentionMenu.Keys) -Color DodgerBlue2
         switch ($retentionMenu[$choice]) {
             'under90' {
                 $selectedTables = @($AllTables | Where-Object { $_.TablePlan -eq 'Analytics' -and $null -ne $_.ActualRetentionDays -and $_.ActualRetentionDays -lt 90 })
@@ -2296,7 +2478,7 @@ function Invoke-ManageTableRetentionFlow {
     $changeArgs = @{}
     $hotEligible = (@($selectedTables | Where-Object { $_.TablePlan -eq 'Analytics' }).Count -eq $selectedTables.Count)
     if ($hotEligible) {
-        $changeHot = Read-SpectreSelection -Title 'Change hot retention?' -Choices @('No change', 'Set value', 'Inherit workspace default') -Color DodgerBlue2
+        $changeHot = Read-LogHorizonSelection -Title 'Change hot retention?' -Choices @('No change', 'Set value', 'Inherit workspace default') -Color DodgerBlue2
         if ($changeHot -eq 'Set value') {
             $rawHot = Read-LogHorizonTextInput -Prompt 'Enter hot retention (4-730 days):'
             $hotDays = 0
@@ -2314,7 +2496,7 @@ function Invoke-ManageTableRetentionFlow {
         Write-SpectreHost '[dim]Hot retention can only be changed when all selected tables are Analytics.[/]'
     }
 
-    $changeCold = Read-SpectreSelection -Title 'Change cold retention?' -Choices @('No change', 'Set value', 'Remove long-term retention') -Color DodgerBlue2
+    $changeCold = Read-LogHorizonSelection -Title 'Change cold retention?' -Choices @('No change', 'Set value', 'Remove long-term retention') -Color DodgerBlue2
     if ($changeCold -eq 'Set value') {
         $minimumColdParams = @{ Analysis = $Analysis; Tables = $selectedTables }
         if ($changeArgs.ContainsKey('RetentionInDays')) {
@@ -2369,6 +2551,7 @@ function Invoke-ManageTableTypeFlow {
         [Parameter(Mandatory)][PSCustomObject[]]$AllTables,
         [PSCustomObject[]]$PreselectedTables
     )
+    $null = Sync-ConsoleSize
 
     Clear-LogHorizonScreen
 
@@ -2393,7 +2576,7 @@ function Invoke-ManageTableTypeFlow {
     Clear-LogHorizonScreen
     Show-LogHorizonManagedTableList -Tables $selectedTables -Title "$($selectedTables.Count) switchable table(s) selected"
 
-    $targetPlan = Read-SpectreSelection -Title 'Change table type to:' -Choices @('Analytics', 'Basic', 'Back') -Color DodgerBlue2
+    $targetPlan = Read-LogHorizonSelection -Title 'Change table type to:' -Choices @('Back', 'Analytics', 'Basic') -Color DodgerBlue2
     if ($targetPlan -eq 'Back') {
         return
     }
@@ -2410,6 +2593,7 @@ function Invoke-ManageRetentionWizard {
         # Optional: pre-select tables (e.g. when launched from a single-table view).
         [string[]]$TableNames
     )
+    $null = Sync-ConsoleSize
 
     $allTables = @($Analysis.TableAnalysis | Where-Object { $_.TablePlan } | Sort-Object TableName)
     if ($allTables.Count -eq 0) {
@@ -2426,15 +2610,15 @@ function Invoke-ManageRetentionWizard {
         }
     }
         $menu = [ordered]@{
+            'Back' = 'back'
             'Change retention for table(s)' = 'retention'
             'Change table type' = 'type'
-            'Back' = 'back'
         }
 
         $showMenu = $true
         while ($showMenu) {
             Clear-LogHorizonScreen
-            $choice = Read-SpectreSelection -Title '[deepskyblue1]Manage table retention and type:[/]' -Choices @($menu.Keys) -Color DodgerBlue2
+            $choice = Read-LogHorizonSelection -Title '[deepskyblue1]Manage table retention and type:[/]' -Choices @($menu.Keys) -Color DodgerBlue2
             switch ($menu[$choice]) {
                 'retention' {
                     Invoke-ManageTableRetentionFlow -Analysis $Analysis -Context $Context -AllTables $allTables -PreselectedTables $preselectedTables
