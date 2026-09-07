@@ -198,7 +198,7 @@ The interactive TUI includes a **Log Tuning / Transforms** menu with live tuning
 
 ### Custom pricing
 
-Default prices are West Europe Simplified PAYG in USD: 5.59 $/GB Analytics, 1.15 $/GB Basic, 0.20 $/GB Data Lake (0.07 ingestion + 0.13 processing). Each table is priced by the plan observed in the `Usage` table, and free status comes from `Usage.IsBillable`. Volumes use billing GB (1000 MB). If your commitment tier is different:
+Default prices are West Europe Simplified PAYG in USD: 5.59 $/GB Analytics, 1.15 $/GB Basic, 0.20 $/GB Data Lake (0.065 ingestion + 0.13 processing, rounded). Each table is priced by the plan observed in the `Usage` table, and free status comes from `Usage.IsBillable`. Volumes use billing GB (1000 MB). If your commitment tier is different:
 
 ```powershell
 Invoke-LogHorizon -SubscriptionId '...' -ResourceGroup 'rg' -WorkspaceName 'ws' -PricePerGB 4.61 -BasicPricePerGB 1.15 -LakePricePerGB 0.20
