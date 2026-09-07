@@ -2050,14 +2050,23 @@ function Invoke-ExportFromMenu {
     }
 
     if (-not $ExportPath) {
-        $ExportPath = $PWD.Path
+        # Ask where to write; an empty answer keeps the working directory. Directory, trailing
+        # separator and extensionless semantics are those of Resolve-ReportOutputPath.
+        $ExportPath = Read-LogHorizonTextInput -Prompt 'Output path (directory or file; Enter for current directory)' -DefaultAnswer $PWD.Path
+        if ([string]::IsNullOrWhiteSpace($ExportPath)) { $ExportPath = $PWD.Path }
     }
 
-    $written = Export-Report -Analysis $Analysis `
-                  -Format $ExportFormat `
-                  -OutputPath $ExportPath `
-                  -WorkspaceName $WorkspaceName `
-                  -DefenderXDR $DefenderXDR
+    try {
+        $written = Export-Report -Analysis $Analysis `
+                      -Format $ExportFormat `
+                      -OutputPath $ExportPath `
+                      -WorkspaceName $WorkspaceName `
+                      -DefenderXDR $DefenderXDR
+    }
+    catch {
+        Write-SpectreHost "[red]Export failed: $(Get-SafeEscapedText $_.Exception.Message)[/]"
+        return
+    }
 
     Write-SpectreHost "[green]Report exported to [bold]$(Get-SafeEscapedText "$written")[/][/]"
 }

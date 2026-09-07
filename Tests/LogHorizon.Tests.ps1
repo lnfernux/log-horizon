@@ -5471,6 +5471,60 @@ Describe 'Dictionary' {
     }
 }
 
+Describe 'Invoke-ExportFromMenu' {
+    BeforeAll {
+        $script:exportAnalysis = New-MockAnalysis
+        # Pester Mock inherits Read-SpectreSelection's [Spectre.Console.Color] binder; replace the function instead
+        $script:exportOrig = @{}
+        foreach ($fn in 'Read-SpectreSelection', 'Write-SpectreHost') {
+            $script:exportOrig[$fn] = if (Test-Path "Function:\$fn") { (Get-Item "Function:\$fn").ScriptBlock } else { $null }
+        }
+        Set-Item -Path Function:\Read-SpectreSelection -Value { param([string]$Title, [object[]]$Choices, $Color, [switch]$EnableSearch) $script:menuAnswers.Dequeue() }
+        Set-Item -Path Function:\Write-SpectreHost -Value { param([string]$Text) $script:exportHost = $Text }
+    }
+    AfterAll {
+        foreach ($fn in $script:exportOrig.Keys) {
+            if ($null -ne $script:exportOrig[$fn]) { Set-Item -Path "Function:\$fn" -Value $script:exportOrig[$fn] }
+            else { Remove-Item -Path "Function:\$fn" -ErrorAction SilentlyContinue }
+        }
+    }
+
+    It 'asks for a format and a path, then writes into the chosen directory' {
+        $target = Join-Path $TestDrive 'menu-export\'
+        $script:menuAnswers = [System.Collections.Generic.Queue[string]]::new([string[]]@('JSON'))
+        Mock Read-LogHorizonTextInput { $target }
+
+        Invoke-ExportFromMenu -Analysis $script:exportAnalysis -WorkspaceName 'ws'
+
+        Should -Invoke Read-LogHorizonTextInput -Times 1
+        $files = @(Get-ChildItem (Join-Path $TestDrive 'menu-export') -Filter '*.json')
+        $files.Count | Should -Be 1
+        $script:exportHost | Should -Match ([regex]::Escape($files[0].Name))
+    }
+
+    It 'does not prompt for a path when one was supplied and writes an explicit file name' {
+        $file = Join-Path $TestDrive 'given\explicit.md'
+        $script:menuAnswers = [System.Collections.Generic.Queue[string]]::new([string[]]@('Markdown'))
+        Mock Read-LogHorizonTextInput { throw 'should not prompt' }
+
+        Invoke-ExportFromMenu -Analysis $script:exportAnalysis -WorkspaceName 'ws' -ExportPath $file
+        Test-Path $file | Should -BeTrue
+    }
+
+    It 'returns on Cancel and reports an export failure without throwing' {
+        $script:menuAnswers = [System.Collections.Generic.Queue[string]]::new([string[]]@('Cancel'))
+        Mock Read-LogHorizonTextInput { throw 'should not prompt' }
+        Mock Export-Report { throw 'should not export' }
+        { Invoke-ExportFromMenu -Analysis $script:exportAnalysis -WorkspaceName 'ws' } | Should -Not -Throw
+
+        $script:menuAnswers = [System.Collections.Generic.Queue[string]]::new([string[]]@('HTML'))
+        Mock Read-LogHorizonTextInput { 'C:\nope\' }
+        Mock Export-Report { throw 'disk full' }
+        { Invoke-ExportFromMenu -Analysis $script:exportAnalysis -WorkspaceName 'ws' } | Should -Not -Throw
+        $script:exportHost | Should -Match 'Export failed: disk full'
+    }
+}
+
 Describe 'Write-Report helper functions' {
     It 'Get-SafeEscapedText returns dash for null input' {
         $result = Get-SafeEscapedText -Value $null
