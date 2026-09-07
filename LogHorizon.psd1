@@ -18,6 +18,7 @@
             Tags       = @('Sentinel', 'SIEM', 'Security', 'Azure', 'LogAnalytics')
             ProjectUri = 'https://github.com/lnfernux/log-horizon'
             LicenseUri = 'https://www.gnu.org/licenses/gpl-3.0.html'
+            ReleaseNotes = 'v0.9.0: plan-aware pricing from Usage.Plan and Usage.IsBillable; default-on collection cache (-NoCache, -RefreshCache, -CacheMaxAgeMinutes, -CachePath); DCR discovery at subscription scope with workspace transformation DCR and associations; classification database 481 tables with lifecycle status, XDR streamability and platform flags; DeprecatedSource and plan-aware Data Lake recommendations; severity-aware auto-close attribution; sovereign cloud endpoints; current API versions; Dictionary menu; Az.Resources dependency removed; GPL-3.0. Full history: https://github.com/lnfernux/log-horizon#version-history'
         }
     }
 }

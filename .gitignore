@@ -4,3 +4,9 @@ LogHorizon_Report_*
 FullControlEncounter*
 Tools/
 .review/
+# Local artifacts that must never ship
+.publish/
+*.clixml
+*.nupkg
+custom-classifications.json
+
