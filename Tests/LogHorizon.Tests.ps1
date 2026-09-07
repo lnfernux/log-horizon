@@ -17,6 +17,7 @@ BeforeAll {
     . "$privatePath\Get-DefenderXDR.ps1"
     . "$privatePath\Get-CollectionCache.ps1"
     . "$privatePath\Get-LogHorizonEndpoint.ps1"
+    . "$privatePath\Get-LogHorizonDictionary.ps1"
     . "$privatePath\Get-HuntingQueries.ps1"
     . "$privatePath\Get-DataConnectors.ps1"
     . "$privatePath\Get-SocOptimization.ps1"
@@ -5187,6 +5188,142 @@ SecurityEvent
         $result | Should -Contain 'SecurityEvent'
         $result | Should -Not -Contain 'the'
         $result | Should -Not -Contain 'key'
+    }
+}
+
+Describe 'Dictionary' {
+    BeforeAll {
+        $script:dict = Get-LogHorizonDictionary
+        $script:dictSection = { param($Name) $script:dict.Sections | Where-Object Name -eq $Name | Select-Object -First 1 }
+        $script:analysisSource = Get-Content (Join-Path $PSScriptRoot '..\Private\Invoke-Analysis.ps1') -Raw
+    }
+
+    It 'loads every section with non-empty terms and definitions' {
+        $script:dict.Sections.Count | Should -BeGreaterOrEqual 10
+        foreach ($s in $script:dict.Sections) {
+            $s.Name | Should -Not -BeNullOrEmpty
+            @($s.Terms).Count | Should -BeGreaterThan 0 -Because "$($s.Name) needs terms"
+            foreach ($t in $s.Terms) {
+                $t.Term | Should -Not -BeNullOrEmpty
+                $t.Definition | Should -Not -BeNullOrEmpty -Because "$($s.Name)/$($t.Term) needs a definition"
+            }
+        }
+        (Get-Content (Join-Path $PSScriptRoot '..\Data\dictionary.json') -Raw) | Should -Not -Match ([char]0x2014)
+    }
+
+    It 'returns an empty dictionary for a missing or corrupt file' {
+        (Get-LogHorizonDictionary -Path (Join-Path $TestDrive 'nope.json')).Sections.Count | Should -Be 0
+        $bad = Join-Path $TestDrive 'bad.json'
+        Set-Content $bad '{ not json'
+        (Get-LogHorizonDictionary -Path $bad -WarningAction SilentlyContinue).Sections.Count | Should -Be 0
+    }
+
+    It 'recommendation types match every Type emitted by Invoke-Analysis (finding types excluded)' {
+        $emitted = @([regex]::Matches($script:analysisSource, "Type\s+=\s+'([A-Za-z]+)'") | ForEach-Object { $_.Groups[1].Value } | Sort-Object -Unique)
+        $findingTypes = @('NotStreaming', 'StreamingNoCoverage', 'NotForwardedToDataLake', 'AdvisoryRetentionGap')
+        $recTypes = @($emitted | Where-Object { $_ -notin $findingTypes })
+        $dictTypes = @((& $script:dictSection 'Recommendation types').Terms.Term | Sort-Object)
+        $dictTypes | Should -Be $recTypes
+        foreach ($f in $findingTypes) { (& $script:dictSection 'XDR states').Terms.Term | Should -Contain $f }
+    }
+
+    It 'assessments match Get-Assessment outputs plus Platform' {
+        $expected = @('High Value', 'Good Value', 'Missing Coverage', 'Optimize', 'Low Value', 'Underutilized', 'Free Tier', 'Platform')
+        foreach ($e in $expected) { $script:analysisSource | Should -Match ([regex]::Escape("'$e'")) }
+        @((& $script:dictSection 'Assessment').Terms.Term | Sort-Object) | Should -Be @($expected | Sort-Object)
+    }
+
+    It 'cost and detection tiers match the thresholds in Invoke-Analysis' {
+        @((& $script:dictSection 'Cost tier').Terms.Term) | Should -Be @('Free', 'Low', 'Medium', 'High', 'Very High')
+        $script:analysisSource | Should -Match "MonthlyGB -ge 50\)\s+\{ 'Very High'"
+        $script:analysisSource | Should -Match "MonthlyGB -ge 10\)\s+\{ 'High'"
+        $script:analysisSource | Should -Match "MonthlyGB -ge 1\)\s+\{ 'Medium'"
+        (& $script:dictSection 'Cost tier').Terms | Where-Object Term -eq 'Very High' | ForEach-Object Definition | Should -Match '50 GB'
+        (& $script:dictSection 'Cost tier').Terms | Where-Object Term -eq 'High' | ForEach-Object Definition | Should -Match '10 to 50'
+
+        @((& $script:dictSection 'Detection tier').Terms.Term) | Should -Be @('None', 'Low', 'Medium', 'High')
+        $script:analysisSource | Should -Match "effectiveCoverage -ge 10\) \{ 'High'"
+        $script:analysisSource | Should -Match "effectiveCoverage -ge 3\)\s+\{ 'Medium'"
+        (& $script:dictSection 'Detection tier').Terms | Where-Object Term -eq 'High' | ForEach-Object Definition | Should -Match '10 or more'
+    }
+
+    It 'coverage sources, score statuses, plans, lifecycle keys and transform operations match the code' {
+        @((& $script:dictSection 'Coverage source').Terms.Term | Sort-Object) | Should -Be @('implicit', 'kql', 'none', 'platform', 'xdr')
+        foreach ($s in 'Scored', 'InsufficientSample', 'NoIncidents') {
+            $script:analysisSource | Should -Match "'$s'"
+            (& $script:dictSection 'Detection Analyzer').Terms.Term | Should -Contain $s
+        }
+        foreach ($p in 'Analytics', 'Basic', 'Auxiliary') { (& $script:dictSection 'Table plans').Terms.Term | Should -Contain $p }
+        foreach ($k in 'deprecated', 'legacy', 'replacedBy', 'xdrStreamable', 'platform') { (& $script:dictSection 'Lifecycle status').Terms.Term | Should -Contain $k }
+
+        $ops = @('Filter', 'ColumnRemoval', 'Projection', 'Enrichment', 'Aggregation')
+        foreach ($o in $ops) {
+            (& $script:dictSection 'Transform types').Terms.Term | Should -Contain $o
+            (Get-TransformType -KQL 'source | where a == 1 | project-away b | project c | extend d = 1 | summarize count() by c') | Should -Match $o
+        }
+        (& $script:dictSection 'Transform types').Terms.Term | Should -Contain 'Custom'
+    }
+
+    It 'the README documents the same recommendation types and assessment values' {
+        $readme = Get-Content (Join-Path $PSScriptRoot '..\README.md') -Raw
+        foreach ($a in (& $script:dictSection 'Assessment').Terms.Term) { $readme | Should -Match ([regex]::Escape($a)) }
+        $readme | Should -Match 'Deprecated Source'
+        $readme | Should -Match 'Interactive Below Baseline'
+        $readme | Should -Match '\*\*Dictionary\*\*'
+    }
+
+    It 'Write-DictionaryView renders the chosen section and returns on Back' {
+        $script:selectionResponses = [System.Collections.Generic.Queue[string]]::new()
+        @('Assessment', 'Back') | ForEach-Object { $script:selectionResponses.Enqueue($_) }
+        $script:renderedRows = @()
+        $script:hostLines = [System.Collections.Generic.List[string]]::new()
+
+        $orig = @{}
+        foreach ($fn in 'Read-SpectreSelection', 'Write-SpectreHost', 'Write-SpectreRule', 'Format-SpectreTable') {
+            $orig[$fn] = if (Test-Path "Function:\$fn") { (Get-Item "Function:\$fn").ScriptBlock } else { $null }
+        }
+        try {
+            Set-Item -Path Function:\Read-SpectreSelection -Value {
+                param([string]$Title, [object[]]$Choices, $Color, [switch]$EnableSearch)
+                $Choices[-1] | Should -Be 'Back'
+                $next = $script:selectionResponses.Dequeue()
+                $next | Should -BeIn @($Choices)
+                $next
+            }
+            Set-Item -Path Function:\Write-SpectreHost -Value { param([string]$Text) $script:hostLines.Add($Text) }
+            Set-Item -Path Function:\Write-SpectreRule -Value { param($Title, $Color) $script:hostLines.Add("RULE:$Title") }
+            Set-Item -Path Function:\Format-SpectreTable -Value {
+                param([Parameter(ValueFromPipeline)]$Data, $Border, $Color, $HeaderColor, [switch]$AllowMarkup, [switch]$Wrap)
+                process { $script:renderedRows += $Data }
+            }
+
+            Write-DictionaryView
+
+            $script:selectionResponses.Count | Should -Be 0
+            ($script:hostLines | Where-Object { $_ -like 'RULE:*Assessment*' }).Count | Should -Be 1
+            $script:renderedRows.Count | Should -Be 8
+            ($script:renderedRows | ForEach-Object Term) -join ' ' | Should -Match 'High Value'
+            ($script:renderedRows | ForEach-Object Definition) -join ' ' | Should -Not -Match '\[bold\]'
+        }
+        finally {
+            foreach ($fn in $orig.Keys) {
+                if ($null -ne $orig[$fn]) { Set-Item -Path "Function:\$fn" -Value $orig[$fn] }
+                else { Remove-Item -Path "Function:\$fn" -ErrorAction SilentlyContinue }
+            }
+        }
+    }
+
+    It 'Write-DictionaryView reports an empty dictionary without prompting' {
+        $script:hostLines = [System.Collections.Generic.List[string]]::new()
+        $origHost = if (Test-Path Function:\Write-SpectreHost) { (Get-Item Function:\Write-SpectreHost).ScriptBlock } else { $null }
+        try {
+            Set-Item -Path Function:\Write-SpectreHost -Value { param([string]$Text) $script:hostLines.Add($Text) }
+            Write-DictionaryView -Dictionary ([PSCustomObject]@{ Description = ''; Sections = @() })
+            ($script:hostLines -join ' ') | Should -Match 'No dictionary entries'
+        }
+        finally {
+            if ($null -ne $origHost) { Set-Item -Path Function:\Write-SpectreHost -Value $origHost } else { Remove-Item -Path Function:\Write-SpectreHost -ErrorAction SilentlyContinue }
+        }
     }
 }
 

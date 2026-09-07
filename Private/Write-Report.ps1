@@ -321,6 +321,7 @@ function Write-InteractiveMenu {
         $menuItems['Manage table retention and type'] = 'manageretention'
     }
 
+    $menuItems['Dictionary']          = 'dictionary'
     $menuItems['Export Report']       = 'export'
     $menuItems['Quit']                = 'quit'
 
@@ -363,6 +364,7 @@ function Write-InteractiveMenu {
             'logtuning'       { Write-LogTuningMenu -Analysis $Analysis -Context $Context }
             'tables'          { Write-TableInventory -Analysis $Analysis }
             'manageretention' { Invoke-ManageRetentionWizard -Analysis $Analysis -Context $Context }
+            'dictionary'      { Write-DictionaryView }
             'export'          {
                 Invoke-ExportFromMenu -Analysis $Analysis `
                                       -WorkspaceName $WorkspaceName `
@@ -633,6 +635,44 @@ function Write-DetectionAssessmentTable {
     $label = if ($Classification -eq 'primary') { 'PRIMARY' } else { 'SECONDARY' }
     $table | Format-SpectreTable -Border Rounded -Color DodgerBlue2 -HeaderColor DodgerBlue2 -AllowMarkup
     Write-SpectreHost "[dim]  $($filtered.Count) $label tables.[/]"
+}
+
+# Dictionary: the terms behind classification, tiers, assessments and recommendations
+function Write-DictionaryView {
+    [CmdletBinding()]
+    param([PSCustomObject]$Dictionary = (Get-LogHorizonDictionary))
+
+    $sections = @($Dictionary.Sections)
+    if ($sections.Count -eq 0) {
+        Write-SpectreHost "[dim]No dictionary entries available (Data/dictionary.json missing or empty).[/]"
+        return
+    }
+
+    $continue = $true
+    while ($continue) {
+        $choices = @($sections | ForEach-Object { $_.Name }) + @('Back')
+        $pick = Read-SpectreSelection -Title "[deepskyblue1]Select a topic:[/]" -Choices $choices -Color DodgerBlue2
+        if ($pick -eq 'Back') { $continue = $false; continue }
+
+        $section = $sections | Where-Object { $_.Name -eq $pick } | Select-Object -First 1
+        if (-not $section) { continue }
+
+        Write-SpectreHost ""
+        Write-SpectreRule -Title "[dodgerblue2]$(Get-SafeEscapedText $section.Name)[/]" -Color DodgerBlue2
+        if (-not [string]::IsNullOrWhiteSpace($section.Description)) {
+            Write-SpectreHost "[dim]$(Get-SafeEscapedText $section.Description)[/]"
+        }
+        Write-SpectreHost ""
+
+        $rows = foreach ($t in @($section.Terms)) {
+            [PSCustomObject]@{
+                'Term'       = "[bold]$(Get-SafeEscapedText $t.Term)[/]"
+                'Definition' = Get-SafeEscapedText $t.Definition
+            }
+        }
+        @($rows) | Format-SpectreTable -Border Rounded -Color DodgerBlue2 -HeaderColor DodgerBlue2 -AllowMarkup -Wrap
+        Write-SpectreHost ""
+    }
 }
 
 # SOC optimization
