@@ -156,8 +156,8 @@ function Get-DefenderXDR {
 
     # Parse enabled XDR rule queries for table references
     $xdrTableCoverage = @{}
+    $projectedRules = [System.Collections.Generic.List[object]]::new()
     foreach ($rule in $customRules) {
-        if ($rule.PSObject.Properties.Name -contains 'isEnabled' -and $rule.isEnabled -eq $false) { continue }
         $query = $null
         if ($rule.PSObject.Properties.Name -contains 'queryCondition' -and $rule.queryCondition) {
             $query = $rule.queryCondition.queryText
@@ -169,6 +169,18 @@ function Get-DefenderXDR {
             $rule.detectionAction.queryCondition) {
             $query = $rule.detectionAction.queryCondition.queryText
         }
+        $isEnabled = -not ($rule.PSObject.Properties.Name -contains 'isEnabled' -and $rule.isEnabled -eq $false)
+
+        # Only the fields the analysis reads are kept; Graph objects also carry createdBy/lastModifiedBy identities
+        $projectedRules.Add([PSCustomObject]@{
+            id             = $(if ($rule.PSObject.Properties.Name -contains 'id') { $rule.id } else { $null })
+            displayName    = $(if ($rule.PSObject.Properties.Name -contains 'displayName') { $rule.displayName } else { $null })
+            isEnabled      = $isEnabled
+            queryCondition = [PSCustomObject]@{ queryText = $query }
+            schedule       = $(if ($rule.PSObject.Properties.Name -contains 'schedule' -and $rule.schedule) { [PSCustomObject]@{ period = $rule.schedule.period } } else { $null })
+        })
+
+        if (-not $isEnabled) { continue }
         if ($query) {
             $tables = @(Get-TablesFromKql -Kql $query)
             foreach ($t in $tables) {
@@ -178,7 +190,7 @@ function Get-DefenderXDR {
         }
     }
 
-    ConvertTo-DefenderXDRResult -Fetched $true -CustomRules @($customRules) -XDRTableCoverage $xdrTableCoverage
+    ConvertTo-DefenderXDRResult -Fetched $true -CustomRules @($projectedRules) -XDRTableCoverage $xdrTableCoverage
 }
 
 function ConvertTo-DefenderXDRResult {

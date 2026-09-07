@@ -125,8 +125,8 @@ function Get-AutomationRules {
             RuleIdFilters         = @($ruleIdFilters | Select-Object -Unique)
             SeverityConditions    = @($severityConditions)
             Conditions            = $conditions
-            Actions               = $actions
-            Raw                   = $rule
+            # Actions are projected: actionConfiguration can carry an assigned owner identity
+            Actions               = @($actions | ForEach-Object { [PSCustomObject]@{ actionType = $_.actionType; order = $_.order; status = $_.actionConfiguration.status } })
         }
     }
 

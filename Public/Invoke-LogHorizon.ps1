@@ -179,7 +179,7 @@ function Invoke-LogHorizon {
 
             if (-not $NoCache) {
                 try {
-                    $savedTo = Save-CollectionCache -Key $cacheKey -Data $collectResult -CachePath $CachePath -Version $moduleVersion
+                    $savedTo = Save-CollectionCache -Key $cacheKey -Data $collectResult -CachePath $CachePath -Version $moduleVersion -MaxAgeMinutes $CacheMaxAgeMinutes
                     Write-Verbose "Collection cached to $savedTo"
                 }
                 catch { $collectWarnings.Add("Could not write collection cache: $($_.Exception.Message)") }

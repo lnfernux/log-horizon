@@ -76,7 +76,26 @@ function Set-LogHorizonTableRetention {
 
         $engineParams['Confirm'] = $false
 
-        Set-TableRetention @engineParams
+        $result = Set-TableRetention @engineParams
+
+        # Under -WhatIf the raw result object truncates in the console; print the same preview the wizard shows
+        if ($WhatIfPreference -and $result -and @($result.ChangeSet).Count -gt 0) {
+            $preview = @(Format-TableRetentionPreview -ChangeSet @($result.ChangeSet) | ForEach-Object {
+                [PSCustomObject]@{
+                    Table       = $_.Table
+                    Plan        = $_.Plan
+                    Interactive = $_.Interactive
+                    Total       = $_.Total
+                    Status      = ($_.Status -replace '\[[^\]]*\]', '')
+                    Reason      = $_.Reason
+                }
+            })
+            Write-Information -InformationAction Continue -MessageData ''
+            Write-Information -InformationAction Continue -MessageData 'What if: preview of table retention / plan changes (nothing applied)'
+            Write-Information -InformationAction Continue -MessageData (($preview | Format-Table -AutoSize -Wrap | Out-String).TrimEnd())
+        }
+
+        $result
     }
     finally {
         if ($null -ne $context) {

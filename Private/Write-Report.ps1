@@ -104,6 +104,30 @@ function Get-TableNameMarkup {
     "$name [orange3]($(Get-SafeEscapedText $status))[/]"
 }
 
+function ConvertTo-TransposedMatrix {
+    <#
+    .SYNOPSIS
+        Pivots a wide table (one row per key, one column per measure) into a tall
+        one (one row per measure, one column per key) for narrow consoles.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][AllowEmptyCollection()][object[]]$Rows,
+        [Parameter(Mandatory)][string]$KeyColumn,
+        [string]$RowLabel = 'Measure'
+    )
+
+    $rows = @($Rows)
+    if ($rows.Count -eq 0) { return @() }
+    $measures = @($rows[0].PSObject.Properties.Name | Where-Object { $_ -ne $KeyColumn })
+    foreach ($m in $measures) {
+        $out = [ordered]@{ $RowLabel = "[bold]$m[/]" }
+        # Key values may carry Spectre markup; headers are plain property names
+        foreach ($r in $rows) { $out[("$($r.$KeyColumn)" -replace '\[[^\]]*\]', '')] = $r.$m }
+        [PSCustomObject]$out
+    }
+}
+
 function Get-TablePlanDisplay {
     [CmdletBinding()]
     param([Parameter(Mandatory)][PSCustomObject]$Table)
@@ -427,7 +451,7 @@ function Write-RecommendationView {
     # Offer to expand if there are more
     if ($remaining -gt 0) {
         Write-SpectreHost ""
-        $pick = Read-SpectreSelection -Title "[deepskyblue1]Show all recommendations?[/]" -Choices @("Show all $($sorted.Count) recommendations", 'Back') -Color DodgerBlue2
+        $pick = Read-SpectreSelection -Title "[deepskyblue1]Show all recommendations?[/]" -Choices @('Back', "Show all $($sorted.Count) recommendations") -Color DodgerBlue2
 
         if ($pick -ne 'Back') {
             $allLines = @("[bold]All Recommendations[/] [dim]($($sorted.Count) total)[/]", "")
@@ -492,7 +516,9 @@ function Write-DetectionAssessment {
     $totalsRow['Total'] = "[bold]$(($allTables | Measure-Object).Count)[/]"
     $matrixTable += [PSCustomObject]$totalsRow
 
-    $matrixTable | Format-SpectreTable -Border Rounded -Color DodgerBlue2 -HeaderColor DodgerBlue2 -AllowMarkup
+    # 10 columns need ~130 chars; below that Spectre wraps header cells mid-word, so pivot to assessment rows
+    $matrix = if ((Get-ConsoleWidth) -ge 132) { $matrixTable } else { ConvertTo-TransposedMatrix -Rows $matrixTable -KeyColumn 'Classification' -RowLabel 'Assessment' }
+    $matrix | Format-SpectreTable -Border Rounded -Color DodgerBlue2 -HeaderColor DodgerBlue2 -AllowMarkup
     Write-SpectreHost ""
 
     $lines = @()
@@ -565,7 +591,7 @@ function Write-DetectionAssessment {
     # Submenu loop for drill-down tables
     $submenuContinue = $true
     while ($submenuContinue) {
-        $choices = @('Show primary tables', 'Show secondary tables', 'Back')
+        $choices = @('Back', 'Show primary tables', 'Show secondary tables')
         $pick = Read-SpectreSelection -Title "[deepskyblue1]Select an option:[/]" `
                     -Choices $choices `
                     -Color DodgerBlue2
@@ -650,7 +676,7 @@ function Write-DictionaryView {
 
     $continue = $true
     while ($continue) {
-        $choices = @($sections | ForEach-Object { $_.Name }) + @('Back')
+        $choices = @('Back') + @($sections | ForEach-Object { $_.Name })
         $pick = Read-SpectreSelection -Title "[deepskyblue1]Select a topic:[/]" -Choices $choices -Color DodgerBlue2
         if ($pick -eq 'Back') { $continue = $false; continue }
 
@@ -670,9 +696,38 @@ function Write-DictionaryView {
                 'Definition' = Get-SafeEscapedText $t.Definition
             }
         }
-        @($rows) | Format-SpectreTable -Border Rounded -Color DodgerBlue2 -HeaderColor DodgerBlue2 -AllowMarkup -Wrap
+        Write-DefinitionTable -Rows @($rows)
         Write-SpectreHost ""
     }
+}
+
+function Write-DefinitionTable {
+    <#
+    .SYNOPSIS
+        Two-column Term | Definition table where the term column never wraps
+        mid-word and rows are separated so long definitions stay aligned.
+        Format-SpectreTable has no per-column NoWrap, so this uses the Spectre
+        table type directly.
+    #>
+    [CmdletBinding()]
+    param([Parameter(Mandatory)][AllowEmptyCollection()][object[]]$Rows)
+
+    $table = [Spectre.Console.Table]::new()
+    $termCol = [Spectre.Console.TableColumn]::new('[dodgerblue2]Term[/]')
+    $termCol.NoWrap = $true
+    [void]$table.AddColumn($termCol)
+    [void]$table.AddColumn([Spectre.Console.TableColumn]::new('[dodgerblue2]Definition[/]'))
+    foreach ($r in @($Rows)) {
+        $cells = [Spectre.Console.Rendering.IRenderable[]]@(
+            [Spectre.Console.Markup]::new("$($r.Term)"),
+            [Spectre.Console.Markup]::new("$($r.Definition)")
+        )
+        [void][Spectre.Console.TableExtensions]::AddRow($table, $cells)
+    }
+    $table.Border = [Spectre.Console.TableBorder]::Rounded
+    $table.BorderStyle = [Spectre.Console.Style]::Parse('dodgerblue2')
+    $table.ShowRowSeparators = $true
+    $table | Out-SpectreHost
 }
 
 # SOC optimization
@@ -936,10 +991,10 @@ function Write-LogTuningMenu {
     $subContinue = $true
     while ($subContinue) {
         $subMenu = [ordered]@{
+            'Back'                                     = 'back'
             'Log tuning suggestions (live data)'      = 'live'
             'Log tuning suggestions (knowledge base)'  = 'kb'
             'Evaluate specific table'                  = 'evaluate'
-            'Back'                                     = 'back'
         }
 
         $subChoice = Read-SpectreSelection -Title "[deepskyblue1]Select a tuning mode:[/]" `
@@ -1023,12 +1078,11 @@ function Write-LiveTuningDetail {
     # Per-table sub-menu
     $detailContinue = $true
     while ($detailContinue) {
-        $detailMenu = [ordered]@{}
+        $detailMenu = [ordered]@{ 'Back' = 'back' }
         if ($lt.FilterKql)   { $detailMenu['View WHERE filter KQL'] = 'filter' }
         if ($lt.ProjectKql)  { $detailMenu['View column reduction KQL'] = 'project' }
         if ($lt.CombinedKql) { $detailMenu['View combined KQL'] = 'combined' }
         $detailMenu['View field-by-rule breakdown'] = 'fields'
-        $detailMenu['Back'] = 'back'
 
         $detailChoice = Read-SpectreSelection -Title "[deepskyblue1]Select a view:[/]" -Choices @($detailMenu.Keys) -Color DodgerBlue2
         $detailAction = $detailMenu[$detailChoice]
@@ -1213,7 +1267,7 @@ function Write-TableEvaluation {
     # KQL generation sub-menu
     $evalContinue = $true
     while ($evalContinue) {
-        $evalMenu = [ordered]@{}
+        $evalMenu = [ordered]@{ 'Back' = 'back' }
 
         # Prefer live tuning KQL if available
         $kqlSource = if ($liveEntry) { $liveEntry } else { $null }
@@ -1233,8 +1287,6 @@ function Write-TableEvaluation {
         if ($Context) {
             $evalMenu['Manage retention/type for this table'] = 'updateretention'
         }
-
-        $evalMenu['Back'] = 'back'
 
         if ($evalMenu.Count -le 1) {
             Write-SpectreHost "[dim]No KQL suggestions could be automatically generated for this table.[/]"
@@ -1360,11 +1412,10 @@ function Write-SplitKqlSuggestionView {
         # Sub-menu for KB drill-down
         $kbContinue = $true
         while ($kbContinue) {
-            $kbMenu = [ordered]@{}
+            $kbMenu = [ordered]@{ 'Back' = 'back' }
             if ($splitSuggestion.SplitKql)   { $kbMenu['View WHERE filter KQL'] = 'filter' }
             if ($splitSuggestion.ProjectKql) { $kbMenu['View column reduction KQL'] = 'project' }
             $kbMenu['View field analysis'] = 'fields'
-            $kbMenu['Back'] = 'back'
 
             $kbChoice = Read-SpectreSelection -Title "[deepskyblue1]Select a view:[/]" -Choices @($kbMenu.Keys) -Color DodgerBlue2
             $kbAction = $kbMenu[$kbChoice]
@@ -1481,6 +1532,37 @@ function Write-TableInventory {
 
     $table | Format-SpectreTable -Border Rounded -Color DodgerBlue2 -HeaderColor DodgerBlue2 -AllowMarkup
     Write-SpectreHost "[dim]  $($sorted.Count) total tables.[/]"
+    Write-SpectreHost ""
+
+    # Hold the screen; the main loop redraws the dashboard as soon as this returns
+    $choices = @('Back') + @($sorted | ForEach-Object { $_.TableName })
+    $pick = Read-SpectreSelection -Title "[deepskyblue1]Select a table for details, or Back:[/]" -Choices $choices -Color DodgerBlue2 -EnableSearch
+    if ($pick -ne 'Back') {
+        $t = $sorted | Where-Object { $_.TableName -eq $pick } | Select-Object -First 1
+        if ($t) {
+            $lines = @(
+                "[bold]Classification:[/] $(Get-SafeEscapedText $t.Classification) ($(Get-SafeEscapedText $t.Category))"
+                "[bold]Volume:[/]         $($t.MonthlyGB) GB/mo, $(if ($t.IsFree) { 'free' } else { "`$$($t.EstMonthlyCostUSD)/mo" }) ($($t.CostTier) cost tier)"
+                "[bold]Coverage:[/]       $($t.AnalyticsRules) rule(s), $($t.HuntingQueries) hunting, $($t.XDRRules) XDR, $($t.ImplicitRules) implicit ($($t.DetectionTier) tier, source $($t.CoverageSource))"
+                "[bold]Plan:[/]           $(Get-TablePlanDisplay -Table $t)$(if ($t.SupportsAuxiliaryPlan) { ' [dim](Auxiliary supported)[/]' })"
+                "[bold]Retention:[/]      $(if ($null -ne $t.ActualInteractiveRetentionDays) { "$($t.ActualInteractiveRetentionDays)d interactive, " })$(if ($null -ne $t.ActualRetentionDays) { "$($t.ActualRetentionDays)d total" } else { 'unknown' }), recommended $($t.RecommendedRetentionDays)d"
+                "[bold]Assessment:[/]     $(Get-SafeEscapedText $t.Assessment)"
+            )
+            $status = Get-TableStatusLabel -Table $t
+            if ($status) { $lines += "[bold]Status:[/]         [orange3]$(Get-SafeEscapedText $status)[/]" }
+            if ($t.HasTransform) { $lines += "[bold]Transforms:[/]     $(Get-SafeEscapedText ($t.TransformTypes -join ', '))" }
+            $recs = @($Analysis.Recommendations | Where-Object TableName -eq $t.TableName)
+            if ($recs.Count -gt 0) {
+                $lines += ''
+                $lines += '[bold]Recommendations:[/]'
+                foreach ($r in $recs) { $lines += "  [$(switch ($r.Priority) { 'High' { 'red' } 'Medium' { 'yellow' } default { 'deepskyblue1' } })]$($r.Priority)[/] $(Get-SafeEscapedText $r.Title)" }
+            }
+            Write-SpectreHost ""
+            ($lines -join "`n") | Format-SpectrePanel -Header "[dodgerblue2] $(Get-SafeEscapedText $t.TableName) [/]" -Border Rounded -Color DodgerBlue2
+            Write-SpectreHost ""
+            Read-SpectreSelection -Title "[deepskyblue1]Return:[/]" -Choices @('Back') -Color DodgerBlue2 | Out-Null
+        }
+    }
 }
 
 # Retention assessment
@@ -1582,7 +1664,7 @@ function Write-RetentionAssessment {
     # Submenu
     $choices = @('Back')
     if ($totalExtended -gt 0) {
-        $choices = @("Show extended retention recommendations ($totalExtended tables)", 'Back')
+        $choices = @('Back', "Show extended retention recommendations ($totalExtended tables)")
     }
 
     $pick = Read-SpectreSelection -Title "[deepskyblue1]Select an option:[/]" -Choices $choices -Color DodgerBlue2
@@ -1960,7 +2042,7 @@ function Invoke-ExportFromMenu {
     # If format wasn't pre-selected, ask the user
     if (-not $ExportFormat) {
         $formatChoice = Read-SpectreSelection -Title "Export format:" `
-                          -Choices @('JSON', 'Markdown', 'HTML', 'Cancel') `
+                          -Choices @('Cancel', 'JSON', 'Markdown', 'HTML') `
                           -Color DodgerBlue2
 
         if ($formatChoice -eq 'Cancel') { return }
@@ -2123,7 +2205,7 @@ function Select-LogHorizonTablesFromList {
     while ($selecting) {
         Clear-LogHorizonScreen
 
-        $menu = [ordered]@{}
+        $menu = [ordered]@{ 'Cancel' = 'cancel' }
         $remaining = @($Tables | Where-Object { $_.TableName -notin $selectedNames })
         if ($remaining.Count -gt 0) {
             $menu['Add a table'] = 'add'
@@ -2132,20 +2214,19 @@ function Select-LogHorizonTablesFromList {
             $menu['Remove a table'] = 'remove'
             $menu['Done'] = 'done'
         }
-        $menu['Cancel'] = 'cancel'
 
         Write-SpectreHost "[dim]Current selection: $(if ($selectedNames.Count -gt 0) { $selectedNames -join ', ' } else { '(none)' })[/]"
         $choice = Read-SpectreSelection -Title $Title -Choices @($menu.Keys) -Color DodgerBlue2
         switch ($menu[$choice]) {
             'add' {
-                $addChoices = @($remaining | ForEach-Object { $_.TableName }) + @('Back')
+                $addChoices = @('Back') + @($remaining | ForEach-Object { $_.TableName })
                 $addChoice = Read-SpectreSelection -Title '[deepskyblue1]Add table:[/]' -Choices $addChoices -Color DodgerBlue2 -EnableSearch
                 if ($addChoice -and $addChoice -ne 'Back' -and $addChoice -notin $selectedNames) {
                     $selectedNames.Add($addChoice) | Out-Null
                 }
             }
             'remove' {
-                $removeChoices = @($selectedNames) + @('Back')
+                $removeChoices = @('Back') + @($selectedNames)
                 $removeChoice = Read-SpectreSelection -Title '[deepskyblue1]Remove table:[/]' -Choices $removeChoices -Color DodgerBlue2 -EnableSearch
                 if ($removeChoice -and $removeChoice -ne 'Back') {
                     $selectedNames.Remove($removeChoice) | Out-Null
@@ -2277,10 +2358,10 @@ function Invoke-ManageTableRetentionFlow {
     }
     else {
         $retentionMenu = [ordered]@{
+            'Back' = 'back'
             'Select all Analytics tables with retention under 90 days' = 'under90'
             'Select all Analytics tables' = 'analytics'
             'Select table(s) from list' = 'list'
-            'Back' = 'back'
         }
         $choice = Read-SpectreSelection -Title '[deepskyblue1]Change retention for table(s):[/]' -Choices @($retentionMenu.Keys) -Color DodgerBlue2
         switch ($retentionMenu[$choice]) {
@@ -2407,7 +2488,7 @@ function Invoke-ManageTableTypeFlow {
     Clear-LogHorizonScreen
     Show-LogHorizonManagedTableList -Tables $selectedTables -Title "$($selectedTables.Count) switchable table(s) selected"
 
-    $targetPlan = Read-SpectreSelection -Title 'Change table type to:' -Choices @('Analytics', 'Basic', 'Back') -Color DodgerBlue2
+    $targetPlan = Read-SpectreSelection -Title 'Change table type to:' -Choices @('Back', 'Analytics', 'Basic') -Color DodgerBlue2
     if ($targetPlan -eq 'Back') {
         return
     }
@@ -2440,9 +2521,9 @@ function Invoke-ManageRetentionWizard {
         }
     }
         $menu = [ordered]@{
+            'Back' = 'back'
             'Change retention for table(s)' = 'retention'
             'Change table type' = 'type'
-            'Back' = 'back'
         }
 
         $showMenu = $true

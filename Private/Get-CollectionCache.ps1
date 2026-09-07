@@ -121,7 +121,8 @@ function Save-CollectionCache {
         [Parameter(Mandatory)][string]$Key,
         [Parameter(Mandatory)][object]$Data,
         [string]$CachePath,
-        [string]$Version
+        [string]$Version,
+        [int]$MaxAgeMinutes = 60
     )
 
     $file = Get-CollectionCachePath -Key $Key -CachePath $CachePath
@@ -144,5 +145,35 @@ function Save-CollectionCache {
         Data    = [PSCustomObject]$safe
     }
     $envelope | Export-Clixml -LiteralPath $file -Depth 12 -Force
+    $null = Remove-ExpiredCollectionCache -CachePath $dir -MaxAgeMinutes $MaxAgeMinutes -Keep $file
     $file
+}
+
+function Remove-ExpiredCollectionCache {
+    <#
+    .SYNOPSIS
+        Deletes collection cache files older than MaxAgeMinutes so entries for
+        other parameter sets or older module versions do not accumulate.
+    .OUTPUTS
+        The paths removed.
+    #>
+    [CmdletBinding(SupportsShouldProcess)]
+    param(
+        [Parameter(Mandatory)][string]$CachePath,
+        [int]$MaxAgeMinutes = 60,
+        [string]$Keep
+    )
+
+    if (-not (Test-Path -LiteralPath $CachePath -PathType Container)) { return @() }
+    $cutoff = (Get-Date).AddMinutes(-$MaxAgeMinutes)
+    $removed = [System.Collections.Generic.List[string]]::new()
+    foreach ($f in Get-ChildItem -LiteralPath $CachePath -Filter 'collection-*.clixml' -File -ErrorAction SilentlyContinue) {
+        if ($Keep -and $f.FullName -eq $Keep) { continue }
+        if ($f.LastWriteTime -ge $cutoff) { continue }
+        if ($PSCmdlet.ShouldProcess($f.FullName, 'Remove expired cache')) {
+            try { Remove-Item -LiteralPath $f.FullName -Force -ErrorAction Stop; $removed.Add($f.FullName) }
+            catch { Write-Verbose "Could not remove expired cache $($f.Name): $($_.Exception.Message)" }
+        }
+    }
+    @($removed)
 }

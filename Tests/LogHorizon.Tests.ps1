@@ -596,6 +596,23 @@ Describe 'Set-LogHorizonTableRetention' {
         $script:publicRetentionCall.RetentionInDays | Should -Be $null
         $script:publicRetentionCall.PreviewOnly | Should -Be $true
     }
+
+    It 'prints a readable preview under -WhatIf and still returns the engine result' {
+        $script:whatIfHost = [System.Collections.Generic.List[string]]::new()
+        Mock Write-Information { param($MessageData, $InformationAction) $script:whatIfHost.Add("$MessageData") }
+
+        $r = Set-LogHorizonTableRetention -SubscriptionId 'sub' -ResourceGroupName 'rg' -WorkspaceName 'ws' -TableName 'SigninLogs' -TotalRetentionInDays 730 -WhatIf
+
+        $r.ChangeSet.Count | Should -Be 1
+        $r.ChangeSet[0].Status | Should -Be 'Pending'
+        $r.Results.Count | Should -Be 0
+        $text = $script:whatIfHost -join "`n"
+        $text | Should -Match 'What if: preview'
+        $text | Should -Match 'SigninLogs'
+        $text | Should -Match '365 d -> 730 d'
+        $text | Should -Match 'Apply'
+        $text | Should -Not -Match '\[green\]'
+    }
 }
 
 Describe 'Get-TablesFromKql' {
@@ -2990,6 +3007,36 @@ Describe 'Get-AutomationRules Resolved status and Boolean conditions' {
         $rules[0].IsCloseIncidentRule | Should -Be $true
     }
 
+    It 'does not carry the raw API object or assigned-owner identities into the rule model' {
+        $mockResponse = @{
+            value = @(
+                @{
+                    name = 'ar-owner-1'
+                    properties = @{
+                        displayName = 'Assign and close'
+                        isEnabled = $true
+                        order = 1
+                        createdBy = @{ userPrincipalName = 'admin@contoso.com'; email = 'admin@contoso.com' }
+                        lastModifiedBy = @{ userPrincipalName = 'admin@contoso.com' }
+                        triggeringLogic = @{ triggersOn = 'Incidents'; triggersWhen = 'Created'; conditions = @() }
+                        actions = @(
+                            @{ order = 1; actionType = 'ModifyProperties'; actionConfiguration = @{ owner = @{ userPrincipalName = 'analyst@contoso.com'; assignedTo = 'Analyst' } } },
+                            @{ order = 2; actionType = 'ModifyProperties'; actionConfiguration = @{ status = 'Closed' } }
+                        )
+                    }
+                }
+            )
+        }
+        Mock Invoke-AzRestWithRetry { $mockResponse }
+        $ctx = [PSCustomObject]@{ ArmToken = 'fake'; ResourceId = '/subscriptions/xxx/resourceGroups/rg/providers/Microsoft.OperationalInsights/workspaces/ws' }
+        $rules = @(Get-AutomationRules -Context $ctx)
+        $rules[0].PSObject.Properties.Name | Should -Not -Contain 'Raw'
+        $rules[0].IsCloseIncidentRule | Should -Be $true
+        $rules[0].Actions.Count | Should -Be 2
+        ($rules[0] | ConvertTo-Json -Depth 6) | Should -Not -Match 'contoso\.com|assignedTo'
+        $rules[0].Actions[1].status | Should -Be 'Closed'
+    }
+
     It 'extracts title filter from Boolean wrapper conditions' {
         $mockResponse = @{
             value = @(
@@ -3446,6 +3493,28 @@ Describe 'Get-DefenderXDR REST fallback' {
         $result.KnownXDRTables.Count | Should -Be 21
         $result.KnownXDRTables | Should -Contain 'AlertEvidence'
         Should -Invoke Resolve-AzToken -Times 1 -ParameterFilter { $ResourceUrl -eq 'https://graph.microsoft.com' -and $TenantId -eq 'tid' }
+    }
+
+    It 'projects custom detections to the consumed fields so author identities never reach the cache' {
+        Mock Get-Command { $null } -ParameterFilter { $Name -eq 'Invoke-MgGraphRequest' }
+        Mock Resolve-AzToken { 'graph-token' }
+        Mock Invoke-AzRestWithRetry {
+            [PSCustomObject]@{ value = @(
+                [PSCustomObject]@{ id = 'r1'; displayName = 'On'; isEnabled = $true; createdBy = 'alice@contoso.com'; lastModifiedBy = 'alice@contoso.com'; schedule = [PSCustomObject]@{ period = '1h'; nextRunDateTime = 'x' }; queryCondition = [PSCustomObject]@{ queryText = 'DeviceEvents | take 1'; extra = 'y' } },
+                [PSCustomObject]@{ id = 'r3'; displayName = 'Nested'; detectionAction = [PSCustomObject]@{ queryCondition = [PSCustomObject]@{ queryText = 'EmailEvents | take 1' } } }
+            ) }
+        }
+
+        $result = Get-DefenderXDR -Context $script:xdrCtx
+        $flat = $result.CustomRules | ConvertTo-Json -Depth 5
+        $flat | Should -Not -Match 'alice@contoso.com'
+        $flat | Should -Not -Match 'createdBy|lastModifiedBy|nextRunDateTime'
+        @($result.CustomRules[0].PSObject.Properties.Name | Sort-Object) | Should -Be @('displayName', 'id', 'isEnabled', 'queryCondition', 'schedule')
+        $result.CustomRules[0].schedule.period | Should -Be '1h'
+        # detectionAction query is hoisted so Invoke-Analysis can read queryCondition.queryText uniformly
+        $result.CustomRules[1].queryCondition.queryText | Should -Be 'EmailEvents | take 1'
+        $result.CustomRules[1].isEnabled | Should -BeTrue
+        $result.XDRTableCoverage['EmailEvents'] | Should -Be 1
     }
 
     It 'follows @odata.nextLink' {
@@ -4694,6 +4763,69 @@ Describe 'Collection cache' {
         Copy-Item (Get-CollectionCachePath -Key 'k1' -CachePath $script:cacheDir) (Get-CollectionCachePath -Key 'k2' -CachePath $script:cacheDir)
         Get-CollectionCache -Key 'k2' -CachePath $script:cacheDir | Should -BeNullOrEmpty
     }
+
+    It 'purges expired sibling cache files on save but keeps fresh ones and the file just written' {
+        $dir = Join-Path $TestDrive 'purge'
+        New-Item -ItemType Directory -Path $dir | Out-Null
+        $stale = Join-Path $dir 'collection-stale.clixml'
+        $fresh = Join-Path $dir 'collection-fresh.clixml'
+        $other = Join-Path $dir 'notes.txt'
+        foreach ($f in $stale, $fresh, $other) { Set-Content $f 'x' }
+        (Get-Item $stale).LastWriteTime = (Get-Date).AddHours(-2)
+        (Get-Item $other).LastWriteTime = (Get-Date).AddHours(-2)
+
+        $written = Save-CollectionCache -Key 'new' -Data $script:sample -CachePath $dir -MaxAgeMinutes 60
+
+        Test-Path $stale | Should -BeFalse
+        Test-Path $fresh | Should -BeTrue
+        Test-Path $other | Should -BeTrue
+        Test-Path $written | Should -BeTrue
+
+        # -WhatIf reports without deleting; missing directory is a no-op
+        (Get-Item $fresh).LastWriteTime = (Get-Date).AddHours(-2)
+        Remove-ExpiredCollectionCache -CachePath $dir -MaxAgeMinutes 60 -WhatIf | Should -BeNullOrEmpty
+        Test-Path $fresh | Should -BeTrue
+        @(Remove-ExpiredCollectionCache -CachePath (Join-Path $TestDrive 'nope') -MaxAgeMinutes 60).Count | Should -Be 0
+        @(Remove-ExpiredCollectionCache -CachePath $dir -MaxAgeMinutes 60 -Keep $written) | Should -Be @($fresh)
+    }
+}
+
+Describe 'TUI layout helpers' {
+    It 'ConvertTo-TransposedMatrix pivots measures into rows and strips markup from the new headers' {
+        $rows = @(
+            [PSCustomObject]@{ Classification = '[green]Primary[/]'; 'High Value' = 3; 'Low Value' = '[dim]-[/]'; Total = 16 },
+            [PSCustomObject]@{ Classification = '[grey]Secondary[/]'; 'High Value' = 0; 'Low Value' = 4; Total = 8 }
+        )
+        $t = @(ConvertTo-TransposedMatrix -Rows $rows -KeyColumn 'Classification' -RowLabel 'Assessment')
+        $t.Count | Should -Be 3
+        @($t[0].PSObject.Properties.Name) | Should -Be @('Assessment', 'Primary', 'Secondary')
+        $t[0].Assessment | Should -Be '[bold]High Value[/]'
+        $t[1].Secondary | Should -Be 4
+        $t[2].Primary | Should -Be 16
+        @(ConvertTo-TransposedMatrix -Rows @() -KeyColumn 'X').Count | Should -Be 0
+    }
+
+    It 'every submenu in Write-Report lists Back or Cancel as the first choice' {
+        $src = Get-Content (Join-Path $PSScriptRoot '..\Private\Write-Report.ps1') -Raw
+        # Literal choice arrays
+        foreach ($m in [regex]::Matches($src, "-Choices @\(('[^)]*')\)")) {
+            $items = @($m.Groups[1].Value -split ',\s*' | ForEach-Object { $_.Trim().Trim("'") })
+            if ($items -contains 'Back' -or $items -contains 'Cancel') {
+                $items[0] | Should -BeIn @('Back', 'Cancel') -Because "choices '$($m.Groups[1].Value)' must lead with Back/Cancel"
+            }
+        }
+        # Arrays built by concatenation must start with @('Back')
+        foreach ($m in [regex]::Matches($src, "\`$\w+ = @\(([^)]*)\) \+ @\('Back'\)")) {
+            $m.Value | Should -BeNullOrEmpty -Because "'$($m.Value)' appends Back last"
+        }
+        # Ordered menu hashtables: the Back/Cancel entry must be the first key
+        foreach ($m in [regex]::Matches($src, "\[ordered\]@\{\s*\r?\n\s*'([^']+)'\s*=\s*'[^']+'(?:\s*\r?\n\s*'([^']+)'\s*=\s*'[^']+')*\s*\r?\n\s*\}")) {
+            $block = $m.Value
+            if ($block -match "'(Back|Cancel)'\s*=") { $m.Groups[1].Value | Should -BeIn @('Back', 'Cancel') -Because "menu block must lead with Back/Cancel: $($block.Substring(0, [Math]::Min(80, $block.Length)))" }
+        }
+        $src | Should -Not -Match "\`$\w+\['Back'\]\s*=\s*'back'"
+        $src | Should -Not -Match "\`$\w+\['Cancel'\]\s*=\s*'cancel'"
+    }
 }
 
 Describe 'Resolve-ReportOutputPath' {
@@ -5279,22 +5411,22 @@ Describe 'Dictionary' {
         $script:hostLines = [System.Collections.Generic.List[string]]::new()
 
         $orig = @{}
-        foreach ($fn in 'Read-SpectreSelection', 'Write-SpectreHost', 'Write-SpectreRule', 'Format-SpectreTable') {
+        foreach ($fn in 'Read-SpectreSelection', 'Write-SpectreHost', 'Write-SpectreRule', 'Write-DefinitionTable') {
             $orig[$fn] = if (Test-Path "Function:\$fn") { (Get-Item "Function:\$fn").ScriptBlock } else { $null }
         }
         try {
             Set-Item -Path Function:\Read-SpectreSelection -Value {
                 param([string]$Title, [object[]]$Choices, $Color, [switch]$EnableSearch)
-                $Choices[-1] | Should -Be 'Back'
+                $Choices[0] | Should -Be 'Back'
                 $next = $script:selectionResponses.Dequeue()
                 $next | Should -BeIn @($Choices)
                 $next
             }
             Set-Item -Path Function:\Write-SpectreHost -Value { param([string]$Text) $script:hostLines.Add($Text) }
             Set-Item -Path Function:\Write-SpectreRule -Value { param($Title, $Color) $script:hostLines.Add("RULE:$Title") }
-            Set-Item -Path Function:\Format-SpectreTable -Value {
-                param([Parameter(ValueFromPipeline)]$Data, $Border, $Color, $HeaderColor, [switch]$AllowMarkup, [switch]$Wrap)
-                process { $script:renderedRows += $Data }
+            Set-Item -Path Function:\Write-DefinitionTable -Value {
+                param([object[]]$Rows)
+                $script:renderedRows += @($Rows)
             }
 
             Write-DictionaryView
@@ -5311,6 +5443,18 @@ Describe 'Dictionary' {
                 else { Remove-Item -Path "Function:\$fn" -ErrorAction SilentlyContinue }
             }
         }
+    }
+
+    It 'Write-DefinitionTable renders a no-wrap term column with row separators' {
+        $rows = @(
+            [PSCustomObject]@{ Term = '[bold]TotalRetentionInDaysAsDefault[/]'; Definition = ('word ' * 60) },
+            [PSCustomObject]@{ Term = '[bold]Basic[/]'; Definition = 'short' }
+        )
+        $out = (Write-DefinitionTable -Rows $rows | Out-String) -split "`r?`n"
+        ($out | Where-Object { $_ -match 'TotalRetentionInDaysAsDefault' }).Count | Should -Be 1
+        ($out | Where-Object { $_ -match 'TotalRetentionInDaysAsDefaul$|^\W*t\W' }).Count | Should -Be 0
+        ($out | Where-Object { $_ -match '├' }).Count | Should -Be 2
+        { Write-DefinitionTable -Rows @() } | Should -Not -Throw
     }
 
     It 'Write-DictionaryView reports an empty dictionary without prompting' {
