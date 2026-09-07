@@ -1,8 +1,9 @@
 function Get-CollectionCacheKey {
     <#
     .SYNOPSIS
-        Deterministic cache key for a Phase 1 collection: SHA-256 over the inputs
-        that change what is collected.
+        Deterministic cache key for a Phase 1 collection: SHA-256 over every input
+        that changes what is collected or how it is priced, plus the module version
+        so a cache written by an older module shape is never reused.
     #>
     [CmdletBinding()]
     param(
@@ -12,9 +13,14 @@ function Get-CollectionCacheKey {
         [int]$DaysBack = 90,
         [int]$DetectionLookbackDays = 90,
         [bool]$IncludeDefenderXDR = $false,
-        [bool]$IncludeDetectionAnalyzer = $false
+        [bool]$IncludeDetectionAnalyzer = $false,
+        [decimal]$PricePerGB = 5.59,
+        [decimal]$BasicPricePerGB = 1.15,
+        [decimal]$LakePricePerGB = 0.20,
+        [string]$ModuleVersion = ''
     )
 
+    $inv = [cultureinfo]::InvariantCulture
     $material = (@(
         $SubscriptionId.ToLowerInvariant()
         $ResourceGroup.ToLowerInvariant()
@@ -23,6 +29,10 @@ function Get-CollectionCacheKey {
         "detdays=$DetectionLookbackDays"
         "xdr=$IncludeDefenderXDR"
         "da=$IncludeDetectionAnalyzer"
+        "price=$($PricePerGB.ToString($inv))"
+        "basic=$($BasicPricePerGB.ToString($inv))"
+        "lake=$($LakePricePerGB.ToString($inv))"
+        "v=$ModuleVersion"
     ) -join '|')
 
     $sha = [System.Security.Cryptography.SHA256]::Create()

@@ -49,6 +49,7 @@ function Get-AutomationRules {
         $titleConditions = [System.Collections.Generic.List[object]]::new()
         $titleSeen = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
         $ruleIdFilters = [System.Collections.Generic.List[string]]::new()
+        $severityConditions = [System.Collections.Generic.List[object]]::new()
         $hasConditions = $conditions.Count -gt 0
 
         # Recursively extract Property conditions (handles Boolean wrappers)
@@ -89,6 +90,14 @@ function Get-AutomationRules {
                     }
                 }
             }
+
+            # Severity conditions (Equals / NotEquals with one or more severities)
+            if ($propertyName -match 'Severity') {
+                $values = @(@($cond.conditionProperties.propertyValues) | Where-Object { -not [string]::IsNullOrWhiteSpace("$_") } | ForEach-Object { "$_" })
+                if ($values.Count -gt 0) {
+                    [void]$severityConditions.Add([PSCustomObject]@{ Values = $values; Operator = $(if ($operator) { $operator } else { 'Equals' }) })
+                }
+            }
         }
 
         # The API exposes the enabled flag under triggeringLogic.isEnabled
@@ -114,6 +123,7 @@ function Get-AutomationRules {
             TitleFilters          = @($titleConditions | ForEach-Object Value)
             TitleOperators        = @($titleConditions | ForEach-Object Operator)
             RuleIdFilters         = @($ruleIdFilters | Select-Object -Unique)
+            SeverityConditions    = @($severityConditions)
             Conditions            = $conditions
             Actions               = $actions
             Raw                   = $rule

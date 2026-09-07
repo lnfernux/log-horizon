@@ -1592,6 +1592,23 @@ Describe 'Classification lifecycle keys' {
         "$w" | Should -Match 'status must be deprecated or legacy'
     }
 
+    It 'parses string booleans instead of casting them and normalises the tier' {
+        $e = ConvertTo-ValidClassificationEntry -Entry ([PSCustomObject]@{ tableName = 'S_CL'; classification = 'secondary'; isFree = 'false'; platform = 'False'; xdrStreamable = 'maybe'; recommendedTier = 'Auxiliary' })
+        $e.isFree | Should -BeFalse
+        $e.platform | Should -BeFalse
+        $e.PSObject.Properties.Name | Should -Not -Contain 'xdrStreamable'
+        $e.recommendedTier | Should -Be 'datalake'
+
+        $t = ConvertTo-ValidClassificationEntry -Entry ([PSCustomObject]@{ tableName = 'T_CL'; classification = 'secondary'; recommendedTier = 'hot' }) -WarningVariable w -WarningAction SilentlyContinue
+        $t.recommendedTier | Should -Be 'analytics'
+        "$w" | Should -Match 'recommendedTier must be analytics or datalake'
+
+        ConvertTo-ClassificationBoolean -Value $null | Should -BeNullOrEmpty
+        ConvertTo-ClassificationBoolean -Value $true | Should -BeTrue
+        ConvertTo-ClassificationBoolean -Value ' TRUE ' | Should -BeTrue
+        ConvertTo-ClassificationBoolean -Value 'no' | Should -BeNullOrEmpty
+    }
+
     It 'Get-TableStatusLabel and Get-TableNameMarkup render the lifecycle badge' {
         Get-TableStatusLabel -Table ([PSCustomObject]@{ TableName = 'T'; Status = 'deprecated'; ReplacedBy = @('A', 'B') }) | Should -Be 'deprecated, use A, B'
         Get-TableStatusLabel -Table ([PSCustomObject]@{ TableName = 'T'; Status = 'legacy'; ReplacedBy = @() }) | Should -Be 'legacy'
@@ -1629,7 +1646,9 @@ Describe 'Invoke-Analysis lifecycle and XDR streamability' {
         $ti.Priority | Should -Be 'Medium'
         $ti.Title | Should -Be 'ThreatIntelligenceIndicator is deprecated'
         $ti.Detail | Should -Match 'Replacement table\(s\): ThreatIntelIndicators, ThreatIntelObjects'
-        $ti.EstSavingsUSD | Should -Be 5.59
+        $ti.Detail | Should -Match '5\.59/mo'
+        $ti.EstSavingsUSD | Should -Be 0
+        $ti.CurrentCost | Should -Be 5.59
         $up = $recs | Where-Object TableName -eq 'Update'
         $up.Title | Should -Match 'legacy collection path'
         $up.Detail | Should -Match 'No direct replacement table'
@@ -2036,6 +2055,41 @@ Describe 'Get-SplitKql schema intersection' {
         $result.RuleCount | Should -Be 0
         $result.Source | Should -Be 'none'
     }
+
+    It 'drops rule conditions that reference columns outside the live schema and never appends them to the hint' {
+        $rules = @([PSCustomObject]@{ RuleName = 'r'; Enabled = $true; Tables = @('ThreatIntelIndicators'); Query = 'ThreatIntelIndicators | where Confidence > 50 | where JoinedTable_Field == "x" | where LegacyUrl has "evil"' })
+        $result = Get-SplitKql -TableName 'ThreatIntelIndicators' -Rules $rules -HighValueFieldsDB $script:hvTI -SchemaColumns $script:tiSchema
+
+        $result.Source | Should -Be 'combined'
+        $result.SplitKql | Should -Match 'Confidence > 50'
+        $result.SplitKql | Should -Not -Match 'JoinedTable_Field'
+        $result.SplitKql | Should -Not -Match 'LegacyUrl'
+        $result.DroppedConditions.Count | Should -Be 2
+        $result.ConditionCount | Should -Be 1
+    }
+
+    It 'falls back to rule-analysis only with schema-valid conditions and reports none when all are dropped' {
+        $rules = @([PSCustomObject]@{ RuleName = 'r'; Enabled = $true; Tables = @('Plain'); Query = 'Plain | where GhostColumn == 1 | where ResultType == 2' })
+        $withSchema = Get-SplitKql -TableName 'Plain' -Rules $rules -SchemaColumns @('TimeGenerated', 'ResultType')
+        $withSchema.Source | Should -Be 'rule-analysis'
+        $withSchema.SplitKql | Should -Be '(ResultType == 2)'
+        $withSchema.DroppedConditions | Should -Be @('GhostColumn == 1')
+
+        $allDropped = Get-SplitKql -TableName 'Plain' -Rules $rules -SchemaColumns @('TimeGenerated')
+        $allDropped.Source | Should -Be 'none'
+        $allDropped.SplitKql | Should -BeNullOrEmpty
+        $allDropped.DroppedConditions.Count | Should -Be 2
+    }
+
+    It 'Select-KqlConditionInSchema keeps everything without a schema and splits by referenced columns with one' {
+        $r = Select-KqlConditionInSchema -Conditions @('Alpha == 1', 'Beta == 2') -SchemaColumns @()
+        $r.Kept | Should -Be @('Alpha == 1', 'Beta == 2')
+        $r.Dropped.Count | Should -Be 0
+
+        $r = Select-KqlConditionInSchema -Conditions @('Alpha == 1 and Beta == 2', 'Gamma == 3', '') -SchemaColumns @('alpha', 'beta')
+        $r.Kept | Should -Be @('Alpha == 1 and Beta == 2')
+        $r.Dropped | Should -Be @('Gamma == 3')
+    }
 }
 
 Describe 'Get-LiveTuningAnalysis schema intersection' {
@@ -2048,6 +2102,15 @@ Describe 'Get-LiveTuningAnalysis schema intersection' {
         $result[0].UsedFields | Should -Not -Contain 'csUserName'
         $result[0].ProjectKql | Should -Not -Match 'csUserName'
         $result[0].UnusedFields | Should -Be @('IPAddress')
+    }
+
+    It 'drops where conditions on columns the table does not have from FilterKql and reports DroppedConditions' {
+        $rules = @([PSCustomObject]@{ RuleName = 'r'; Enabled = $true; Tables = @('SigninLogs'); Query = 'SigninLogs | where ResultType != 0 | where csUserName == "x"' })
+        $schema = @{ 'SigninLogs' = @('TimeGenerated', 'ResultType', 'UserPrincipalName') }
+        $result = @(Get-LiveTuningAnalysis -Rules $rules -SchemaLookup $schema)
+        $result[0].FilterKql | Should -Be '(ResultType != 0)'
+        $result[0].DroppedConditions | Should -Be @('csUserName == "x"')
+        $result[0].ConditionCount | Should -Be 1
     }
 
     It 'builds filter-only and project-only combined KQL and resolves rule names from hunting queries' {
@@ -3056,10 +3119,9 @@ Describe 'Get-Incidents' {
         $incidents[0].Etag | Should -Be 'e1'
         $incidents[0].PSObject.Properties.Name | Should -Not -Contain 'Raw'
         $incidents[0].RelatedAnalyticRuleNames | Should -Be @('Rule One')
-        $incidents[0].Owner | Should -Be 'a@b.c'
+        $incidents[0].PSObject.Properties.Name | Should -Not -Contain 'Owner'
         $incidents[0].ClosedTimeUtc | Should -BeOfType [datetime]
         $incidents[1].ClosedTimeUtc | Should -BeNullOrEmpty
-        $incidents[1].Owner | Should -BeNullOrEmpty
     }
 
     It 'normalises helper values' {
@@ -3398,7 +3460,12 @@ Describe 'Get-DefenderXDR REST fallback' {
     It 'returns null when no Graph token can be acquired' {
         Mock Get-Command { $null } -ParameterFilter { $Name -eq 'Invoke-MgGraphRequest' }
         Mock Resolve-AzToken { throw 'no token' }
-        Get-DefenderXDR -Context ([PSCustomObject]@{ SubscriptionId = 'sub' }) -WarningAction SilentlyContinue | Should -BeNullOrEmpty
+        $r = Get-DefenderXDR -Context ([PSCustomObject]@{ SubscriptionId = 'sub' }) -WarningAction SilentlyContinue
+        $r | Should -Not -BeNullOrEmpty
+        $r.Fetched | Should -BeFalse
+        $r.FetchError | Should -Match 'Graph token'
+        $r.TotalXDRRules | Should -Be 0
+        $r.KnownXDRTables.Count | Should -Be 21
     }
 
     It 'returns the empty shape with the known table list when every endpoint fails' {
@@ -3567,6 +3634,22 @@ Describe 'Test-AutomationRuleIncidentMatch AND semantics' {
     It 'treats rules with only unmodelled conditions as matching' {
         $rule = [PSCustomObject]@{ HasConditions = $true; TitleFilters = @(); TitleOperators = @(); RuleIdFilters = @() }
         Test-AutomationRuleIncidentMatch -AutomationRule $rule -IncidentTitle 'Anything' -IncidentRuleIds @() | Should -Be $true
+    }
+
+    It 'evaluates severity conditions with Equals and NotEquals and ANDs them with the other groups' {
+        $eq = [PSCustomObject]@{ HasConditions = $true; TitleFilters = @(); TitleOperators = @(); RuleIdFilters = @(); SeverityConditions = @([PSCustomObject]@{ Values = @('Informational', 'Low'); Operator = 'Equals' }) }
+        Test-AutomationRuleIncidentMatch -AutomationRule $eq -IncidentTitle 'x' -IncidentRuleIds @() -IncidentSeverity 'Low' | Should -Be $true
+        Test-AutomationRuleIncidentMatch -AutomationRule $eq -IncidentTitle 'x' -IncidentRuleIds @() -IncidentSeverity 'High' | Should -Be $false
+        Test-AutomationRuleIncidentMatch -AutomationRule $eq -IncidentTitle 'x' -IncidentRuleIds @() -IncidentSeverity '' | Should -Be $false
+
+        $ne = [PSCustomObject]@{ HasConditions = $true; TitleFilters = @(); TitleOperators = @(); RuleIdFilters = @(); SeverityConditions = @([PSCustomObject]@{ Values = @('High'); Operator = 'NotEquals' }) }
+        Test-AutomationRuleIncidentMatch -AutomationRule $ne -IncidentTitle 'x' -IncidentRuleIds @() -IncidentSeverity 'High' | Should -Be $false
+        Test-AutomationRuleIncidentMatch -AutomationRule $ne -IncidentTitle 'x' -IncidentRuleIds @() -IncidentSeverity 'Medium' | Should -Be $true
+        Test-AutomationRuleIncidentMatch -AutomationRule $ne -IncidentTitle 'x' -IncidentRuleIds @() -IncidentSeverity '' | Should -Be $true
+
+        $both = [PSCustomObject]@{ HasConditions = $true; TitleFilters = @('Suspicious'); TitleOperators = @('Contains'); RuleIdFilters = @(); SeverityConditions = @([PSCustomObject]@{ Values = @('High'); Operator = 'Equals' }) }
+        Test-AutomationRuleIncidentMatch -AutomationRule $both -IncidentTitle 'Suspicious login' -IncidentRuleIds @() -IncidentSeverity 'High' | Should -Be $true
+        Test-AutomationRuleIncidentMatch -AutomationRule $both -IncidentTitle 'Suspicious login' -IncidentRuleIds @() -IncidentSeverity 'Low' | Should -Be $false
     }
 
     It 'fails a title group when the incident has no title' {
@@ -4555,6 +4638,11 @@ Describe 'Collection cache' {
         (Get-CollectionCacheKey -SubscriptionId 'sub' -ResourceGroup 'rg' -WorkspaceName 'ws' -IncludeDefenderXDR $true) | Should -Not -Be $k1
         (Get-CollectionCacheKey -SubscriptionId 'sub' -ResourceGroup 'rg' -WorkspaceName 'ws' -IncludeDetectionAnalyzer $true) | Should -Not -Be $k1
         (Get-CollectionCacheKey -SubscriptionId 'sub' -ResourceGroup 'rg' -WorkspaceName 'other') | Should -Not -Be $k1
+        (Get-CollectionCacheKey -SubscriptionId 'sub' -ResourceGroup 'rg' -WorkspaceName 'ws' -PricePerGB 4.61) | Should -Not -Be $k1
+        (Get-CollectionCacheKey -SubscriptionId 'sub' -ResourceGroup 'rg' -WorkspaceName 'ws' -BasicPricePerGB 1) | Should -Not -Be $k1
+        (Get-CollectionCacheKey -SubscriptionId 'sub' -ResourceGroup 'rg' -WorkspaceName 'ws' -LakePricePerGB 0.1) | Should -Not -Be $k1
+        (Get-CollectionCacheKey -SubscriptionId 'sub' -ResourceGroup 'rg' -WorkspaceName 'ws' -ModuleVersion '0.8.0') | Should -Not -Be $k1
+        (Get-CollectionCacheKey -SubscriptionId 'sub' -ResourceGroup 'rg' -WorkspaceName 'ws' -PricePerGB 5.59 -ModuleVersion '') | Should -Be $k1
     }
 
     It 'resolves the default cache path under the local app data folder' {
@@ -4608,17 +4696,27 @@ Describe 'Collection cache' {
 }
 
 Describe 'Resolve-ReportOutputPath' {
-    It 'creates a missing directory and returns a timestamped file inside it' {
-        $dir = Join-Path $TestDrive 'reports-new'
+    It 'returns a timestamped file inside an existing directory' {
+        $dir = Join-Path $TestDrive 'reports-existing'
+        New-Item -ItemType Directory -Path $dir | Out-Null
         $p = Resolve-ReportOutputPath -OutputPath $dir -Format 'json' -Timestamp '2026-09-06_1200'
-        Test-Path $dir -PathType Container | Should -Be $true
         $p | Should -Be (Join-Path $dir 'LogHorizon_Report_2026-09-06_1200.json')
     }
 
-    It 'treats a trailing separator as a directory and maps md aliases' {
-        $p = Resolve-ReportOutputPath -OutputPath ((Join-Path $TestDrive 'slash') + '\') -Format 'markdown' -Timestamp 'T'
-        $p | Should -Match 'LogHorizon_Report_T\.md$'
+    It 'treats a trailing separator as a directory, creates it and maps md aliases' {
+        $dir = Join-Path $TestDrive 'slash'
+        $p = Resolve-ReportOutputPath -OutputPath ($dir + '\') -Format 'markdown' -Timestamp 'T'
+        Test-Path $dir -PathType Container | Should -Be $true
+        $p | Should -Be (Join-Path $dir 'LogHorizon_Report_T.md')
         (Resolve-ReportOutputPath -OutputPath (Join-Path $TestDrive 'x/') -Format 'md' -Timestamp 'T') | Should -Match '\.md$'
+    }
+
+    It 'treats a non-existing extensionless path as a file and appends the format extension' {
+        $p = Resolve-ReportOutputPath -OutputPath (Join-Path $TestDrive 'out\report') -Format 'html'
+        $p | Should -Be (Join-Path $TestDrive 'out\report.html')
+        Test-Path (Join-Path $TestDrive 'out') -PathType Container | Should -Be $true
+        Test-Path (Join-Path $TestDrive 'out\report') | Should -Be $false
+        (Resolve-ReportOutputPath -OutputPath (Join-Path $TestDrive 'out\notes') -Format 'markdown') | Should -Match 'notes\.md$'
     }
 
     It 'creates the parent of an explicit file path and returns it unchanged' {
@@ -5035,6 +5133,16 @@ Describe 'Collector endpoints and API versions' {
         $null = Get-TableRetention -Context $script:epCtx
         Should -Invoke Invoke-AzRestWithRetry -Times 1 -ParameterFilter { $Uri -eq 'https://management.usgovcloudapi.net/subscriptions/s/resourceGroups/rg/providers/Microsoft.OperationalInsights/workspaces/ws?api-version=2025-07-01' }
         Should -Invoke Invoke-AzRestWithRetry -Times 1 -ParameterFilter { $Uri -eq 'https://management.usgovcloudapi.net/subscriptions/s/resourceGroups/rg/providers/Microsoft.OperationalInsights/workspaces/ws/tables?api-version=2025-07-01' }
+    }
+
+    It 'Get-TableRetention reuses the workspace facts from Connect-Sentinel instead of fetching the workspace again' {
+        Mock Invoke-AzRestWithRetry { [PSCustomObject]@{ value = @() } }
+        $ctx = [PSCustomObject]@{ ArmToken = 'tok'; ResourceId = $script:epCtx.ResourceId; Endpoints = $script:epCtx.Endpoints; WorkspaceRetentionDays = 120; DefaultDataCollectionRuleResourceId = '/dcr/ws' }
+        $r = Get-TableRetention -Context $ctx
+        $r.WorkspaceRetentionDays | Should -Be 120
+        $r.WorkspaceDefaultDcrId | Should -Be '/dcr/ws'
+        Should -Invoke Invoke-AzRestWithRetry -Times 1
+        Should -Invoke Invoke-AzRestWithRetry -Times 1 -ParameterFilter { $Uri -like '*/tables?*' }
     }
 
     It 'Get-TableUsage queries the environment Log Analytics endpoint' {

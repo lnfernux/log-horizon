@@ -54,6 +54,8 @@
             if ($DefenderXDR) {
                 $xdrStreamed = @($Analysis.TableAnalysis | Where-Object IsXDRStreaming)
                 $export.defenderXDR = [ordered]@{
+                    fetched          = $(if ($DefenderXDR.PSObject.Properties.Name -contains 'Fetched') { [bool]$DefenderXDR.Fetched } else { $true })
+                    fetchError       = $(if ($DefenderXDR.PSObject.Properties.Name -contains 'FetchError') { $DefenderXDR.FetchError } else { $null })
                     totalXDRRules    = $DefenderXDR.TotalXDRRules
                     xdrTableCoverage = $DefenderXDR.XDRTableCoverage
                     knownXDRTables   = $DefenderXDR.KnownXDRTables
@@ -125,9 +127,10 @@
 function Resolve-ReportOutputPath {
     <#
     .SYNOPSIS
-        Turns the user-supplied -OutputPath into a concrete file path. A directory
-        (existing, trailing separator, or extensionless) gets a timestamped file
-        name and is created when missing; a file path gets its parent created.
+        Turns the user-supplied -OutputPath into a concrete file path. An existing
+        directory or a path ending in a separator gets a timestamped file name; a
+        file path without an extension gets the format's extension; missing parent
+        directories are created.
     #>
     [CmdletBinding()]
     param(
@@ -139,9 +142,7 @@ function Resolve-ReportOutputPath {
     $resolved = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($OutputPath)
     $ext = if ($Format -in 'markdown', 'md') { 'md' } else { $Format.ToLower() }
     $endsWithSeparator = $OutputPath.TrimEnd() -match '[\\/]$'
-    $isDirectory = (Test-Path -LiteralPath $resolved -PathType Container) -or
-                   $endsWithSeparator -or
-                   [string]::IsNullOrEmpty([IO.Path]::GetExtension($resolved))
+    $isDirectory = (Test-Path -LiteralPath $resolved -PathType Container) -or $endsWithSeparator
 
     if ($isDirectory) {
         if (-not (Test-Path -LiteralPath $resolved -PathType Container)) {
@@ -150,6 +151,7 @@ function Resolve-ReportOutputPath {
         return (Join-Path $resolved "LogHorizon_Report_${Timestamp}.$ext")
     }
 
+    if ([string]::IsNullOrEmpty([IO.Path]::GetExtension($resolved))) { $resolved = "$resolved.$ext" }
     $parent = Split-Path -Path $resolved -Parent
     if (-not (Test-Path -Path $parent -IsValid)) { throw "Invalid output path: $OutputPath" }
     if ($parent -and -not (Test-Path -LiteralPath $parent -PathType Container)) {

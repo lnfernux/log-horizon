@@ -97,7 +97,9 @@ function Invoke-LogHorizon {
     try {
         $cacheKey = Get-CollectionCacheKey -SubscriptionId $SubscriptionId -ResourceGroup $ResourceGroup -WorkspaceName $WorkspaceName `
                                            -DaysBack $DaysBack -DetectionLookbackDays $DetectionLookbackDays `
-                                           -IncludeDefenderXDR ([bool]$IncludeDefenderXDR) -IncludeDetectionAnalyzer ([bool]$IncludeDetectionAnalyzer)
+                                           -IncludeDefenderXDR ([bool]$IncludeDefenderXDR) -IncludeDetectionAnalyzer ([bool]$IncludeDetectionAnalyzer) `
+                                           -PricePerGB $PricePerGB -BasicPricePerGB $BasicPricePerGB -LakePricePerGB $LakePricePerGB `
+                                           -ModuleVersion $moduleVersion
         $collectResult = $null
         $collectWarnings = [System.Collections.Generic.List[string]]::new()
 
@@ -170,8 +172,10 @@ function Invoke-LogHorizon {
 
             foreach ($item in @($spinnerOutput)) {
                 if ($item -is [System.Management.Automation.WarningRecord]) { $collectWarnings.Add($item.Message) }
-                elseif ($null -ne $item) { $collectResult = $item }
+                elseif ($null -ne $item -and $item.PSObject.Properties.Name -contains 'TableUsage') { $collectResult = $item }
+                elseif ($null -ne $item) { Write-Verbose "Ignoring stray collector output of type $($item.GetType().Name)." }
             }
+            if (-not $collectResult) { throw 'Data collection produced no result object; see warnings above.' }
 
             if (-not $NoCache) {
                 try {

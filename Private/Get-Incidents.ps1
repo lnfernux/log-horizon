@@ -55,7 +55,6 @@ function Get-Incidents {
             LastModifiedTimeUtc        = $modified
             RelatedAnalyticRuleIds     = @(Get-NormalizedArray -Value $props.relatedAnalyticRuleIds)
             RelatedAnalyticRuleNames   = @(Get-NormalizedArray -Value $props.relatedAnalyticRuleNames)
-            Owner                      = if ($props.owner) { $props.owner.userPrincipalName } else { $null }
             Etag                       = $incident.etag
         }
     }

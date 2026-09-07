@@ -299,7 +299,8 @@ function Invoke-Analysis {
             }
         }
 
-        # 12. Deprecated or legacy source still ingesting
+        # 12. Deprecated or legacy source still ingesting. Informational: migrating moves the
+        #     ingestion to the replacement table rather than removing it, so no savings are claimed.
         if ($t.Status -in @('deprecated', 'legacy') -and $t.MonthlyGB -gt 0) {
             $replacement = if (@($t.ReplacedBy).Count -gt 0) { "Replacement table(s): $(@($t.ReplacedBy) -join ', '). " } else { 'No direct replacement table is documented. ' }
             $verb = if ($t.Status -eq 'deprecated') { 'is deprecated' } else { 'uses a legacy collection path' }
@@ -308,9 +309,9 @@ function Invoke-Analysis {
                 Type          = 'DeprecatedSource'
                 TableName     = $t.TableName
                 Title         = "$($t.TableName) $verb"
-                Detail        = "Ingesting $($t.MonthlyGB) GB/mo into a table whose connector $verb. " + $replacement +
+                Detail        = "Ingesting $($t.MonthlyGB) GB/mo (~`$$($t.EstMonthlyCostUSD)/mo) into a table whose connector $verb. " + $replacement +
                                 'Migrate detections to the replacement, then retire the old connector to avoid paying for both.'
-                EstSavingsUSD = $t.EstMonthlyCostUSD
+                EstSavingsUSD = 0
                 CurrentCost   = $t.EstMonthlyCostUSD
             })
         }
@@ -902,7 +903,7 @@ function Get-DetectionAnalyzerData {
             # Automation rule condition matching: fallback attribution, and the source of linked rule names
             if ($enabledAutoCloseRules.Count -gt 0) {
                 $matched = @($enabledAutoCloseRules | Where-Object {
-                    Test-AutomationRuleIncidentMatch -AutomationRule $_ -IncidentTitle $inc.Title -IncidentRuleIds $inc.RelatedAnalyticRuleIds
+                    Test-AutomationRuleIncidentMatch -AutomationRule $_ -IncidentTitle $inc.Title -IncidentRuleIds $inc.RelatedAnalyticRuleIds -IncidentSeverity "$($inc.Severity)"
                 })
                 if ($matched.Count -gt 0) {
                     $isAutoClose = $true
@@ -1188,25 +1189,38 @@ function Test-AutomationRuleIncidentMatch {
     .SYNOPSIS
         Decides whether an automation rule's modelled conditions apply to an incident.
     .DESCRIPTION
-        Sentinel ANDs all conditions on a rule, so when both an analytic-rule-id group
-        and a title group are present both must match. A rule whose conditions are
-        not modelled here (severity, status, tactics, entities) is treated as a match,
-        the same as a rule with no conditions at all.
+        Sentinel ANDs all conditions on a rule, so analytic-rule-id, title and severity
+        groups must all match when present. A rule whose conditions are not modelled
+        here (status, tactics, entities) is treated as a match, the same as a rule with
+        no conditions at all.
     #>
     [CmdletBinding()]
     param(
         [PSCustomObject]$AutomationRule,
         [string]$IncidentTitle,
-        [string[]]$IncidentRuleIds
+        [string[]]$IncidentRuleIds,
+        [string]$IncidentSeverity
     )
 
     if (-not $AutomationRule.HasConditions) { return $true }
 
     $ruleIdFilters = @($AutomationRule.RuleIdFilters | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
     $titleConditions = @(Get-AutomationTitleConditions -AutomationRule $AutomationRule)
+    $severityConditions = @()
+    if ($AutomationRule.PSObject.Properties.Name -contains 'SeverityConditions') {
+        $severityConditions = @($AutomationRule.SeverityConditions | Where-Object { $_ -and @($_.Values).Count -gt 0 })
+    }
 
-    # Only unmodelled conditions (severity, status, tactics ...) - cannot exclude, so it applies
-    if ($ruleIdFilters.Count -eq 0 -and $titleConditions.Count -eq 0) { return $true }
+    # Only unmodelled conditions (status, tactics, entities ...) - cannot exclude, so it applies
+    if ($ruleIdFilters.Count -eq 0 -and $titleConditions.Count -eq 0 -and $severityConditions.Count -eq 0) { return $true }
+
+    foreach ($sc in $severityConditions) {
+        # Unknown incident severity cannot satisfy an Equals condition and cannot be excluded by NotEquals
+        if ([string]::IsNullOrWhiteSpace($IncidentSeverity)) { if ("$($sc.Operator)" -ne 'NotEquals') { return $false } else { continue } }
+        $inSet = $IncidentSeverity -in @($sc.Values)
+        if ("$($sc.Operator)" -eq 'NotEquals') { if ($inSet) { return $false } }
+        elseif (-not $inSet) { return $false }
+    }
 
     if ($ruleIdFilters.Count -gt 0) {
         $idMatch = $false

@@ -16,11 +16,18 @@ function Get-TableRetention {
     $headers = @{ Authorization = "Bearer $($Context.ArmToken)" }
     $arm = Get-LogHorizonEndpoint -Name Arm -Context $Context
 
-    # Workspace-level default retention and the workspace transformation DCR (if any)
-    $wsUri = "$arm$($Context.ResourceId)?api-version=2025-07-01"
-    $wsResponse = Invoke-AzRestWithRetry -Uri $wsUri -Headers $headers
-    $workspaceRetention = [int]$wsResponse.properties.retentionInDays
-    $defaultDcrId = if ($wsResponse.properties.PSObject.Properties.Name -contains 'defaultDataCollectionRuleResourceId') { $wsResponse.properties.defaultDataCollectionRuleResourceId } else { $null }
+    # Workspace-level default retention and the workspace transformation DCR. Connect-Sentinel already
+    # read the workspace resource; only fetch it again when the context does not carry those facts.
+    if ($Context.PSObject.Properties.Name -contains 'WorkspaceRetentionDays' -and $null -ne $Context.WorkspaceRetentionDays) {
+        $workspaceRetention = [int]$Context.WorkspaceRetentionDays
+        $defaultDcrId = if ($Context.PSObject.Properties.Name -contains 'DefaultDataCollectionRuleResourceId') { $Context.DefaultDataCollectionRuleResourceId } else { $null }
+    }
+    else {
+        $wsUri = "$arm$($Context.ResourceId)?api-version=2025-07-01"
+        $wsResponse = Invoke-AzRestWithRetry -Uri $wsUri -Headers $headers
+        $workspaceRetention = [int]$wsResponse.properties.retentionInDays
+        $defaultDcrId = if ($wsResponse.properties.PSObject.Properties.Name -contains 'defaultDataCollectionRuleResourceId') { $wsResponse.properties.defaultDataCollectionRuleResourceId } else { $null }
+    }
 
     # Per-table retention and plan. retentionInDays / totalRetentionInDays are always the
     # effective values; the *AsDefault booleans say whether they are inherited.

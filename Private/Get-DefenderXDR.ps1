@@ -103,6 +103,7 @@ function Get-DefenderXDR {
 
     # Fallback: if delegated Graph auth/request did not fetch results, try Az token + raw REST.
     # This keeps delegated Graph as the preferred path while still supporting non-interactive/CI environments.
+    $fetchError = $null
     if (-not $fetched) {
         $graphToken = $null
         try {
@@ -110,8 +111,9 @@ function Get-DefenderXDR {
             $graphToken = Resolve-AzToken -ResourceUrl $graphBase -TenantId $tenantId
         }
         catch {
-            Write-Warning 'Cannot acquire Microsoft Graph token. Defender XDR analysis will be skipped.'
-            return $null
+            $fetchError = "Cannot acquire Microsoft Graph token: $($_.Exception.Message)"
+            Write-Warning "$fetchError. Defender XDR custom detection coverage is unavailable for this run."
+            return ConvertTo-DefenderXDRResult -Fetched $false -FetchError $fetchError
         }
 
         $headers = @{
@@ -147,13 +149,9 @@ function Get-DefenderXDR {
 
     if (-not $fetched) {
         $missing = if (-not $mgCmd) { ' Install Microsoft.Graph.Authentication for delegated access (CustomDetection.Read.All).' } else { '' }
-        Write-Warning "Could not fetch Defender custom detection rules from Graph API (beta/v1.0).$missing"
-        return [PSCustomObject]@{
-            CustomRules      = @()
-            TotalXDRRules    = 0
-            XDRTableCoverage = @{}
-            KnownXDRTables   = @($script:KnownXDRTables)
-        }
+        $fetchError = "Could not fetch Defender custom detection rules from Graph API (beta/v1.0).$missing"
+        Write-Warning $fetchError
+        return ConvertTo-DefenderXDRResult -Fetched $false -FetchError $fetchError
     }
 
     # Parse enabled XDR rule queries for table references
@@ -180,10 +178,29 @@ function Get-DefenderXDR {
         }
     }
 
+    ConvertTo-DefenderXDRResult -Fetched $true -CustomRules @($customRules) -XDRTableCoverage $xdrTableCoverage
+}
+
+function ConvertTo-DefenderXDRResult {
+    <#
+    .SYNOPSIS
+        The one shape every Get-DefenderXDR path returns, so callers never see $null.
+        Fetched=$false with FetchError tells the run and the exports that the flag had no data.
+    #>
+    [CmdletBinding()]
+    param(
+        [bool]$Fetched,
+        [string]$FetchError,
+        [array]$CustomRules = @(),
+        [hashtable]$XDRTableCoverage = @{}
+    )
+
     [PSCustomObject]@{
-        CustomRules      = @($customRules)
-        TotalXDRRules    = $customRules.Count
-        XDRTableCoverage = $xdrTableCoverage
+        Fetched          = $Fetched
+        FetchError       = $FetchError
+        CustomRules      = @($CustomRules)
+        TotalXDRRules    = @($CustomRules).Count
+        XDRTableCoverage = $XDRTableCoverage
         KnownXDRTables   = @($script:KnownXDRTables)
     }
 }

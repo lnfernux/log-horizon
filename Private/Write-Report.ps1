@@ -233,7 +233,12 @@ function Write-Dashboard {
         $tierDetail = if ($tierParts.Count -gt 0) { " ($($tierParts -join ', '))" } else { '' }
         $notStreamedCount = $Analysis.XdrChecker.Summary.NotStreamedCount
         $notStreamedPart = if ($notStreamedCount -gt 0) { " | [dim]$notStreamedCount not streamed[/]" } else { '' }
-        $overviewLines += "[bold]Defender XDR:[/]     [deepskyblue1]$($DefenderXDR.TotalXDRRules) custom detections[/]${cdrCorrelated} | [dim]$xdrStreamingCount streaming tables${tierDetail}[/]${notStreamedPart}"
+        $rulesPart = if ($DefenderXDR.PSObject.Properties.Name -contains 'Fetched' -and -not $DefenderXDR.Fetched) {
+            '[yellow]custom detections unavailable (Graph fetch failed)[/]'
+        } else {
+            "[deepskyblue1]$($DefenderXDR.TotalXDRRules) custom detections[/]${cdrCorrelated}"
+        }
+        $overviewLines += "[bold]Defender XDR:[/]     ${rulesPart} | [dim]$xdrStreamingCount streaming tables${tierDetail}[/]${notStreamedPart}"
     }
 
     $overviewText = $overviewLines -join "`n"

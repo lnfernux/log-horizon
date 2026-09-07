@@ -436,10 +436,17 @@ function Get-LiveTuningAnalysis {
         $monthlyGB = if ($tableEntry) { $tableEntry.MonthlyGB } else { 0 }
         $monthlyCost = if ($tableEntry) { $tableEntry.EstMonthlyCostUSD } else { 0 }
 
-        # Generate filter KQL (condition-only for portal)
+        # Generate filter KQL (condition-only for portal); predicates on columns the table does not have are dropped
         $filterKql = $null
-        if ($conditions.Count -gt 0) {
-            $uniqueConditions = @($conditions | Select-Object -Unique | Select-Object -First 10)
+        $droppedConditions = @()
+        $usableConditions = @($conditions | Select-Object -Unique)
+        if ($schemaColumns.Count -gt 0) {
+            $split = Select-KqlConditionInSchema -Conditions $usableConditions -SchemaColumns $schemaColumns
+            $usableConditions = @($split.Kept)
+            $droppedConditions = @($split.Dropped)
+        }
+        if ($usableConditions.Count -gt 0) {
+            $uniqueConditions = @($usableConditions | Select-Object -First 10)
             $filterKql = ($uniqueConditions | ForEach-Object { "($($_))" }) -join "`n    or "
         }
 
@@ -482,7 +489,8 @@ function Get-LiveTuningAnalysis {
             SchemaColumnCount  = $schemaColumns.Count
             UnusedFieldCount   = $unusedFields.Count
             RuleCount          = $ruleDetails.Count
-            ConditionCount     = $conditions.Count
+            ConditionCount     = $usableConditions.Count
+            DroppedConditions  = $droppedConditions
             FilterKql          = $filterKql
             ProjectKql         = $projectKql
             CombinedKql        = $combinedKql
@@ -593,11 +601,19 @@ function Get-SplitKql {
         foreach ($d in $droppedFields) { [void]$allFields.Remove($d) }
     }
 
-    # 4. Generate KQL (condition-only - the Sentinel portal prepends "source | where" implicitly)
+    # 4. Generate KQL (condition-only - the Sentinel portal prepends "source | where" implicitly).
+    #    Predicates on columns the table does not have would fail in the portal, so they are dropped.
     $splitKql = $null
     $projectKql = $null
     $source = 'none'
-    $uniqueConditions = @($ruleConditions | Select-Object -Unique | Select-Object -First 10)
+    $droppedConditions = @()
+    $usableConditions = @($ruleConditions | Select-Object -Unique)
+    if ($SchemaColumns -and $SchemaColumns.Count -gt 0) {
+        $split = Select-KqlConditionInSchema -Conditions $usableConditions -SchemaColumns $SchemaColumns
+        $usableConditions = @($split.Kept)
+        $droppedConditions = @($split.Dropped)
+    }
+    $uniqueConditions = @($usableConditions | Select-Object -First 10)
 
     # Prefer knowledge-base split hint if available (these are curated)
     if ($splitHint) {
@@ -641,12 +657,43 @@ function Get-SplitKql {
         FallbackFields  = $fallbackFields
         AllFields       = @($allFields | Sort-Object)
         DroppedFields   = $droppedFields
+        DroppedConditions = $droppedConditions
         RuleCount       = $tableRulesAll.Count
-        ConditionCount  = $ruleConditions.Count
+        ConditionCount  = $usableConditions.Count
         Source          = $source
         FallbackSource  = $fallbackSource
         Description     = if ($hvEntry) { $hvEntry.description } else { $null }
     }
+}
+
+function Select-KqlConditionInSchema {
+    <#
+    .SYNOPSIS
+        Splits where-predicates into Kept (every referenced column exists in the
+        table schema) and Dropped (at least one column is not in the schema, so the
+        predicate came from a joined table, a let variable or a renamed field).
+    #>
+    [CmdletBinding()]
+    param(
+        [string[]]$Conditions = @(),
+        [string[]]$SchemaColumns = @()
+    )
+
+    $kept = [System.Collections.Generic.List[string]]::new()
+    $dropped = [System.Collections.Generic.List[string]]::new()
+    if (-not $SchemaColumns -or $SchemaColumns.Count -eq 0) {
+        foreach ($c in $Conditions) { $kept.Add($c) }
+        return [PSCustomObject]@{ Kept = @($kept); Dropped = @($dropped) }
+    }
+
+    $schemaSet = [System.Collections.Generic.HashSet[string]]::new([string[]]$SchemaColumns, [StringComparer]::OrdinalIgnoreCase)
+    foreach ($c in $Conditions) {
+        if ([string]::IsNullOrWhiteSpace($c)) { continue }
+        $fields = @(Get-FieldsFromKql -Kql "source | where $c")
+        $missing = @($fields | Where-Object { -not $schemaSet.Contains($_) })
+        if ($missing.Count -eq 0) { $kept.Add($c) } else { $dropped.Add($c) }
+    }
+    [PSCustomObject]@{ Kept = @($kept); Dropped = @($dropped) }
 }
 
 function Get-KqlWhereCondition {

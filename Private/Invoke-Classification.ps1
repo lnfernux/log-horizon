@@ -176,13 +176,18 @@ function ConvertTo-ValidClassificationEntry {
 
     $tier = "$($Entry.recommendedTier)".Trim().ToLowerInvariant()
     if ([string]::IsNullOrWhiteSpace($tier)) { $tier = 'analytics' }
+    elseif ($tier -in 'datalake', 'auxiliary', 'lake', 'data lake') { $tier = 'datalake' }
+    elseif ($tier -ne 'analytics') {
+        Write-Warning "Custom classification '$name': recommendedTier must be analytics or datalake (got '$($Entry.recommendedTier)'); using analytics."
+        $tier = 'analytics'
+    }
 
     $retention = 90
     $parsed = 0
     if ($null -ne $Entry.recommendedRetentionDays -and [int]::TryParse("$($Entry.recommendedRetentionDays)", [ref]$parsed) -and $parsed -gt 0) { $retention = $parsed }
 
-    $isFree = $false
-    if ($null -ne $Entry.isFree) { $isFree = [bool]$Entry.isFree }
+    $isFree = ConvertTo-ClassificationBoolean -Value $Entry.isFree
+    if ($null -eq $isFree) { $isFree = $false }
 
     $normalized = [ordered]@{
         tableName                = $name
@@ -203,10 +208,28 @@ function ConvertTo-ValidClassificationEntry {
     elseif (-not [string]::IsNullOrWhiteSpace("$($Entry.status)")) { Write-Warning "Custom classification '$name': status must be deprecated or legacy (got '$($Entry.status)'); ignoring." }
     $replacedBy = @(@($Entry.replacedBy) | Where-Object { -not [string]::IsNullOrWhiteSpace("$_") } | ForEach-Object { "$_" })
     if ($replacedBy.Count -gt 0) { $normalized.replacedBy = $replacedBy }
-    if ($null -ne $Entry.platform) { $normalized.platform = [bool]$Entry.platform }
-    if ($null -ne $Entry.xdrStreamable) { $normalized.xdrStreamable = [bool]$Entry.xdrStreamable }
+    $platform = ConvertTo-ClassificationBoolean -Value $Entry.platform
+    if ($null -ne $platform) { $normalized.platform = $platform }
+    $xdrStreamable = ConvertTo-ClassificationBoolean -Value $Entry.xdrStreamable
+    if ($null -ne $xdrStreamable) { $normalized.xdrStreamable = $xdrStreamable }
 
     [PSCustomObject]$normalized
+}
+
+function ConvertTo-ClassificationBoolean {
+    <#
+    .SYNOPSIS
+        Nullable boolean from a JSON value: real booleans pass through, the strings
+        true/false parse, anything else (including "false" cast the wrong way) is $null.
+    #>
+    [CmdletBinding()]
+    param([object]$Value)
+
+    if ($null -eq $Value) { return $null }
+    if ($Value -is [bool]) { return $Value }
+    $parsed = $false
+    if ([bool]::TryParse("$Value".Trim(), [ref]$parsed)) { return $parsed }
+    $null
 }
 
 function Get-ClassificationEntryStatus {
