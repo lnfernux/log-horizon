@@ -1,0 +1,61 @@
+name: CI & Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Pester Tests & Manifest Validation
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    defaults:
+      run:
+        shell: pwsh
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install PowerShell Modules
+        run: |
+          Set-PSRepository PSGallery -InstallationPolicy Trusted
+          Install-Module -Name Pester -RequiredVersion 5.7.1 -Force -SkipPublisherCheck -Scope CurrentUser
+          Install-Module -Name PwshSpectreConsole -RequiredVersion 2.6.3 -Force -SkipPublisherCheck -Scope CurrentUser
+          Install-Module -Name Az.Accounts -Force -SkipPublisherCheck -Scope CurrentUser
+
+      - name: Test Module Manifest
+        run: |
+          $manifestPath = Join-Path $PWD 'LogHorizon.psd1'
+          Test-ModuleManifest -Path $manifestPath -ErrorAction Stop
+
+      - name: Run Pester Tests
+        run: |
+          Import-Module Pester -RequiredVersion 5.7.1 -Force
+          Import-Module PwshSpectreConsole -RequiredVersion 2.6.3 -Force
+          Import-Module Az.Accounts -Force
+
+          $config = New-PesterConfiguration
+          $config.Run.Path = './Tests/LogHorizon.Tests.ps1'
+          $config.Run.PassThru = $true
+          $config.Output.Verbosity = 'Detailed'
+
+          $result = Invoke-Pester -Configuration $config
+          if ($result.FailedCount -gt 0) {
+            Write-Error "Pester tests failed: $($result.FailedCount) test(s) failed out of $($result.TotalCount)."
+            exit 1
+          }
+          Write-Host "All $($result.TotalCount) tests passed successfully!"
