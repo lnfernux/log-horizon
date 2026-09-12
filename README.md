@@ -20,6 +20,7 @@ I've had to answer *"what are we actually getting out of these logs?"* or *"what
 2. [Update: Log Horizon v0.5.0](https://infernux.no/blog/loghorizon-update1/)
 3. [Building a practical log baseline and how Log Horizon helps you do that](https://infernux.no/blog/buildingapracticallogbaseline/)
 4. [How to use Log Horizon](https://infernux.no/blog/loghorizon-howtouse/)
+5. [Log Horizon 0.9.0](https://infernux.no/blog/loghorizon-0-9-0/)
 
 ## Features
 
