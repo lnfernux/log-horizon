@@ -52,7 +52,7 @@ function Get-CollectionCachePath {
 
     if ([string]::IsNullOrWhiteSpace($CachePath)) {
         $base = if ($env:LOCALAPPDATA) { $env:LOCALAPPDATA } elseif ($env:XDG_CACHE_HOME) { $env:XDG_CACHE_HOME } else { Join-Path $HOME '.cache' }
-        $CachePath = Join-Path $base 'LogHorizon\cache'
+        $CachePath = Join-Path (Join-Path $base 'LogHorizon') 'cache'
     }
     Join-Path $CachePath "collection-$Key.clixml"
 }

@@ -4719,7 +4719,8 @@ Describe 'Collection cache' {
         $p = Get-CollectionCachePath -Key 'abc'
         $p | Should -Match 'LogHorizon'
         $p | Should -Match 'collection-abc\.clixml$'
-        (Get-CollectionCachePath -Key 'abc' -CachePath 'C:\x') | Should -Be 'C:\x\collection-abc.clixml'
+        $custom = Join-Path ([System.IO.Path]::GetTempPath()) 'custom-cache'
+        (Get-CollectionCachePath -Key 'abc' -CachePath $custom) | Should -Be (Join-Path $custom 'collection-abc.clixml')
     }
 
     It 'round-trips a collection without persisting the context or any token' {
