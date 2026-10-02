@@ -9,18 +9,20 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 180
+    "recommendedRetentionDays": 180,
+    "sourceIds": ["log-horizon-custom-example"]
   },
   {
     "tableName": "AzureMetrics",
     "connector": "Azure Monitor",
     "classification": "primary",
-    "category": "Infrastructure Diag",
+    "category": "Infrastructure Diagnostics",
     "description": "Override: promoted to primary because we detect on Azure resource metrics in this environment",
     "keywords": ["metrics", "azure", "infrastructure", "monitoring"],
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": ["log-horizon-custom-example"]
   }
 ]

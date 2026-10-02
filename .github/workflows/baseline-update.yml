@@ -1,0 +1,140 @@
+name: Update bundled baseline
+
+on:
+  schedule:
+    - cron: "17 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: baseline-update
+  cancel-in-progress: false
+
+jobs:
+  update:
+    name: Open baseline update PR
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      BASELINE_REPOSITORY: lnfernux/log-baseline
+      UPDATE_BRANCH: dependencies/log-baseline
+    steps:
+      # Pushes and PRs made with GITHUB_TOKEN do not trigger the required CI checks.
+      - name: Create app token
+        id: app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ vars.LOG_BASELINE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.LOG_BASELINE_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+
+      - name: Checkout Log Horizon
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          token: ${{ steps.app-token.outputs.token }}
+
+      - name: Download latest approved baseline release
+        id: baseline
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          $release = gh api "repos/$env:BASELINE_REPOSITORY/releases/latest" | ConvertFrom-Json
+          $assets = @($release.assets | Where-Object { $_.name -match '^log-baseline-\d+\.\d+\.\d+\.zip$' })
+          if ($assets.Count -ne 1) {
+              throw "The latest log-baseline release must contain exactly one baseline ZIP asset, found $($assets.Count)."
+          }
+          $assetName = $assets[0].name
+          $releaseVersion = $assetName -replace '^log-baseline-' -replace '\.zip$'
+          if ($release.tag_name -cne "v$releaseVersion") {
+              throw "The latest release tag does not match asset version $releaseVersion."
+          }
+          "version=$releaseVersion" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+          $currentVersion = [version]'0.0.0'
+          $markerPath = Join-Path $PWD 'Data/baseline-version.json'
+          if (Test-Path -LiteralPath $markerPath) {
+              $currentVersion = [version](Get-Content -LiteralPath $markerPath -Raw | ConvertFrom-Json).dataVersion
+          }
+          if ([version]$releaseVersion -le $currentVersion) {
+              Write-Host "Bundled baseline $currentVersion is current."
+              "changed=false" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+              return
+          }
+
+          # An open update branch that already carries this release is left alone, including manual fixes.
+          if (git for-each-ref --format='%(refname)' "refs/remotes/origin/$env:UPDATE_BRANCH") {
+              $pendingVersion = (git show "origin/$($env:UPDATE_BRANCH):Data/baseline-version.json" | Out-String | ConvertFrom-Json).dataVersion
+              if ($pendingVersion -eq $releaseVersion) {
+                  Write-Host "Branch $env:UPDATE_BRANCH already carries baseline $releaseVersion."
+                  "changed=false" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+                  return
+              }
+          }
+
+          gh release download "v$releaseVersion" --repo $env:BASELINE_REPOSITORY --pattern $assetName --pattern "$assetName.sha256" --dir $env:RUNNER_TEMP --clobber
+          $archivePath = Join-Path $env:RUNNER_TEMP $assetName
+          $publishedHash = ((Get-Content -LiteralPath "$archivePath.sha256" -Raw).Trim() -split '\s+')[0]
+          if ((Get-FileHash -LiteralPath $archivePath -Algorithm SHA256).Hash -ne $publishedHash) {
+              throw "$assetName does not match its published SHA256 checksum."
+          }
+
+          ./scripts/Update-LogBaseline.ps1 -ArchivePath $archivePath -ExpectedVersion $releaseVersion
+          "changed=true" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+      # Tests run in CI on the pull request, so a breaking baseline still produces a reviewable PR.
+      - name: Create or refresh pull request
+        if: steps.baseline.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          APP_SLUG: ${{ steps.app-token.outputs.app-slug }}
+          BASELINE_VERSION: ${{ steps.baseline.outputs.version }}
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          if (-not (git status --porcelain -- Data)) {
+              Write-Host 'No baseline file changes detected.'
+              return
+          }
+
+          $botLogin = "$($env:APP_SLUG)[bot]"
+          $botId = gh api "users/$botLogin" --jq .id
+          git config user.name $botLogin
+          git config user.email "$botId+$botLogin@users.noreply.github.com"
+          git checkout -B $env:UPDATE_BRANCH
+          git add -- Data
+          git commit -m "Update bundled baseline to $env:BASELINE_VERSION"
+          git push --force-with-lease origin $env:UPDATE_BRANCH
+
+          $title = "Update bundled baseline to $env:BASELINE_VERSION"
+          $body = @(
+              '## Summary'
+              ''
+              ('Vendors the `v{0}` release of `{1}` into `Data/`. The module still makes no runtime baseline download.' -f $env:BASELINE_VERSION, $env:BASELINE_REPOSITORY)
+              ''
+              '## Validation'
+              ''
+              '- Release archive matches its published `.sha256` asset'
+              '- Manifest version, schema major version, source commit, and minimum Log Horizon version checked'
+              '- Every bundled data-file checksum verified'
+              '- CI runs the full Pester suite on this pull request'
+              ''
+              '## Review'
+              ''
+              '- [ ] README entry, connector, and category counts still match `Data/log-classifications.json`'
+          ) -join "`n"
+          $bodyPath = Join-Path $env:RUNNER_TEMP 'baseline-pr-body.md'
+          Set-Content -LiteralPath $bodyPath -Value $body -Encoding utf8
+
+          $existing = gh pr list --head $env:UPDATE_BRANCH --base main --state open --json number --jq '.[0].number'
+          if ($existing) {
+              gh pr edit $existing --title $title --body-file $bodyPath
+          }
+          else {
+              gh pr create --head $env:UPDATE_BRANCH --base main --title $title --body-file $bodyPath
+          }

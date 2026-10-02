@@ -26,7 +26,7 @@ I've had to answer *"what are we actually getting out of these logs?"* or *"what
 
 | Feature | Description |
 |---|---|
-| **Classification Engine** | 481-entry knowledge base covering 240+ connectors, 22 categories, with lifecycle status (deprecated/legacy plus replacement tables) and automatic heuristic fallback for unknown tables |
+| **Classification Engine** | 510-entry knowledge base covering 260+ connectors, 22 categories, with lifecycle status (deprecated/legacy plus replacement tables) and automatic heuristic fallback for unknown tables |
 | **Cost-Value Scoring** | Per-table cost tier vs detection tier matrix with combined assessment (High Value to Low Value), priced per observed plan (Analytics, Basic, Data Lake) |
 | **Recommendations** | 13 prioritised action types: data lake or Basic candidates, zero-detection tables, XDR streaming waste, ingest-time filtering, split candidates, plan usage, deprecated sources, retention shortfalls, XDR Checker and Detection Analyzer findings, each with savings estimates |
 | **Detection Mapping** | Maps analytics rules, hunting queries, and XDR detections to each table to spot coverage gaps |
@@ -258,7 +258,7 @@ The module connects to Azure and pulls data from the Log Analytics, Security Ins
 
 Every table gets classified through two passes:
 
-**First**, a direct lookup against the 481-entry knowledge base in `Data/log-classifications.json`. Each entry carries the connector name, primary/secondary classification, security category, MITRE data source mappings, a recommended pricing tier and retention, and optional lifecycle flags (deprecated/legacy with replacement tables, XDR streamability, platform).
+**First**, a direct lookup against the 510-entry knowledge base in `Data/log-classifications.json`. Each entry carries the connector name, primary/secondary classification, security category, MITRE data source mappings, a recommended pricing tier and retention, and optional lifecycle flags (deprecated/legacy with replacement tables, XDR streamability, platform).
 
 **If there's no match**, heuristic rules kick in, in this order:
 - Name contains a security token such as `Alert`, `Incident`, `Threat`, `Signin`, `Logon`, `Audit`, `Risk`, `Detection` (matched at PascalCase word starts) -> **primary**
@@ -359,7 +359,9 @@ The main menu offers these views:
 
 ## The classification database
 
-Sitting at `Data/log-classifications.json`. **481 entries**, **243 connectors**, **22 categories**.
+Sitting at `Data/log-classifications.json`. **510 entries**, **263 connectors**, **22 categories**.
+
+The canonical data is maintained in [log-baseline](https://github.com/lnfernux/log-baseline). A scheduled workflow checks for a newer log-baseline release once a day and opens a dependency pull request when it finds one. After review and merge, the versioned snapshot is bundled under `Data/`, so installations from PowerShell Gallery are self-contained and do not download baseline data at runtime. The bundled version, source commit, and checksums are recorded in `Data/baseline-version.json`. To vendor a release by hand, run `./scripts/Update-LogBaseline.ps1 -ArchivePath <log-baseline-x.y.z.zip>`.
 
 ### What's in each entry
 
@@ -384,34 +386,34 @@ Tables with a `status` show a badge in the TUI and the reports, and any that sti
 
 ### Primary vs secondary security data
 
-**Primary** (278 entries): the tables you're actually building detections on. Sign-in logs, security alerts, threat intel, audit trails, vulnerability findings, firewall hits, EDR telemetry.
+**Primary** (298 entries): the tables you're actually building detections on. Sign-in logs, security alerts, threat intel, audit trails, vulnerability findings, firewall hits, EDR telemetry.
 
-**Secondary** (203 entries): supporting stuff. Perf metrics, infrastructure diagnostics, network flow volumes, inventory snapshots, config baselines, health checks.
+**Secondary** (212 entries): supporting stuff. Perf metrics, infrastructure diagnostics, network flow volumes, inventory snapshots, config baselines, health checks.
 
 ### Categories at a glance
 
 | Category | Count | Examples |
 |---|---|---|
-| Identity & Access | 51 | `SigninLogs`, `MicrosoftServicePrincipalSignInLogs`, `OktaSSO` |
-| Network Security | 49 | `AZFWNetworkRule`, `NSPAccessLogs`, `DarktraceModelAlerts_CL` |
+| Identity & Access | 56 | `SigninLogs`, `MicrosoftServicePrincipalSignInLogs`, `OktaSSO` |
+| Network Security | 51 | `AZFWNetworkRule`, `NSPAccessLogs`, `DarktraceModelAlerts_CL` |
 | Cloud Control Plane | 37 | `AzureActivity`, `AZKVAuditLogs`, `GoogleWorkspaceReports` |
-| Network Flow | 36 | `NTANetAnalytics`, `CommonSecurityLog`, `AZFWFatFlow` |
+| Network Flow | 37 | `NTANetAnalytics`, `CommonSecurityLog`, `AZFWFatFlow` |
 | Endpoint Detection | 33 | `DeviceProcessEvents`, `CrowdStrikeAuditEvents`, `SentinelOneAlertsV2_CL` |
+| Email Security | 33 | `EmailEvents`, `CampaignInfo`, `Ttp_Url_CL` |
+| Security Alerts | 32 | `SecurityAlert`, `SentinelBehaviorInfo`, `DisruptionAndResponseEvents` |
 | Application Logs | 32 | `AppServiceHTTPLogs`, `AppServiceAuditLogs`, `DynatraceAttacksV2_CL` |
-| Email Security | 29 | `EmailEvents`, `CampaignInfo`, `Ttp_Url_CL` |
-| Security Alerts | 29 | `SecurityAlert`, `SentinelBehaviorInfo`, `DisruptionAndResponseEvents` |
 | Vulnerability Mgmt | 23 | `DeviceTvmSoftwareVulnerabilities`, `Rapid7InsightVMCloudVulnerabilities` |
-| Cloud Security | 20 | `EnrichedMicrosoft365AuditLogs`, `OAuthAppInfo`, `PowerAppsActivity` |
+| Cloud Security | 21 | `EnrichedMicrosoft365AuditLogs`, `OAuthAppInfo`, `PowerAppsActivity` |
 | Endpoint Telemetry | 18 | `DeviceInfo`, `Windows365NetworkLogs`, `SentinelOneAgents_CL` |
-| Posture Management | 17 | `ExposureGraphNodes`, `SecurityNestedRecommendation`, `ZTSMetadata` |
-| Data Security | 16 | `PurviewDataSensitivityLogs`, `DataSecurityEvents`, `PowerPlatformDlpActivity` |
+| Posture Management | 18 | `ExposureGraphNodes`, `SecurityNestedRecommendation`, `ZTSMetadata` |
+| Data Security | 17 | `PurviewDataSensitivityLogs`, `DataSecurityEvents`, `PowerPlatformDlpActivity` |
 | Data Platform | 16 | `SQLSecurityAuditEvents`, `CDBControlPlaneRequests`, `SnowflakeLogin_CL` |
+| Threat Intelligence | 15 | `ThreatIntelIndicators`, `ThreatIntelObjects`, `CybleVisionAlerts_CL` |
+| Infrastructure Diag | 14 | `AzureMetrics`, `AGWPerformanceLogs`, `ContainerAppSystemLogs` |
 | Platform Health | 14 | `SentinelHealth`, `Usage`, `SecurityCaseEvent` |
 | Container & K8s | 13 | `AKSAudit`, `CloudProcessEvents`, `GKEAudit` |
-| Infrastructure Diag | 13 | `AzureMetrics`, `AGWPerformanceLogs`, `ContainerAppSystemLogs` |
-| Threat Intelligence | 10 | `ThreatIntelIndicators`, `ThreatIntelObjects`, `CybleVisionAlerts_CL` |
-| Configuration Mgmt | 8 | `ConfigurationData`, `AVNMRuleCollectionChange` |
-| SAP Security | 7 | `ABAPAuditLog`, `SAPBTPAuditLog_CL`, `Onapsis_Defend_CL` |
+| Configuration Mgmt | 12 | `ConfigurationData`, `AVNMRuleCollectionChange` |
+| SAP Security | 8 | `ABAPAuditLog`, `SAPBTPAuditLog_CL`, `Onapsis_Defend_CL` |
 | Storage Access | 6 | `StorageBlobLogs`, `CloudStorageAggregatedEvents`, `AWSS3ServerAccess` |
 | IoT/OT Security | 4 | `RadiflowEvent`, `DragosAlerts_CL`, `Phosphorus_CL` |
 
@@ -530,7 +532,8 @@ Private/
   Write-Report.ps1           Spectre.Console TUI rendering
   Export-Report.ps1          JSON / Markdown / static HTML export with shared section renderer
 Data/
-  log-classifications.json              481-entry classification knowledge base
+  log-classifications.json              510-entry classification knowledge base
+  baseline-version.json                 Bundled log-baseline release version, source commit, and file checksums
   basic-plan-tables.json                Built-in tables that support the Basic plan (from the Azure Monitor feature matrix)
   auxiliary-plan-tables.json            Built-in tables that support the Auxiliary / Data Lake plan
   implicit-consumers.json               Non-KQL rule kinds to tables, plus platform tables
@@ -540,7 +543,7 @@ Data/
   custom-classifications-example.json   Example custom classification override file
   ReportTemplate.html                   Static HTML report template (pure-CSS tabs, zero JS, CSP meta)
 Tests/
-  LogHorizon.Tests.ps1       437 Pester v5 unit tests
+  LogHorizon.Tests.ps1       445 Pester v5 unit tests
 ```
 
 ### How the knowledge bases are generated
