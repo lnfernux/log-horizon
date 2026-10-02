@@ -1,0 +1,2 @@
+# Bundled baseline checksums are computed over LF bytes on every platform.
+Data/*.json text eol=lf

@@ -1392,6 +1392,99 @@ Describe 'Invoke-Analysis plan-aware pricing' {
     }
 }
 
+Describe 'Update-LogBaseline' {
+    BeforeAll {
+        $script:updateScript = Join-Path (Split-Path -Parent $PSScriptRoot) 'scripts' 'Update-LogBaseline.ps1'
+        $script:bundledNames = @(
+            'auxiliary-plan-tables.json', 'basic-plan-tables.json', 'custom-classifications-example.json', 'field-frequency-stats.json',
+            'high-value-fields.json', 'implicit-consumers.json', 'log-classifications.json'
+        )
+
+        function New-TestBaseline {
+            param(
+                [string]$Name,
+                [string]$DataVersion = '0.2.0',
+                [string]$SchemaVersion = '1.1.0',
+                [string]$Revision = ('a' * 40),
+                [string]$MinimumVersion = '0.9.0',
+                [string]$TamperFile,
+                [string]$OmitFile
+            )
+
+            $sourceRoot = Join-Path $TestDrive "$Name-source"
+            $sourceData = Join-Path $sourceRoot 'data'
+            New-Item -ItemType Directory -Path $sourceData -Force | Out-Null
+            $files = [ordered]@{}
+            foreach ($fileName in @($script:bundledNames) + 'sources.json') {
+                $path = Join-Path $sourceData $fileName
+                [System.IO.File]::WriteAllText($path, "[`"new $fileName`"]`n")
+                $files[$fileName] = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash
+            }
+            $manifest = [ordered]@{
+                schemaVersion = $SchemaVersion
+                dataVersion = $DataVersion
+                source = [ordered]@{ repository = 'https://github.com/lnfernux/log-baseline'; revision = $Revision; minimumLogHorizonVersion = $MinimumVersion }
+                files = $files
+            }
+            $manifest | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $sourceData 'manifest.json')
+            if ($TamperFile) { [System.IO.File]::WriteAllText((Join-Path $sourceData $TamperFile), '["tampered"]') }
+            if ($OmitFile) { Remove-Item -LiteralPath (Join-Path $sourceData $OmitFile) }
+
+            $archivePath = Join-Path $TestDrive "$Name.zip"
+            [System.IO.Compression.ZipFile]::CreateFromDirectory($sourceRoot, $archivePath)
+
+            $moduleRoot = Join-Path $TestDrive "$Name-module"
+            $moduleData = Join-Path $moduleRoot 'Data'
+            New-Item -ItemType Directory -Path $moduleData -Force | Out-Null
+            Set-Content -LiteralPath (Join-Path $moduleRoot 'LogHorizon.psd1') -Value "@{ ModuleVersion = '0.9.0' }"
+            foreach ($fileName in $script:bundledNames) {
+                [System.IO.File]::WriteAllText((Join-Path $moduleData $fileName), '["old"]')
+            }
+
+            [pscustomobject]@{ ArchivePath = $archivePath; ModuleRoot = $moduleRoot; DataPath = $moduleData }
+        }
+
+        function Get-TestDataSnapshot {
+            param([string]$DataPath)
+            Get-ChildItem -LiteralPath $DataPath -File | Sort-Object Name | ForEach-Object { '{0}={1}' -f $_.Name, (Get-FileHash -LiteralPath $_.FullName).Hash }
+        }
+
+        Add-Type -AssemblyName System.IO.Compression.FileSystem
+    }
+
+    It 'vendors only the runtime files and writes an LF version marker' {
+        $baseline = New-TestBaseline -Name 'valid'
+        & $script:updateScript -ArchivePath $baseline.ArchivePath -ExpectedVersion '0.2.0' -ModuleRoot $baseline.ModuleRoot 6>$null
+
+        Test-Path -LiteralPath (Join-Path $baseline.DataPath 'sources.json') | Should -BeFalse
+        $markerPath = Join-Path $baseline.DataPath 'baseline-version.json'
+        [System.IO.File]::ReadAllText($markerPath) | Should -Not -Match "`r"
+        $marker = Get-Content -LiteralPath $markerPath -Raw | ConvertFrom-Json
+        $marker.dataVersion | Should -Be '0.2.0'
+        $marker.schemaVersion | Should -Be '1.1.0'
+        $marker.sourceRevision | Should -Be ('a' * 40)
+        @($marker.files.PSObject.Properties.Name) | Should -Be $script:bundledNames
+        foreach ($fileName in $script:bundledNames) {
+            Get-Content -LiteralPath (Join-Path $baseline.DataPath $fileName) -Raw | Should -Match "new $([regex]::Escape($fileName))"
+        }
+    }
+
+    It 'rejects <Case> and leaves Data unchanged' -ForEach @(
+        @{ Case = 'a checksum mismatch'; Options = @{ TamperFile = 'log-classifications.json' }; Expected = '*Checksum mismatch*' }
+        @{ Case = 'a missing runtime file'; Options = @{ OmitFile = 'implicit-consumers.json' }; Expected = '*missing implicit-consumers.json*' }
+        @{ Case = 'an unsupported schema major version'; Options = @{ SchemaVersion = '2.0.0' }; Expected = '*schema 2.0.0 is not supported*' }
+        @{ Case = 'a newer minimum Log Horizon version'; Options = @{ MinimumVersion = '1.0.0' }; Expected = '*requires Log Horizon 1.0.0*' }
+        @{ Case = 'an unreleased source revision'; Options = @{ Revision = 'unreleased' }; Expected = '*not a commit SHA*' }
+        @{ Case = 'a version that differs from the release'; Options = @{ DataVersion = '0.3.0' }; Expected = '*does not match the expected release version*' }
+    ) {
+        $baseline = New-TestBaseline -Name ($Case -replace '\W', '-') @Options
+        $before = Get-TestDataSnapshot -DataPath $baseline.DataPath
+
+        { & $script:updateScript -ArchivePath $baseline.ArchivePath -ExpectedVersion '0.2.0' -ModuleRoot $baseline.ModuleRoot 6>$null } | Should -Throw $Expected
+        Get-TestDataSnapshot -DataPath $baseline.DataPath | Should -Be $before
+    }
+}
+
 Describe 'Classification database integrity' {
     BeforeAll {
         $dbPath = Join-Path $PSScriptRoot '..\Data\log-classifications.json'
@@ -1404,6 +1497,24 @@ Describe 'Classification database integrity' {
             'IoT/OT Security', 'Network Flow', 'Network Security', 'Platform Health', 'Posture Management', 'SAP Security', 'Security Alerts',
             'Storage Access', 'Threat Intelligence', 'Vulnerability Management'
         )
+    }
+
+    It 'bundles a versioned baseline with matching checksums' {
+        $dataPath = Join-Path (Split-Path -Parent $PSScriptRoot) 'Data'
+        $versionPath = Join-Path $dataPath 'baseline-version.json'
+        Test-Path -LiteralPath $versionPath -PathType Leaf | Should -BeTrue
+
+        $baselineVersion = Get-Content -LiteralPath $versionPath -Raw | ConvertFrom-Json
+        $baselineVersion.dataVersion | Should -Match '^\d+\.\d+\.\d+$'
+        $baselineVersion.schemaVersion | Should -Match '^1\.\d+\.\d+$'
+        $baselineVersion.sourceRepository | Should -Be 'https://github.com/lnfernux/log-baseline'
+        $baselineVersion.sourceRevision | Should -Match '^[a-f0-9]{40}$'
+
+        foreach ($fileProperty in $baselineVersion.files.PSObject.Properties) {
+            $filePath = Join-Path $dataPath $fileProperty.Name
+            Test-Path -LiteralPath $filePath -PathType Leaf | Should -BeTrue -Because "$($fileProperty.Name) must ship with the module"
+            (Get-FileHash -LiteralPath $filePath -Algorithm SHA256).Hash | Should -Be $fileProperty.Value
+        }
     }
 
     It 'has at least 480 entries' {

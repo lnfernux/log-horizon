@@ -15,7 +15,10 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": true,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "SecurityIncident",
@@ -34,7 +37,10 @@
     "recommendedTier": "analytics",
     "isFree": true,
     "recommendedRetentionDays": 365,
-    "platform": true
+    "platform": true,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "SentinelHealth",
@@ -53,7 +59,10 @@
     "recommendedTier": "analytics",
     "isFree": true,
     "recommendedRetentionDays": 180,
-    "platform": true
+    "platform": true,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "SentinelAudit",
@@ -72,7 +81,10 @@
     "recommendedTier": "analytics",
     "isFree": false,
     "recommendedRetentionDays": 180,
-    "platform": true
+    "platform": true,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "SecurityEvent",
@@ -97,7 +109,10 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "SigninLogs",
@@ -121,7 +136,10 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "AuditLogs",
@@ -146,7 +164,10 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "AADRiskyUsers",
@@ -168,7 +189,10 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "AADUserRiskEvents",
@@ -190,7 +214,10 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "IdentityLogonEvents",
@@ -214,7 +241,10 @@
     "recommendedTier": "analytics",
     "isFree": false,
     "recommendedRetentionDays": 365,
-    "xdrStreamable": true
+    "xdrStreamable": true,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "IdentityQueryEvents",
@@ -237,7 +267,10 @@
     "recommendedTier": "datalake",
     "isFree": false,
     "recommendedRetentionDays": 365,
-    "xdrStreamable": true
+    "xdrStreamable": true,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "IdentityDirectoryEvents",
@@ -261,7 +294,10 @@
     "recommendedTier": "analytics",
     "isFree": false,
     "recommendedRetentionDays": 365,
-    "xdrStreamable": true
+    "xdrStreamable": true,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "AlertEvidence",
@@ -281,7 +317,10 @@
     "recommendedTier": "analytics",
     "isFree": false,
     "recommendedRetentionDays": 365,
-    "xdrStreamable": true
+    "xdrStreamable": true,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "AlertInfo",
@@ -301,7 +340,10 @@
     "recommendedTier": "analytics",
     "isFree": false,
     "recommendedRetentionDays": 365,
-    "xdrStreamable": true
+    "xdrStreamable": true,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "DeviceEvents",
@@ -325,7 +367,10 @@
     "recommendedTier": "analytics",
     "isFree": false,
     "recommendedRetentionDays": 365,
-    "xdrStreamable": true
+    "xdrStreamable": true,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "DeviceProcessEvents",
@@ -349,7 +394,10 @@
     "recommendedTier": "analytics",
     "isFree": false,
     "recommendedRetentionDays": 365,
-    "xdrStreamable": true
+    "xdrStreamable": true,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "DeviceFileEvents",
@@ -374,7 +422,10 @@
     "recommendedTier": "analytics",
     "isFree": false,
     "recommendedRetentionDays": 365,
-    "xdrStreamable": true
+    "xdrStreamable": true,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "DeviceRegistryEvents",
@@ -398,7 +449,10 @@
     "recommendedTier": "analytics",
     "isFree": false,
     "recommendedRetentionDays": 365,
-    "xdrStreamable": true
+    "xdrStreamable": true,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "DeviceNetworkEvents",
@@ -421,7 +475,10 @@
     "recommendedTier": "analytics",
     "isFree": false,
     "recommendedRetentionDays": 365,
-    "xdrStreamable": true
+    "xdrStreamable": true,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "DeviceNetworkInfo",
@@ -443,7 +500,10 @@
     "recommendedTier": "datalake",
     "isFree": false,
     "recommendedRetentionDays": 365,
-    "xdrStreamable": true
+    "xdrStreamable": true,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "DeviceLogonEvents",
@@ -468,7 +528,10 @@
     "recommendedTier": "analytics",
     "isFree": false,
     "recommendedRetentionDays": 365,
-    "xdrStreamable": true
+    "xdrStreamable": true,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "DeviceImageLoadEvents",
@@ -492,7 +555,10 @@
     "recommendedTier": "datalake",
     "isFree": false,
     "recommendedRetentionDays": 365,
-    "xdrStreamable": true
+    "xdrStreamable": true,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "EmailEvents",
@@ -515,7 +581,10 @@
     "recommendedTier": "analytics",
     "isFree": false,
     "recommendedRetentionDays": 365,
-    "xdrStreamable": true
+    "xdrStreamable": true,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "EmailAttachmentInfo",
@@ -537,7 +606,10 @@
     "recommendedTier": "analytics",
     "isFree": false,
     "recommendedRetentionDays": 365,
-    "xdrStreamable": true
+    "xdrStreamable": true,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "EmailUrlInfo",
@@ -559,7 +631,10 @@
     "recommendedTier": "analytics",
     "isFree": false,
     "recommendedRetentionDays": 365,
-    "xdrStreamable": true
+    "xdrStreamable": true,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "EmailPostDeliveryEvents",
@@ -582,7 +657,10 @@
     "recommendedTier": "analytics",
     "isFree": false,
     "recommendedRetentionDays": 365,
-    "xdrStreamable": true
+    "xdrStreamable": true,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "UrlClickEvents",
@@ -604,7 +682,10 @@
     "recommendedTier": "analytics",
     "isFree": false,
     "recommendedRetentionDays": 365,
-    "xdrStreamable": true
+    "xdrStreamable": true,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "CloudAppEvents",
@@ -627,7 +708,10 @@
     "recommendedTier": "analytics",
     "isFree": false,
     "recommendedRetentionDays": 365,
-    "xdrStreamable": true
+    "xdrStreamable": true,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "AzureActivity",
@@ -649,7 +733,10 @@
     ],
     "recommendedTier": "analytics",
     "isFree": true,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "AWSCloudTrail",
@@ -672,7 +759,10 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "AWSGuardDuty",
@@ -691,7 +781,10 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "GCPAuditLogs",
@@ -712,7 +805,10 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "DnsEvents",
@@ -738,6 +834,9 @@
     "status": "legacy",
     "replacedBy": [
       "ASimDnsActivityLogs"
+    ],
+    "sourceIds": [
+      "log-horizon-classifications"
     ]
   },
   {
@@ -760,6 +859,9 @@
     "status": "legacy",
     "replacedBy": [
       "ASimDnsActivityLogs"
+    ],
+    "sourceIds": [
+      "log-horizon-classifications"
     ]
   },
   {
@@ -785,6 +887,9 @@
     "replacedBy": [
       "ThreatIntelIndicators",
       "ThreatIntelObjects"
+    ],
+    "sourceIds": [
+      "log-horizon-classifications"
     ]
   },
   {
@@ -805,7 +910,10 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "OfficeActivity",
@@ -827,7 +935,10 @@
     ],
     "recommendedTier": "analytics",
     "isFree": true,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "CommonSecurityLog",
@@ -852,7 +963,10 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "Syslog",
@@ -874,7 +988,10 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "BehaviorAnalytics",
@@ -895,7 +1012,10 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "UserPeerAnalytics",
@@ -915,7 +1035,10 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "MicrosoftPurviewInformationProtection",
@@ -936,7 +1059,10 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "PowerBIActivity",
@@ -957,7 +1083,10 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "ASimDnsActivityLogs",
@@ -978,7 +1107,10 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "ASimAuthenticationEventLogs",
@@ -1000,7 +1132,10 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "ASimNetworkSessionLogs",
@@ -1022,7 +1157,10 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "ASimProcessEventLogs",
@@ -1042,7 +1180,10 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "ASimFileEventLogs",
@@ -1064,7 +1205,10 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "ASimWebSessionLogs",
@@ -1086,7 +1230,10 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "ASimRegistryEventLogs",
@@ -1107,7 +1254,10 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "Anomalies",
@@ -1125,7 +1275,10 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "SecurityRecommendation",
@@ -1143,7 +1296,10 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "SecurityRegulatoryCompliance",
@@ -1162,7 +1318,10 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "McasShadowItReporting",
@@ -1182,7 +1341,10 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "AZFWThreatIntel",
@@ -1202,7 +1364,10 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "AZFWIdpsSignature",
@@ -1224,7 +1389,10 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "AzureDevOpsAuditing",
@@ -1245,7 +1413,10 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "CrowdStrikeAlerts",
@@ -1264,7 +1435,10 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "AWSVPCFlow",
@@ -1285,7 +1459,10 @@
     ],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 180
+    "recommendedRetentionDays": 180,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "GCPVPCFlow",
@@ -1307,7 +1484,10 @@
     ],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 180
+    "recommendedRetentionDays": 180,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "AZFWNetworkRule",
@@ -1328,7 +1508,10 @@
     ],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 180
+    "recommendedRetentionDays": 180,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "AZFWApplicationRule",
@@ -1349,7 +1532,10 @@
     ],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 180
+    "recommendedRetentionDays": 180,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "AZFWFlowTrace",
@@ -1370,7 +1556,10 @@
     ],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 180
+    "recommendedRetentionDays": 180,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "AZFWNatRule",
@@ -1391,7 +1580,10 @@
     ],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 180
+    "recommendedRetentionDays": 180,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "AZFWDnsQuery",
@@ -1411,7 +1603,10 @@
     ],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 180
+    "recommendedRetentionDays": 180,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "StorageBlobLogs",
@@ -1432,7 +1627,10 @@
     ],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 180
+    "recommendedRetentionDays": 180,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "StorageFileLogs",
@@ -1452,7 +1650,10 @@
     ],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 180
+    "recommendedRetentionDays": 180,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "StorageQueueLogs",
@@ -1472,7 +1673,10 @@
     ],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 180
+    "recommendedRetentionDays": 180,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "StorageTableLogs",
@@ -1492,7 +1696,10 @@
     ],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 180
+    "recommendedRetentionDays": 180,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "AzureDiagnostics",
@@ -1513,7 +1720,10 @@
     ],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 90
+    "recommendedRetentionDays": 90,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "AzureMetrics",
@@ -1532,7 +1742,10 @@
     "mitreSources": [],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 90
+    "recommendedRetentionDays": 90,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "W3CIISLog",
@@ -1553,7 +1766,10 @@
     ],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 180
+    "recommendedRetentionDays": 180,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "WindowsEvent",
@@ -1575,7 +1791,10 @@
     ],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 180
+    "recommendedRetentionDays": 180,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "NetworkAccessTraffic",
@@ -1597,7 +1816,10 @@
     ],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 180
+    "recommendedRetentionDays": 180,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "AADNonInteractiveUserSignInLogs",
@@ -1619,7 +1841,10 @@
     ],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "AADServicePrincipalSignInLogs",
@@ -1641,7 +1866,10 @@
     ],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "AADManagedIdentitySignInLogs",
@@ -1662,7 +1890,10 @@
     ],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "AADProvisioningLogs",
@@ -1684,7 +1915,10 @@
     ],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "LAQueryLogs",
@@ -1703,7 +1937,10 @@
     "recommendedTier": "datalake",
     "isFree": false,
     "recommendedRetentionDays": 180,
-    "platform": true
+    "platform": true,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "AppServiceHTTPLogs",
@@ -1723,7 +1960,10 @@
     ],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 180
+    "recommendedRetentionDays": 180,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "AppServiceConsoleLogs",
@@ -1743,7 +1983,10 @@
     ],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 180
+    "recommendedRetentionDays": 180,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "FunctionAppLogs",
@@ -1763,7 +2006,10 @@
     ],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 180
+    "recommendedRetentionDays": 180,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "ContainerLog",
@@ -1784,7 +2030,10 @@
     ],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 180
+    "recommendedRetentionDays": 180,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "ContainerLogV2",
@@ -1805,7 +2054,10 @@
     ],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 180
+    "recommendedRetentionDays": 180,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "KubeEvents",
@@ -1826,7 +2078,10 @@
     ],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 180
+    "recommendedRetentionDays": 180,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "KubePodInventory",
@@ -1847,7 +2102,10 @@
     ],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 180
+    "recommendedRetentionDays": 180,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "ConfigurationData",
@@ -1865,7 +2123,10 @@
     "mitreSources": [],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "ConfigurationChange",
@@ -1882,7 +2143,10 @@
     "mitreSources": [],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "Heartbeat",
@@ -1900,7 +2164,10 @@
     "mitreSources": [],
     "recommendedTier": "datalake",
     "isFree": true,
-    "recommendedRetentionDays": 90
+    "recommendedRetentionDays": 90,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "Perf",
@@ -1919,7 +2186,10 @@
     "mitreSources": [],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 90
+    "recommendedRetentionDays": 90,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "Event",
@@ -1937,7 +2207,10 @@
     "mitreSources": [],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 180
+    "recommendedRetentionDays": 180,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "Update",
@@ -1956,7 +2229,10 @@
     "isFree": false,
     "recommendedRetentionDays": 365,
     "status": "deprecated",
-    "replacedBy": []
+    "replacedBy": [],
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "UpdateSummary",
@@ -1976,7 +2252,10 @@
     "isFree": false,
     "recommendedRetentionDays": 365,
     "status": "deprecated",
-    "replacedBy": []
+    "replacedBy": [],
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "InsightsMetrics",
@@ -1994,7 +2273,10 @@
     "mitreSources": [],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 90
+    "recommendedRetentionDays": 90,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "VMConnection",
@@ -2014,7 +2296,10 @@
     ],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 180
+    "recommendedRetentionDays": 180,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "AppTraces",
@@ -2034,7 +2319,10 @@
     ],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 180
+    "recommendedRetentionDays": 180,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "AppRequests",
@@ -2054,7 +2342,10 @@
     ],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 180
+    "recommendedRetentionDays": 180,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "AppExceptions",
@@ -2074,7 +2365,10 @@
     ],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 180
+    "recommendedRetentionDays": 180,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "AppPageViews",
@@ -2092,7 +2386,10 @@
     "mitreSources": [],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 180
+    "recommendedRetentionDays": 180,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "AppDependencies",
@@ -2111,7 +2408,10 @@
     "mitreSources": [],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 180
+    "recommendedRetentionDays": 180,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "AppPerformanceCounters",
@@ -2129,7 +2429,10 @@
     "mitreSources": [],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 180
+    "recommendedRetentionDays": 180,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "ADFActivityRun",
@@ -2149,7 +2452,10 @@
     ],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 180
+    "recommendedRetentionDays": 180,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "ADFPipelineRun",
@@ -2169,7 +2475,10 @@
     ],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 180
+    "recommendedRetentionDays": 180,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "ADFTriggerRun",
@@ -2189,7 +2498,10 @@
     ],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 180
+    "recommendedRetentionDays": 180,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "SynapseSqlPoolExecRequests",
@@ -2209,7 +2521,10 @@
     ],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 180
+    "recommendedRetentionDays": 180,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "SynapseIntegrationActivityRuns",
@@ -2229,7 +2544,10 @@
     ],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 180
+    "recommendedRetentionDays": 180,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "AmlComputeClusterEvent",
@@ -2247,7 +2565,10 @@
     "mitreSources": [],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 180
+    "recommendedRetentionDays": 180,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "MicrosoftGraphActivityLogs",
@@ -2268,7 +2589,10 @@
     ],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "IdentityInfo",
@@ -2289,7 +2613,10 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "AADRiskyServicePrincipals",
@@ -2309,7 +2636,10 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "AADServicePrincipalRiskEvents",
@@ -2330,7 +2660,10 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "ADFSSignInLogs",
@@ -2351,7 +2684,10 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "DeviceInfo",
@@ -2371,7 +2707,10 @@
     "recommendedTier": "datalake",
     "isFree": false,
     "recommendedRetentionDays": 365,
-    "xdrStreamable": true
+    "xdrStreamable": true,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "DeviceFileCertificateInfo",
@@ -2393,7 +2732,10 @@
     "recommendedTier": "datalake",
     "isFree": false,
     "recommendedRetentionDays": 365,
-    "xdrStreamable": true
+    "xdrStreamable": true,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "DeviceTvmSoftwareInventory",
@@ -2413,7 +2755,10 @@
     "recommendedTier": "datalake",
     "isFree": false,
     "recommendedRetentionDays": 365,
-    "xdrStreamable": false
+    "xdrStreamable": false,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "DeviceTvmSoftwareVulnerabilities",
@@ -2432,7 +2777,10 @@
     "recommendedTier": "analytics",
     "isFree": false,
     "recommendedRetentionDays": 365,
-    "xdrStreamable": false
+    "xdrStreamable": false,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "DeviceTvmSecureConfigurationAssessment",
@@ -2452,7 +2800,10 @@
     "recommendedTier": "datalake",
     "isFree": false,
     "recommendedRetentionDays": 365,
-    "xdrStreamable": false
+    "xdrStreamable": false,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "DeviceTvmSecureConfigurationAssessmentKB",
@@ -2471,7 +2822,10 @@
     "recommendedTier": "datalake",
     "isFree": false,
     "recommendedRetentionDays": 365,
-    "xdrStreamable": false
+    "xdrStreamable": false,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "CloudAuditEvents",
@@ -2492,7 +2846,10 @@
     "recommendedTier": "analytics",
     "isFree": false,
     "recommendedRetentionDays": 365,
-    "xdrStreamable": false
+    "xdrStreamable": false,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "AWSCloudWatch",
@@ -2511,7 +2868,10 @@
     "mitreSources": [],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "AWSNetworkFirewallFlow",
@@ -2531,7 +2891,10 @@
     ],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 180
+    "recommendedRetentionDays": 180,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "AWSRoute53Resolver",
@@ -2552,7 +2915,10 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "AWSS3ServerAccess",
@@ -2573,7 +2939,10 @@
     ],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 180
+    "recommendedRetentionDays": 180,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "AWSSecurityHubFindings",
@@ -2592,7 +2961,10 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "AWSWAF",
@@ -2613,7 +2985,10 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "GCPApigee",
@@ -2633,7 +3008,10 @@
     ],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 180
+    "recommendedRetentionDays": 180,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "GCPCDN",
@@ -2653,7 +3031,10 @@
     ],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 180
+    "recommendedRetentionDays": 180,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "GCPCloudRun",
@@ -2673,7 +3054,10 @@
     ],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 180
+    "recommendedRetentionDays": 180,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "GCPCloudSQL",
@@ -2693,7 +3077,10 @@
     ],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 180
+    "recommendedRetentionDays": 180,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "GCPComputeEngine",
@@ -2711,7 +3098,10 @@
     "mitreSources": [],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 90
+    "recommendedRetentionDays": 90,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "GCPDNS",
@@ -2731,7 +3121,10 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "GCPIAM",
@@ -2752,7 +3145,10 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "GCPIDS",
@@ -2773,7 +3169,10 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "GCPMonitoring",
@@ -2791,7 +3190,10 @@
     "mitreSources": [],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 90
+    "recommendedRetentionDays": 90,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "GCPNAT",
@@ -2811,7 +3213,10 @@
     ],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 180
+    "recommendedRetentionDays": 180,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "GCPNATAudit",
@@ -2831,7 +3236,10 @@
     ],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 180
+    "recommendedRetentionDays": 180,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "GCPResourceManager",
@@ -2851,7 +3259,10 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "GKEAudit",
@@ -2872,7 +3283,10 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 180
+    "recommendedRetentionDays": 180,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "GoogleCloudSCC",
@@ -2891,7 +3305,10 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "GoogleWorkspaceReports",
@@ -2913,7 +3330,10 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "AZFWFatFlow",
@@ -2933,7 +3353,10 @@
     ],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 180
+    "recommendedRetentionDays": 180,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "AZFWInternalFqdnResolutionFailure",
@@ -2952,7 +3375,10 @@
     "mitreSources": [],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 180
+    "recommendedRetentionDays": 180,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "CopilotActivity",
@@ -2972,7 +3398,10 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "DataverseActivity",
@@ -2992,7 +3421,10 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "Dynamics365Activity",
@@ -3012,7 +3444,10 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "PowerAutomateActivity",
@@ -3032,7 +3467,10 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "PowerPlatformAdminActivity",
@@ -3052,7 +3490,10 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "ProjectActivity",
@@ -3072,7 +3513,10 @@
     ],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "PurviewDataSensitivityLogs",
@@ -3090,7 +3534,10 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "ABAPAuditLog",
@@ -3111,7 +3558,10 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "Corelight",
@@ -3133,7 +3583,10 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "ElasticAgentEvent",
@@ -3154,6 +3607,9 @@
     "status": "legacy",
     "replacedBy": [
       "ElasticAgentLogsV2_CL"
+    ],
+    "sourceIds": [
+      "log-horizon-classifications"
     ]
   },
   {
@@ -3175,7 +3631,10 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "RadiflowEvent",
@@ -3196,7 +3655,10 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "TheHiveData",
@@ -3214,7 +3676,10 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "TrellixEvents",
@@ -3235,7 +3700,10 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "OktaSSO",
@@ -3257,7 +3725,10 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "BitwardenEventLogs",
@@ -3277,7 +3748,10 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "ASimAuditEventLogs",
@@ -3297,7 +3771,10 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "SentinelOne_CL",
@@ -3326,6 +3803,9 @@
       "SentinelOneThreats_CL",
       "SentinelOneAlerts_CL",
       "SentinelOneAlertsV2_CL"
+    ],
+    "sourceIds": [
+      "log-horizon-classifications"
     ]
   },
   {
@@ -3344,7 +3824,10 @@
     "mitreSources": [],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 180
+    "recommendedRetentionDays": 180,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "SentinelOneAlerts_CL",
@@ -3366,6 +3849,9 @@
     "status": "legacy",
     "replacedBy": [
       "SentinelOneAlertsV2_CL"
+    ],
+    "sourceIds": [
+      "log-horizon-classifications"
     ]
   },
   {
@@ -3384,7 +3870,10 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "SentinelOneAgents_CL",
@@ -3402,7 +3891,10 @@
     "mitreSources": [],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 180
+    "recommendedRetentionDays": 180,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "SentinelOneGroups_CL",
@@ -3419,7 +3911,10 @@
     "mitreSources": [],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 180
+    "recommendedRetentionDays": 180,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "CrowdStrike_Additional_Events_CL",
@@ -3440,7 +3935,10 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "CrowdStrikeReplicatorV2",
@@ -3462,7 +3960,10 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "PaloAltoCortexXDR_Alerts_CL",
@@ -3480,7 +3981,10 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "PaloAltoCortexXDR_Incidents_CL",
@@ -3498,7 +4002,10 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "PaloAltoCortexXDR_Audit_Agent_CL",
@@ -3516,7 +4023,10 @@
     "mitreSources": [],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 180
+    "recommendedRetentionDays": 180,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "PaloAltoCortexXDR_Audit_Management_CL",
@@ -3535,7 +4045,10 @@
     "mitreSources": [],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 180
+    "recommendedRetentionDays": 180,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "PaloAltoCortexXDR_Endpoints_CL",
@@ -3553,7 +4066,10 @@
     "mitreSources": [],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 180
+    "recommendedRetentionDays": 180,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "PaloAltoPrismaCloudAlertV2_CL",
@@ -3572,7 +4088,10 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "CarbonBlack_Alerts_CL",
@@ -3590,7 +4109,10 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "CarbonBlackAuditLogs_CL",
@@ -3611,6 +4133,9 @@
     "status": "deprecated",
     "replacedBy": [
       "CarbonBlack_Alerts_CL"
+    ],
+    "sourceIds": [
+      "log-horizon-classifications"
     ]
   },
   {
@@ -3637,6 +4162,9 @@
     "status": "deprecated",
     "replacedBy": [
       "CarbonBlack_Alerts_CL"
+    ],
+    "sourceIds": [
+      "log-horizon-classifications"
     ]
   },
   {
@@ -3659,6 +4187,9 @@
     "status": "deprecated",
     "replacedBy": [
       "CarbonBlack_Alerts_CL"
+    ],
+    "sourceIds": [
+      "log-horizon-classifications"
     ]
   },
   {
@@ -3683,6 +4214,9 @@
     "status": "deprecated",
     "replacedBy": [
       "SophosEPEvents_CL"
+    ],
+    "sourceIds": [
+      "log-horizon-classifications"
     ]
   },
   {
@@ -3701,7 +4235,10 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "CortexXDR_Incidents_CL",
@@ -3719,7 +4256,10 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "CortexXpanseAlerts_CL",
@@ -3737,7 +4277,10 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "DragosAlerts_CL",
@@ -3756,7 +4299,10 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "NetskopeAlerts_CL",
@@ -3775,7 +4321,10 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "NetskopeWebtxData_CL",
@@ -3796,7 +4345,10 @@
     ],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 180
+    "recommendedRetentionDays": 180,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "Netskope_WebTx_metrics_CL",
@@ -3814,7 +4366,10 @@
     "mitreSources": [],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 180
+    "recommendedRetentionDays": 180,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "CiscoDuo_CL",
@@ -3834,7 +4389,10 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "CiscoETD_CL",
@@ -3856,6 +4414,9 @@
     "status": "legacy",
     "replacedBy": [
       "CiscoETDv2_CL"
+    ],
+    "sourceIds": [
+      "log-horizon-classifications"
     ]
   },
   {
@@ -3876,7 +4437,10 @@
     ],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 180
+    "recommendedRetentionDays": 180,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "CiscoSecureEndpointAuditLogsV2_CL",
@@ -3893,7 +4457,10 @@
     "mitreSources": [],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 180
+    "recommendedRetentionDays": 180,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "CiscoSecureEndpointEventsV2_CL",
@@ -3914,7 +4481,10 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "Cisco_Umbrella_dns_CL",
@@ -3934,7 +4504,10 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "Cisco_Umbrella_proxy_CL",
@@ -3954,7 +4527,10 @@
     ],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "Cisco_Umbrella_cloudfirewall_CL",
@@ -3974,7 +4550,10 @@
     ],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "Cisco_Umbrella_dlp_CL",
@@ -3992,7 +4571,10 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "Cisco_Umbrella_audit_CL",
@@ -4010,7 +4592,10 @@
     "mitreSources": [],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "Cisco_Umbrella_firewall_CL",
@@ -4030,7 +4615,10 @@
     ],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 180
+    "recommendedRetentionDays": 180,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "Cisco_Umbrella_intrusion_CL",
@@ -4050,7 +4638,10 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "Cisco_Umbrella_ip_CL",
@@ -4070,7 +4661,10 @@
     ],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 180
+    "recommendedRetentionDays": 180,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "Cisco_Umbrella_fileevent_CL",
@@ -4090,7 +4684,10 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "ProofPointTAPClicksPermittedV2_CL",
@@ -4109,7 +4706,10 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "ProofPointTAPClicksBlockedV2_CL",
@@ -4128,7 +4728,10 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "ProofPointTAPMessagesBlockedV2_CL",
@@ -4147,7 +4750,10 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "ProofPointTAPMessagesDeliveredV2_CL",
@@ -4166,7 +4772,10 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "ProofpointPODMailLog_CL",
@@ -4184,7 +4793,10 @@
     "mitreSources": [],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "ProofpointPODMessage_CL",
@@ -4202,7 +4814,10 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "MimecastAudit_CL",
@@ -4223,6 +4838,9 @@
     "status": "legacy",
     "replacedBy": [
       "Audit_CL"
+    ],
+    "sourceIds": [
+      "log-horizon-classifications"
     ]
   },
   {
@@ -4245,6 +4863,9 @@
     "status": "legacy",
     "replacedBy": [
       "Seg_Dlp_CL"
+    ],
+    "sourceIds": [
+      "log-horizon-classifications"
     ]
   },
   {
@@ -4267,6 +4888,9 @@
     "status": "legacy",
     "replacedBy": [
       "Seg_Cg_CL"
+    ],
+    "sourceIds": [
+      "log-horizon-classifications"
     ]
   },
   {
@@ -4289,6 +4913,9 @@
     "status": "legacy",
     "replacedBy": [
       "Ttp_Url_CL"
+    ],
+    "sourceIds": [
+      "log-horizon-classifications"
     ]
   },
   {
@@ -4311,6 +4938,9 @@
     "status": "legacy",
     "replacedBy": [
       "Ttp_Attachment_CL"
+    ],
+    "sourceIds": [
+      "log-horizon-classifications"
     ]
   },
   {
@@ -4333,6 +4963,9 @@
     "status": "legacy",
     "replacedBy": [
       "Ttp_Impersonation_CL"
+    ],
+    "sourceIds": [
+      "log-horizon-classifications"
     ]
   },
   {
@@ -4358,6 +4991,9 @@
     "status": "deprecated",
     "replacedBy": [
       "OktaSSO"
+    ],
+    "sourceIds": [
+      "log-horizon-classifications"
     ]
   },
   {
@@ -4379,7 +5015,10 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "Cloudflare_CL",
@@ -4400,7 +5039,10 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "CloudflareV2_CL",
@@ -4421,7 +5063,10 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "ImpervaWAFCloud_CL",
@@ -4445,6 +5090,9 @@
     "status": "legacy",
     "replacedBy": [
       "ImpervaWAFCloud"
+    ],
+    "sourceIds": [
+      "log-horizon-classifications"
     ]
   },
   {
@@ -4465,7 +5113,10 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "SlackAuditV2_CL",
@@ -4485,7 +5136,10 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "BoxEventsV2_CL",
@@ -4505,7 +5159,10 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "GitHubAuditLogPolling_CL",
@@ -4529,6 +5186,9 @@
     "status": "deprecated",
     "replacedBy": [
       "GitHubAuditLogsV2_CL"
+    ],
+    "sourceIds": [
+      "log-horizon-classifications"
     ]
   },
   {
@@ -4549,7 +5209,10 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "SailPointIDN_Events_CL",
@@ -4569,7 +5232,10 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "SailPointIDN_Triggers_CL",
@@ -4589,7 +5255,10 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "Auth0AM_CL",
@@ -4613,6 +5282,9 @@
     "status": "deprecated",
     "replacedBy": [
       "Auth0Logs_CL"
+    ],
+    "sourceIds": [
+      "log-horizon-classifications"
     ]
   },
   {
@@ -4633,7 +5305,10 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "QualysHostDetectionV3_CL",
@@ -4652,7 +5327,10 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "QualysKB_CL",
@@ -4674,6 +5352,9 @@
     "status": "legacy",
     "replacedBy": [
       "QualysKnowledgeBase"
+    ],
+    "sourceIds": [
+      "log-horizon-classifications"
     ]
   },
   {
@@ -4692,7 +5373,10 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "Tenable_VM_Asset_CL",
@@ -4710,7 +5394,10 @@
     "mitreSources": [],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "Tenable_WAS_Vuln_CL",
@@ -4728,7 +5415,10 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "Tenable_WAS_Asset_CL",
@@ -4746,7 +5436,10 @@
     "mitreSources": [],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "VaronisAlerts_CL",
@@ -4764,7 +5457,10 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "darktrace_model_alerts_CL",
@@ -4794,6 +5490,9 @@
       "DarktraceEMAIL_CL",
       "DarktraceResponseActions_CL",
       "DarktraceSystemStatusAlerts_CL"
+    ],
+    "sourceIds": [
+      "log-horizon-classifications"
     ]
   },
   {
@@ -4814,7 +5513,10 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "VectraStream_CL",
@@ -4835,7 +5537,10 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "Illumio_Auditable_Events_CL",
@@ -4853,7 +5558,10 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "Illumio_Flow_Events_CL",
@@ -4873,7 +5581,10 @@
     ],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 180
+    "recommendedRetentionDays": 180,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "ZPA_CL",
@@ -4893,7 +5604,10 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "Perimeter81_CL",
@@ -4913,7 +5627,10 @@
     ],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "ForcepointDLPEvents_CL",
@@ -4931,7 +5648,10 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "Rubrik_Anomaly_Data_CL",
@@ -4949,7 +5669,10 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "Rubrik_Events_Data_CL",
@@ -4967,7 +5690,10 @@
     "mitreSources": [],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "Rubrik_Ransomware_Data_CL",
@@ -4985,7 +5711,10 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "Rubrik_ThreatHunt_Data_CL",
@@ -5004,7 +5733,10 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "OrcaAlerts_CL",
@@ -5022,7 +5754,10 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "ObsidianActivity_CL",
@@ -5042,7 +5777,10 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "ObsidianThreat_CL",
@@ -5060,7 +5798,10 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "CyberArk_AuditEvents_CL",
@@ -5081,7 +5822,10 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "Lookout_CL",
@@ -5103,6 +5847,9 @@
     "status": "deprecated",
     "replacedBy": [
       "LookoutMtdV2_CL"
+    ],
+    "sourceIds": [
+      "log-horizon-classifications"
     ]
   },
   {
@@ -5125,6 +5872,9 @@
     "status": "legacy",
     "replacedBy": [
       "Island_UserEvents_V2_CL"
+    ],
+    "sourceIds": [
+      "log-horizon-classifications"
     ]
   },
   {
@@ -5150,6 +5900,9 @@
     "status": "legacy",
     "replacedBy": [
       "Island_UserEvents_V2_CL"
+    ],
+    "sourceIds": [
+      "log-horizon-classifications"
     ]
   },
   {
@@ -5169,7 +5922,10 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "DynatraceAttacks_CL",
@@ -5191,6 +5947,9 @@
     "status": "legacy",
     "replacedBy": [
       "DynatraceAttacksV2_CL"
+    ],
+    "sourceIds": [
+      "log-horizon-classifications"
     ]
   },
   {
@@ -5212,6 +5971,9 @@
     "status": "legacy",
     "replacedBy": [
       "DynatraceProblemsV2_CL"
+    ],
+    "sourceIds": [
+      "log-horizon-classifications"
     ]
   },
   {
@@ -5234,6 +5996,9 @@
     "status": "legacy",
     "replacedBy": [
       "DynatraceSecurityProblemsV2_CL"
+    ],
+    "sourceIds": [
+      "log-horizon-classifications"
     ]
   },
   {
@@ -5255,6 +6020,9 @@
     "status": "legacy",
     "replacedBy": [
       "DynatraceAuditLogsV2_CL"
+    ],
+    "sourceIds": [
+      "log-horizon-classifications"
     ]
   },
   {
@@ -5276,7 +6044,10 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "F5Telemetry_LTM_CL",
@@ -5296,7 +6067,10 @@
     ],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 180
+    "recommendedRetentionDays": 180,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "DigitalShadows_CL",
@@ -5318,6 +6092,9 @@
     "status": "legacy",
     "replacedBy": [
       "DigitalShadows_V2_CL"
+    ],
+    "sourceIds": [
+      "log-horizon-classifications"
     ]
   },
   {
@@ -5338,7 +6115,10 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "SAPETDAlerts_CL",
@@ -5356,7 +6136,10 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "SAPETDInvestigations_CL",
@@ -5374,7 +6157,10 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "SecurityBridgeLogs_CL",
@@ -5392,7 +6178,10 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "HalcyonProcessEvent_CL",
@@ -5417,6 +6206,9 @@
     "replacedBy": [
       "HalcyonEventsV2_CL",
       "HalcyonAlertUpdatesV2_CL"
+    ],
+    "sourceIds": [
+      "log-horizon-classifications"
     ]
   },
   {
@@ -5441,6 +6233,9 @@
     "replacedBy": [
       "HalcyonEventsV2_CL",
       "HalcyonAlertUpdatesV2_CL"
+    ],
+    "sourceIds": [
+      "log-horizon-classifications"
     ]
   },
   {
@@ -5466,6 +6261,9 @@
     "replacedBy": [
       "HalcyonEventsV2_CL",
       "HalcyonAlertUpdatesV2_CL"
+    ],
+    "sourceIds": [
+      "log-horizon-classifications"
     ]
   },
   {
@@ -5491,6 +6289,9 @@
     "replacedBy": [
       "HalcyonEventsV2_CL",
       "HalcyonAlertUpdatesV2_CL"
+    ],
+    "sourceIds": [
+      "log-horizon-classifications"
     ]
   },
   {
@@ -5515,6 +6316,9 @@
     "replacedBy": [
       "HalcyonEventsV2_CL",
       "HalcyonAlertUpdatesV2_CL"
+    ],
+    "sourceIds": [
+      "log-horizon-classifications"
     ]
   },
   {
@@ -5536,7 +6340,10 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "jamfprotectalerts_CL",
@@ -5555,7 +6362,10 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "jamfprotecttelemetryv2_CL",
@@ -5575,7 +6385,10 @@
     ],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 180
+    "recommendedRetentionDays": 180,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "Zoom_CL",
@@ -5598,6 +6411,9 @@
     "status": "deprecated",
     "replacedBy": [
       "ZoomV2_CL"
+    ],
+    "sourceIds": [
+      "log-horizon-classifications"
     ]
   },
   {
@@ -5618,7 +6434,10 @@
     ],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "OneLoginEventsV2_CL",
@@ -5638,7 +6457,10 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "OneLoginUsersV2_CL",
@@ -5656,7 +6478,10 @@
     "mitreSources": [],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "Jira_Audit_v2_CL",
@@ -5676,7 +6501,10 @@
     ],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "ConfluenceAuditLogs_CL",
@@ -5696,7 +6524,10 @@
     ],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "TransmitSecurityActivity_CL",
@@ -5716,7 +6547,10 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "KeeperSecurityEventNewLogs_CL",
@@ -5736,7 +6570,10 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "NordPassEventLogs_CL",
@@ -5756,7 +6593,10 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "Samsung_Knox_Audit_CL",
@@ -5775,7 +6615,10 @@
     "mitreSources": [],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 180
+    "recommendedRetentionDays": 180,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "Cohesity_CL",
@@ -5793,7 +6636,10 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "VeeamSecurityComplianceAnalyzer_CL",
@@ -5811,7 +6657,10 @@
     "mitreSources": [],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "VeeamMalwareEvents_CL",
@@ -5829,7 +6678,10 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "VeeamAuthorizationEvents_CL",
@@ -5849,7 +6701,10 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "ADOAuditLogs_CL",
@@ -5870,7 +6725,10 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "Watchlist",
@@ -5889,7 +6747,10 @@
     "recommendedTier": "analytics",
     "isFree": true,
     "recommendedRetentionDays": 180,
-    "platform": true
+    "platform": true,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "SquidProxy_CL",
@@ -5910,7 +6771,10 @@
     ],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "Cisco_Umbrella_ravpnlogs_CL",
@@ -5930,7 +6794,10 @@
     ],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "Cisco_Umbrella_ztaflow_CL",
@@ -5950,7 +6817,10 @@
     ],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "Cisco_Umbrella_ztna_CL",
@@ -5970,7 +6840,10 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "AWSEKSLogs_CL",
@@ -5991,7 +6864,10 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 180
+    "recommendedRetentionDays": 180,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "GCPLoadBalancerLogs_CL",
@@ -6011,7 +6887,10 @@
     ],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 180
+    "recommendedRetentionDays": 180,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "NexposeInsightVMCloud_vulnerabilities_CL",
@@ -6033,6 +6912,9 @@
     "status": "legacy",
     "replacedBy": [
       "Rapid7InsightVMCloudVulnerabilities"
+    ],
+    "sourceIds": [
+      "log-horizon-classifications"
     ]
   },
   {
@@ -6055,6 +6937,9 @@
     "status": "legacy",
     "replacedBy": [
       "Rapid7InsightVMCloudAssets"
+    ],
+    "sourceIds": [
+      "log-horizon-classifications"
     ]
   },
   {
@@ -6073,7 +6958,10 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "Talon_CL",
@@ -6092,7 +6980,10 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "SeraphicWebSecurity_CL",
@@ -6110,7 +7001,10 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "ErmesBrowserSecurityEvents_CL",
@@ -6128,7 +7022,10 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "ValenceAlert_CL",
@@ -6146,7 +7043,10 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "atlassian_beacon_alerts_CL",
@@ -6165,7 +7065,10 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "FinanceOperationsActivity_CL",
@@ -6185,7 +7088,10 @@
     ],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "SalesforceServiceCloudV2_CL",
@@ -6209,6 +7115,9 @@
     "status": "legacy",
     "replacedBy": [
       "SalesforceServiceCloudV3_CL"
+    ],
+    "sourceIds": [
+      "log-horizon-classifications"
     ]
   },
   {
@@ -6229,7 +7138,10 @@
     ],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "MailGuard365_Threats_CL",
@@ -6247,7 +7159,10 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "MailRiskEmails_CL",
@@ -6269,6 +7184,9 @@
     "status": "legacy",
     "replacedBy": [
       "MailRiskEventEmails_CL"
+    ],
+    "sourceIds": [
+      "log-horizon-classifications"
     ]
   },
   {
@@ -6287,7 +7205,10 @@
     "mitreSources": [],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "ExchangeHttpProxy_CL",
@@ -6308,7 +7229,10 @@
     ],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 180
+    "recommendedRetentionDays": 180,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "Phosphorus_CL",
@@ -6327,7 +7251,10 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "CynerioEvent_CL",
@@ -6346,7 +7273,10 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "Onapsis_Defend_CL",
@@ -6365,7 +7295,10 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "Anvilogic_Alerts_CL",
@@ -6383,7 +7316,10 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "SOCPrimeAuditLogs_CL",
@@ -6401,7 +7337,10 @@
     "mitreSources": [],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 180
+    "recommendedRetentionDays": 180,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "CriblInternal_CL",
@@ -6419,7 +7358,10 @@
     "mitreSources": [],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 180
+    "recommendedRetentionDays": 180,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "Ubiquiti_CL",
@@ -6439,7 +7381,10 @@
     ],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "PostgreSQL_CL",
@@ -6459,7 +7404,10 @@
     ],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 180
+    "recommendedRetentionDays": 180,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "MarkLogicAudit_CL",
@@ -6479,7 +7427,10 @@
     ],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 180
+    "recommendedRetentionDays": 180,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "MongoDBAudit_CL",
@@ -6499,7 +7450,10 @@
     ],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 180
+    "recommendedRetentionDays": 180,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "OracleWebLogicServer_CL",
@@ -6519,7 +7473,10 @@
     ],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 180
+    "recommendedRetentionDays": 180,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "Tomcat_CL",
@@ -6539,7 +7496,10 @@
     ],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 180
+    "recommendedRetentionDays": 180,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "ApacheHTTPServer_CL",
@@ -6559,7 +7519,10 @@
     ],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 180
+    "recommendedRetentionDays": 180,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "NGINX_CL",
@@ -6579,7 +7542,10 @@
     ],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 180
+    "recommendedRetentionDays": 180,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "JBossEvent_CL",
@@ -6599,7 +7565,10 @@
     ],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 180
+    "recommendedRetentionDays": 180,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "ESIExchangeOnlineConfig_CL",
@@ -6617,7 +7586,10 @@
     "mitreSources": [],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "ESIExchangeConfig_CL",
@@ -6635,7 +7607,10 @@
     "mitreSources": [],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "SAPLogServ_CL",
@@ -6655,7 +7630,10 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "WsSecurityEvents_CL",
@@ -6676,7 +7654,10 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "prancer_CL",
@@ -6694,7 +7675,10 @@
     "mitreSources": [],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "PrismaCloudCompute_CL",
@@ -6715,7 +7699,10 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 180
+    "recommendedRetentionDays": 180,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "SymantecICDx_CL",
@@ -6733,7 +7720,10 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "OCI_LogsV2_CL",
@@ -6753,7 +7743,10 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "NCProtectUAL_CL",
@@ -6771,7 +7764,10 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "CybleVisionAlerts_CL",
@@ -6789,7 +7785,10 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "CyberSixgill_Alerts_CL",
@@ -6807,7 +7806,10 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "feedly_indicators_CL",
@@ -6825,7 +7827,10 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "DataminrPulse_Alerts_CL",
@@ -6843,7 +7848,10 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "MDBALogTable_CL",
@@ -6863,7 +7871,10 @@
     ],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 180
+    "recommendedRetentionDays": 180,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "SnowflakeLogin_CL",
@@ -6883,7 +7894,10 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 180
+    "recommendedRetentionDays": 180,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "SnowflakeQuery_CL",
@@ -6903,7 +7917,10 @@
     ],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 180
+    "recommendedRetentionDays": 180,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "SnowflakeRoleGrant_CL",
@@ -6923,7 +7940,10 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "CloudGuard_SecurityEvents_CL",
@@ -6941,7 +7961,10 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "AliCloudActionTrailLogs_CL",
@@ -6962,7 +7985,10 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "IllumioInsights_CL",
@@ -6982,7 +8008,10 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "ContrastADR_CL",
@@ -7005,6 +8034,9 @@
     "replacedBy": [
       "ContrastADRAttackEvents_CL",
       "ContrastADRIncidents_CL"
+    ],
+    "sourceIds": [
+      "log-horizon-classifications"
     ]
   },
   {
@@ -7023,7 +8055,10 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "AZFWNetworkRuleAggregation",
@@ -7042,7 +8077,10 @@
     "mitreSources": [],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 180
+    "recommendedRetentionDays": 180,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "AZFWApplicationRuleAggregation",
@@ -7061,7 +8099,10 @@
     "mitreSources": [],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 180
+    "recommendedRetentionDays": 180,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "AZFWDnsFlowTrace",
@@ -7083,7 +8124,10 @@
     ],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 180
+    "recommendedRetentionDays": 180,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "AGWAccessLogs",
@@ -7104,7 +8148,10 @@
     ],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 180
+    "recommendedRetentionDays": 180,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "AGWFirewallLogs",
@@ -7126,7 +8173,10 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "ContainerRegistryRepositoryEvents",
@@ -7148,7 +8198,10 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "ContainerRegistryLoginEvents",
@@ -7168,7 +8221,10 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "REDConnectionEvents",
@@ -7186,7 +8242,10 @@
     "mitreSources": [],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 180
+    "recommendedRetentionDays": 180,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "ACRConnectedClientList",
@@ -7204,7 +8263,10 @@
     "mitreSources": [],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 90
+    "recommendedRetentionDays": 90,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "SynapseRbacOperations",
@@ -7224,7 +8286,10 @@
     ],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "Operation",
@@ -7244,7 +8309,10 @@
     "recommendedTier": "datalake",
     "isFree": true,
     "recommendedRetentionDays": 90,
-    "platform": true
+    "platform": true,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "NTATopologyDetails",
@@ -7264,7 +8332,10 @@
     "mitreSources": [],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 90
+    "recommendedRetentionDays": 90,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "AzureNetworkAnalytics_CL",
@@ -7286,7 +8357,10 @@
     ],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 180
+    "recommendedRetentionDays": 180,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "AzureNetworkAnalyticsIPDetails_CL",
@@ -7307,7 +8381,10 @@
     ],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 180
+    "recommendedRetentionDays": 180,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "SignalRServiceDiagnosticLogs",
@@ -7325,7 +8402,10 @@
     "mitreSources": [],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 180
+    "recommendedRetentionDays": 180,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "AZMSRunTimeAuditLogs",
@@ -7346,7 +8426,10 @@
     ],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 180
+    "recommendedRetentionDays": 180,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "FusionAuthAuditLog_CL",
@@ -7366,7 +8449,10 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "FusionAuthWebhookEventLog_CL",
@@ -7384,7 +8470,10 @@
     "mitreSources": [],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 180
+    "recommendedRetentionDays": 180,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "HetznerCloudActions_CL",
@@ -7404,7 +8493,10 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "ThreatIntelObjects",
@@ -7423,7 +8515,10 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "MicrosoftServicePrincipalSignInLogs",
@@ -7442,7 +8537,10 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "SecurityCaseEvent",
@@ -7462,7 +8560,10 @@
     "recommendedTier": "analytics",
     "isFree": false,
     "recommendedRetentionDays": 365,
-    "platform": true
+    "platform": true,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "AADGraphActivityLogs",
@@ -7481,7 +8582,10 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "GraphNotificationsActivityLogs",
@@ -7499,7 +8603,10 @@
     "mitreSources": [],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 90
+    "recommendedRetentionDays": 90,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "AADRiskyAgents",
@@ -7518,7 +8625,10 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "AADAgentRiskEvents",
@@ -7537,7 +8647,10 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "AADCustomSecurityAttributeAuditLogs",
@@ -7556,7 +8669,10 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "RemoteNetworkHealthLogs",
@@ -7576,7 +8692,10 @@
     "mitreSources": [],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 90
+    "recommendedRetentionDays": 90,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "NetworkAccessAlerts",
@@ -7595,7 +8714,10 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "NetworkAccessConnectionEvents",
@@ -7614,7 +8736,10 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 180
+    "recommendedRetentionDays": 180,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "EnrichedMicrosoft365AuditLogs",
@@ -7633,7 +8758,10 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "ThreatIntelExportOperation",
@@ -7653,7 +8781,10 @@
     "recommendedTier": "datalake",
     "isFree": false,
     "recommendedRetentionDays": 90,
-    "platform": true
+    "platform": true,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "SentinelBehaviorEntities",
@@ -7671,7 +8802,10 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "SentinelBehaviorInfo",
@@ -7689,7 +8823,10 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "ConfidentialWatchlist",
@@ -7708,7 +8845,10 @@
     "recommendedTier": "analytics",
     "isFree": true,
     "recommendedRetentionDays": 180,
-    "platform": true
+    "platform": true,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "ExposureGraphNodes",
@@ -7728,7 +8868,10 @@
     "recommendedTier": "analytics",
     "isFree": false,
     "recommendedRetentionDays": 180,
-    "xdrStreamable": false
+    "xdrStreamable": false,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "ExposureGraphEdges",
@@ -7749,7 +8892,10 @@
     "recommendedTier": "analytics",
     "isFree": false,
     "recommendedRetentionDays": 180,
-    "xdrStreamable": false
+    "xdrStreamable": false,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "DeviceBaselineComplianceAssessment",
@@ -7769,7 +8915,10 @@
     "recommendedTier": "analytics",
     "isFree": false,
     "recommendedRetentionDays": 180,
-    "xdrStreamable": false
+    "xdrStreamable": false,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "DeviceBaselineComplianceProfiles",
@@ -7788,7 +8937,10 @@
     "recommendedTier": "analytics",
     "isFree": false,
     "recommendedRetentionDays": 180,
-    "xdrStreamable": false
+    "xdrStreamable": false,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "DeviceBaselineComplianceAssessmentKB",
@@ -7808,7 +8960,10 @@
     "recommendedTier": "analytics",
     "isFree": false,
     "recommendedRetentionDays": 180,
-    "xdrStreamable": false
+    "xdrStreamable": false,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "DeviceTvmBrowserExtensions",
@@ -7828,7 +8983,10 @@
     "recommendedTier": "analytics",
     "isFree": false,
     "recommendedRetentionDays": 180,
-    "xdrStreamable": false
+    "xdrStreamable": false,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "DeviceTvmBrowserExtensionsKB",
@@ -7848,7 +9006,10 @@
     "recommendedTier": "analytics",
     "isFree": false,
     "recommendedRetentionDays": 180,
-    "xdrStreamable": false
+    "xdrStreamable": false,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "DeviceTvmCertificateInfo",
@@ -7867,7 +9028,10 @@
     "recommendedTier": "analytics",
     "isFree": false,
     "recommendedRetentionDays": 180,
-    "xdrStreamable": false
+    "xdrStreamable": false,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "DeviceTvmHardwareFirmware",
@@ -7887,7 +9051,10 @@
     "recommendedTier": "analytics",
     "isFree": false,
     "recommendedRetentionDays": 180,
-    "xdrStreamable": false
+    "xdrStreamable": false,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "DeviceTvmInfoGatheringKB",
@@ -7907,7 +9074,10 @@
     "recommendedTier": "analytics",
     "isFree": false,
     "recommendedRetentionDays": 180,
-    "xdrStreamable": false
+    "xdrStreamable": false,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "DeviceTvmSoftwareEvidenceBeta",
@@ -7927,7 +9097,10 @@
     "recommendedTier": "analytics",
     "isFree": false,
     "recommendedRetentionDays": 180,
-    "xdrStreamable": false
+    "xdrStreamable": false,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "DeviceTvmSoftwareVulnerabilitiesKB",
@@ -7947,7 +9120,10 @@
     "recommendedTier": "analytics",
     "isFree": false,
     "recommendedRetentionDays": 180,
-    "xdrStreamable": false
+    "xdrStreamable": false,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "CloudProcessEvents",
@@ -7967,7 +9143,10 @@
     "recommendedTier": "analytics",
     "isFree": false,
     "recommendedRetentionDays": 180,
-    "xdrStreamable": false
+    "xdrStreamable": false,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "CloudStorageAggregatedEvents",
@@ -7987,7 +9166,10 @@
     "recommendedTier": "analytics",
     "isFree": false,
     "recommendedRetentionDays": 180,
-    "xdrStreamable": false
+    "xdrStreamable": false,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "DataSecurityBehaviors",
@@ -8007,7 +9189,10 @@
     "recommendedTier": "analytics",
     "isFree": false,
     "recommendedRetentionDays": 365,
-    "xdrStreamable": false
+    "xdrStreamable": false,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "DataSecurityEvents",
@@ -8027,7 +9212,10 @@
     "recommendedTier": "analytics",
     "isFree": false,
     "recommendedRetentionDays": 365,
-    "xdrStreamable": false
+    "xdrStreamable": false,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "DisruptionAndResponseEvents",
@@ -8047,7 +9235,10 @@
     "recommendedTier": "analytics",
     "isFree": false,
     "recommendedRetentionDays": 365,
-    "xdrStreamable": false
+    "xdrStreamable": false,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "IdentityEvents",
@@ -8067,7 +9258,10 @@
     "recommendedTier": "analytics",
     "isFree": false,
     "recommendedRetentionDays": 365,
-    "xdrStreamable": false
+    "xdrStreamable": false,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "OAuthAppInfo",
@@ -8087,7 +9281,10 @@
     "recommendedTier": "analytics",
     "isFree": false,
     "recommendedRetentionDays": 180,
-    "xdrStreamable": false
+    "xdrStreamable": false,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "GraphAPIAuditEvents",
@@ -8107,7 +9304,10 @@
     "recommendedTier": "analytics",
     "isFree": false,
     "recommendedRetentionDays": 365,
-    "xdrStreamable": false
+    "xdrStreamable": false,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "CampaignInfo",
@@ -8126,7 +9326,10 @@
     "recommendedTier": "analytics",
     "isFree": false,
     "recommendedRetentionDays": 180,
-    "xdrStreamable": false
+    "xdrStreamable": false,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "SecurityNestedRecommendation",
@@ -8146,7 +9349,10 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 180
+    "recommendedRetentionDays": 180,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "SecurityBaseline",
@@ -8165,7 +9371,10 @@
     "mitreSources": [],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 90
+    "recommendedRetentionDays": 90,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "SecurityBaselineSummary",
@@ -8184,7 +9393,10 @@
     "mitreSources": [],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 90
+    "recommendedRetentionDays": 90,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "AgentsInfo",
@@ -8205,7 +9417,10 @@
     "recommendedTier": "analytics",
     "isFree": false,
     "recommendedRetentionDays": 180,
-    "xdrStreamable": false
+    "xdrStreamable": false,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "AIAgentsInfo",
@@ -8225,7 +9440,10 @@
     "recommendedTier": "analytics",
     "isFree": false,
     "recommendedRetentionDays": 180,
-    "xdrStreamable": false
+    "xdrStreamable": false,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "PowerPlatformConnectorActivity",
@@ -8244,7 +9462,10 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 180
+    "recommendedRetentionDays": 180,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "PowerPlatformDlpActivity",
@@ -8263,7 +9484,10 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "PowerAppsActivity",
@@ -8282,7 +9506,10 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 180
+    "recommendedRetentionDays": 180,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "AKSAudit",
@@ -8301,7 +9528,10 @@
     "mitreSources": [],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 90
+    "recommendedRetentionDays": 90,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "AKSAuditAdmin",
@@ -8320,7 +9550,10 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 180
+    "recommendedRetentionDays": 180,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "AKSControlPlane",
@@ -8339,7 +9572,10 @@
     "mitreSources": [],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 90
+    "recommendedRetentionDays": 90,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "AZFWNatRuleAggregation",
@@ -8358,7 +9594,10 @@
     "mitreSources": [],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 90
+    "recommendedRetentionDays": 90,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "AGWPerformanceLogs",
@@ -8377,7 +9616,10 @@
     "mitreSources": [],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 90
+    "recommendedRetentionDays": 90,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "NSPAccessLogs",
@@ -8397,7 +9639,10 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 180
+    "recommendedRetentionDays": 180,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "NTANetAnalytics",
@@ -8417,7 +9662,10 @@
     "mitreSources": [],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 90
+    "recommendedRetentionDays": 90,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "NTAIpDetails",
@@ -8437,7 +9685,10 @@
     "mitreSources": [],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 90
+    "recommendedRetentionDays": 90,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "AZKVAuditLogs",
@@ -8456,7 +9707,10 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "AppServiceAuditLogs",
@@ -8476,7 +9730,10 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 180
+    "recommendedRetentionDays": 180,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "AppServiceIPSecAuditLogs",
@@ -8495,7 +9752,10 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 180
+    "recommendedRetentionDays": 180,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "AppServiceAuthenticationLogs",
@@ -8514,7 +9774,10 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 180
+    "recommendedRetentionDays": 180,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "AVNMNetworkGroupMembershipChange",
@@ -8533,7 +9796,10 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 180
+    "recommendedRetentionDays": 180,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "AVNMRuleCollectionChange",
@@ -8553,7 +9819,10 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 180
+    "recommendedRetentionDays": 180,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "CDBControlPlaneRequests",
@@ -8573,7 +9842,10 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 180
+    "recommendedRetentionDays": 180,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "SQLSecurityAuditEvents",
@@ -8592,7 +9864,10 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 180
+    "recommendedRetentionDays": 180,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "WVDConnections",
@@ -8611,7 +9886,10 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 180
+    "recommendedRetentionDays": 180,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "WVDManagement",
@@ -8630,7 +9908,10 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 180
+    "recommendedRetentionDays": 180,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "ContainerAppConsoleLogs",
@@ -8649,7 +9930,10 @@
     "mitreSources": [],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 90
+    "recommendedRetentionDays": 90,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "ContainerAppSystemLogs",
@@ -8668,7 +9952,10 @@
     "mitreSources": [],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 90
+    "recommendedRetentionDays": 90,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "ContainerAppHTTPLogs",
@@ -8687,7 +9974,10 @@
     "mitreSources": [],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 90
+    "recommendedRetentionDays": 90,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "Windows365ConnectionLogs",
@@ -8706,7 +9996,10 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 180
+    "recommendedRetentionDays": 180,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "Windows365CheckpointLogs",
@@ -8725,7 +10018,10 @@
     "mitreSources": [],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 90
+    "recommendedRetentionDays": 90,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "Windows365ConnectionErrorLogs",
@@ -8744,7 +10040,10 @@
     "mitreSources": [],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 90
+    "recommendedRetentionDays": 90,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "Windows365NetworkLogs",
@@ -8763,7 +10062,10 @@
     "mitreSources": [],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 90
+    "recommendedRetentionDays": 90,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "AWSNetworkFirewallAlert",
@@ -8782,7 +10084,10 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 180
+    "recommendedRetentionDays": 180,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "AWSNetworkFirewallTls",
@@ -8801,7 +10106,10 @@
     "mitreSources": [],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 90
+    "recommendedRetentionDays": 90,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "GCPFirewallLogs",
@@ -8820,7 +10128,10 @@
     "mitreSources": [],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 90
+    "recommendedRetentionDays": 90,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "ASimUserManagementActivityLogs",
@@ -8839,7 +10150,10 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "ASimDhcpEventLogs",
@@ -8858,7 +10172,10 @@
     "mitreSources": [],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 90
+    "recommendedRetentionDays": 90,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "DNSQueryLogs",
@@ -8877,7 +10194,10 @@
     "mitreSources": [],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 90
+    "recommendedRetentionDays": 90,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "WindowsFirewall",
@@ -8896,7 +10216,10 @@
     "mitreSources": [],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 90
+    "recommendedRetentionDays": 90,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "CrowdStrikeAuditEvents",
@@ -8915,7 +10238,10 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "ZTSGraph",
@@ -8934,7 +10260,10 @@
     "mitreSources": [],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 90
+    "recommendedRetentionDays": 90,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "ZTSMetadata",
@@ -8953,7 +10282,10 @@
     "mitreSources": [],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 90
+    "recommendedRetentionDays": 90,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "DeviceTvmInfoGathering",
@@ -8973,7 +10305,10 @@
     "recommendedTier": "datalake",
     "isFree": false,
     "recommendedRetentionDays": 180,
-    "xdrStreamable": false
+    "xdrStreamable": false,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "Usage",
@@ -8993,7 +10328,10 @@
     "recommendedTier": "analytics",
     "isFree": true,
     "recommendedRetentionDays": 90,
-    "platform": true
+    "platform": true,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "SentinelOneAlertsV2_CL",
@@ -9011,7 +10349,10 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "LookoutMtdV2_CL",
@@ -9029,7 +10370,10 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "DarktraceModelAlerts_CL",
@@ -9050,7 +10394,10 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "DarktraceIncidents_CL",
@@ -9071,7 +10418,10 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "DarktraceASM_CL",
@@ -9092,7 +10442,10 @@
     ],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "DarktraceEMAIL_CL",
@@ -9113,7 +10466,10 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "DarktraceResponseActions_CL",
@@ -9134,7 +10490,10 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "DarktraceSystemStatusAlerts_CL",
@@ -9155,7 +10514,10 @@
     ],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 90
+    "recommendedRetentionDays": 90,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "Island_UserEvents_V2_CL",
@@ -9176,7 +10538,10 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "SalesforceServiceCloudV3_CL",
@@ -9196,7 +10561,10 @@
     ],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "CiscoETDv2_CL",
@@ -9214,7 +10582,10 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "ImpervaWAFCloud",
@@ -9234,7 +10605,10 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "QualysKnowledgeBase",
@@ -9252,7 +10626,10 @@
     "mitreSources": [],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "Rapid7InsightVMCloudAssets",
@@ -9270,7 +10647,10 @@
     "mitreSources": [],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "Rapid7InsightVMCloudVulnerabilities",
@@ -9288,7 +10668,10 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "Audit_CL",
@@ -9306,7 +10689,10 @@
     "mitreSources": [],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "Seg_Cg_CL",
@@ -9324,7 +10710,10 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "Seg_Dlp_CL",
@@ -9342,7 +10731,10 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "Ttp_Url_CL",
@@ -9360,7 +10752,10 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "Ttp_Attachment_CL",
@@ -9378,7 +10773,10 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "Ttp_Impersonation_CL",
@@ -9396,7 +10794,10 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "DynatraceAttacksV2_CL",
@@ -9414,7 +10815,10 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 180
+    "recommendedRetentionDays": 180,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "DynatraceAuditLogsV2_CL",
@@ -9431,7 +10835,10 @@
     "mitreSources": [],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 180
+    "recommendedRetentionDays": 180,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "DynatraceProblemsV2_CL",
@@ -9448,7 +10855,10 @@
     "mitreSources": [],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 180
+    "recommendedRetentionDays": 180,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "DynatraceSecurityProblemsV2_CL",
@@ -9466,7 +10876,10 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "ElasticAgentLogsV2_CL",
@@ -9483,7 +10896,10 @@
     "mitreSources": [],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 180
+    "recommendedRetentionDays": 180,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "DigitalShadows_V2_CL",
@@ -9501,7 +10917,10 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "MailRiskEventEmails_CL",
@@ -9519,7 +10938,10 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "ContrastADRAttackEvents_CL",
@@ -9537,7 +10959,10 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 180
+    "recommendedRetentionDays": 180,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "ContrastADRIncidents_CL",
@@ -9555,7 +10980,10 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 180
+    "recommendedRetentionDays": 180,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "HalcyonEventsV2_CL",
@@ -9575,7 +11003,10 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "HalcyonAlertUpdatesV2_CL",
@@ -9595,7 +11026,10 @@
     ],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "CiscoUmbrellaAdminAudit_CL",
@@ -9614,7 +11048,10 @@
     "mitreSources": [],
     "recommendedTier": "analytics",
     "isFree": false,
-    "recommendedRetentionDays": 365
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "IllumioInsightsGraph",
@@ -9634,7 +11071,10 @@
     ],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 90
+    "recommendedRetentionDays": 90,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
   },
   {
     "tableName": "IllumioInsightsSummary_CL",
@@ -9652,6 +11092,677 @@
     "mitreSources": [],
     "recommendedTier": "datalake",
     "isFree": false,
-    "recommendedRetentionDays": 90
+    "recommendedRetentionDays": 90,
+    "sourceIds": [
+      "log-horizon-classifications"
+    ]
+  },
+  {
+    "tableName": "CheckpointHEC_CL",
+    "connector": "Check Point Harmony Email and Collaboration",
+    "classification": "primary",
+    "category": "Email Security",
+    "description": "Check Point Harmony Email and Collaboration security events including phishing, data loss prevention, and quarantine outcomes",
+    "keywords": [
+      "check point",
+      "harmony",
+      "email",
+      "phishing",
+      "dlp",
+      "quarantine"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "isFree": false,
+    "recommendedRetentionDays": 180,
+    "domainId": "email-collaboration",
+    "logTypeId": "security-event",
+    "sourceIds": [
+      "azure-sentinel-rule-corpus"
+    ]
+  },
+  {
+    "tableName": "ContraForceEvents_CL",
+    "connector": "ContraForce",
+    "classification": "primary",
+    "category": "Security Alerts",
+    "description": "ContraForce security service delivery events including incident detections, administrative access changes, machine credential activity, and destructive workspace actions",
+    "keywords": [
+      "contraforce",
+      "incident",
+      "administration",
+      "credential",
+      "workspace"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "isFree": false,
+    "recommendedRetentionDays": 365,
+    "domainId": "security-operations",
+    "logTypeId": "alert",
+    "sourceIds": [
+      "azure-sentinel-rule-corpus"
+    ]
+  },
+  {
+    "tableName": "Tailscale_Devices_CL",
+    "connector": "Tailscale",
+    "classification": "secondary",
+    "category": "Configuration Management",
+    "description": "Tailscale device inventory and state used as context for network investigations",
+    "keywords": [
+      "tailscale",
+      "device",
+      "inventory",
+      "network",
+      "configuration"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "datalake",
+    "isFree": false,
+    "recommendedRetentionDays": 180,
+    "domainId": "infrastructure-platform",
+    "logTypeId": "configuration",
+    "sourceIds": [
+      "azure-sentinel-rule-corpus"
+    ]
+  },
+  {
+    "tableName": "Tailscale_Network_CL",
+    "connector": "Tailscale",
+    "classification": "primary",
+    "category": "Network Flow",
+    "description": "Tailscale network session activity normalized for traffic investigation",
+    "keywords": [
+      "tailscale",
+      "network",
+      "session",
+      "flow",
+      "traffic"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "datalake",
+    "isFree": false,
+    "recommendedRetentionDays": 180,
+    "domainId": "network",
+    "logTypeId": "network-flow",
+    "sourceIds": [
+      "azure-sentinel-rule-corpus"
+    ]
+  },
+  {
+    "tableName": "Unifi_SiteManager_Devices_CL",
+    "connector": "UniFi Site Manager",
+    "classification": "secondary",
+    "category": "Configuration Management",
+    "description": "UniFi Site Manager device inventory, firmware, and operational state",
+    "keywords": [
+      "unifi",
+      "device",
+      "inventory",
+      "firmware",
+      "state"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "datalake",
+    "isFree": false,
+    "recommendedRetentionDays": 180,
+    "domainId": "infrastructure-platform",
+    "logTypeId": "configuration",
+    "sourceIds": [
+      "azure-sentinel-rule-corpus"
+    ]
+  },
+  {
+    "tableName": "Unifi_SiteManager_Hosts_CL",
+    "connector": "UniFi Site Manager",
+    "classification": "secondary",
+    "category": "Configuration Management",
+    "description": "UniFi Site Manager host and controller inventory and connection state",
+    "keywords": [
+      "unifi",
+      "host",
+      "controller",
+      "inventory",
+      "configuration"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "datalake",
+    "isFree": false,
+    "recommendedRetentionDays": 180,
+    "domainId": "infrastructure-platform",
+    "logTypeId": "configuration",
+    "sourceIds": [
+      "azure-sentinel-rule-corpus"
+    ]
+  },
+  {
+    "tableName": "Unifi_SiteManager_ISPMetrics_CL",
+    "connector": "UniFi Site Manager",
+    "classification": "secondary",
+    "category": "Infrastructure Diagnostics",
+    "description": "UniFi Site Manager internet service provider availability, latency, and performance metrics",
+    "keywords": [
+      "unifi",
+      "isp",
+      "latency",
+      "availability",
+      "metrics"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "datalake",
+    "isFree": false,
+    "recommendedRetentionDays": 90,
+    "domainId": "infrastructure-platform",
+    "logTypeId": "diagnostic",
+    "sourceIds": [
+      "azure-sentinel-rule-corpus"
+    ]
+  },
+  {
+    "tableName": "Unifi_SiteManager_Sites_CL",
+    "connector": "UniFi Site Manager",
+    "classification": "secondary",
+    "category": "Configuration Management",
+    "description": "UniFi Site Manager site inventory and security configuration state",
+    "keywords": [
+      "unifi",
+      "site",
+      "inventory",
+      "network",
+      "configuration"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "datalake",
+    "isFree": false,
+    "recommendedRetentionDays": 180,
+    "domainId": "infrastructure-platform",
+    "logTypeId": "configuration",
+    "sourceIds": [
+      "azure-sentinel-rule-corpus"
+    ]
+  },
+  {
+    "tableName": "CybereinforceCTE_CL",
+    "connector": "Cybereinforce Threat Enforcement",
+    "classification": "primary",
+    "category": "Network Security",
+    "description": "Cybereinforce browser-level URL blocking, threat-intelligence matches, and administration events",
+    "keywords": [
+      "cybereinforce",
+      "url",
+      "browser",
+      "blocking",
+      "threat intelligence"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "isFree": false,
+    "recommendedRetentionDays": 180,
+    "domainId": "network",
+    "logTypeId": "security-event",
+    "sourceIds": [
+      "azure-sentinel-rule-corpus"
+    ]
+  },
+  {
+    "tableName": "DuoActivity_CL",
+    "connector": "Cisco Duo",
+    "classification": "primary",
+    "category": "Identity & Access",
+    "description": "Cisco Duo administrative activity including administrator, policy, and configuration changes",
+    "keywords": [
+      "duo",
+      "identity",
+      "administrator",
+      "policy",
+      "audit"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "isFree": false,
+    "recommendedRetentionDays": 365,
+    "domainId": "identity",
+    "logTypeId": "authentication",
+    "sourceIds": [
+      "azure-sentinel-rule-corpus"
+    ]
+  },
+  {
+    "tableName": "DuoAuthentication_CL",
+    "connector": "Cisco Duo",
+    "classification": "primary",
+    "category": "Identity & Access",
+    "description": "Cisco Duo authentication activity including outcomes, users, devices, locations, and factors",
+    "keywords": [
+      "duo",
+      "authentication",
+      "mfa",
+      "identity",
+      "device"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "isFree": false,
+    "recommendedRetentionDays": 365,
+    "domainId": "identity",
+    "logTypeId": "authentication",
+    "sourceIds": [
+      "azure-sentinel-rule-corpus"
+    ]
+  },
+  {
+    "tableName": "NetskopeAlertEvents_CL",
+    "connector": "Netskope Alert Events",
+    "classification": "primary",
+    "category": "Security Alerts",
+    "description": "Netskope security alert events for cloud, web, data, and threat activity",
+    "keywords": [
+      "netskope",
+      "alert",
+      "cloud",
+      "web",
+      "data security"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "isFree": false,
+    "recommendedRetentionDays": 365,
+    "domainId": "security-operations",
+    "logTypeId": "alert",
+    "sourceIds": [
+      "azure-sentinel-rule-corpus"
+    ]
+  },
+  {
+    "tableName": "Pathlock_TDnR_CL",
+    "connector": "Pathlock Threat Detection and Response for SAP",
+    "classification": "primary",
+    "category": "SAP Security",
+    "description": "Pathlock security-relevant SAP events enriched with business process context",
+    "keywords": [
+      "pathlock",
+      "sap",
+      "threat detection",
+      "audit",
+      "business process"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "isFree": false,
+    "recommendedRetentionDays": 365,
+    "domainId": "applications-workloads",
+    "logTypeId": "audit",
+    "sourceIds": [
+      "azure-sentinel-rule-corpus"
+    ]
+  },
+  {
+    "tableName": "RedSiftEmailForensics_CL",
+    "connector": "Red Sift",
+    "classification": "primary",
+    "category": "Email Security",
+    "description": "Red Sift email forensic events with sender, source, domain, URL, and message context",
+    "keywords": [
+      "red sift",
+      "email",
+      "forensics",
+      "sender",
+      "url"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "isFree": false,
+    "recommendedRetentionDays": 365,
+    "domainId": "email-collaboration",
+    "logTypeId": "security-event",
+    "sourceIds": [
+      "azure-sentinel-rule-corpus"
+    ]
+  },
+  {
+    "tableName": "SailPointISC_Events_CL",
+    "connector": "SailPoint Identity Security Cloud",
+    "classification": "primary",
+    "category": "Identity & Access",
+    "description": "SailPoint Identity Security Cloud events for identity governance operations and failures",
+    "keywords": [
+      "sailpoint",
+      "identity governance",
+      "access",
+      "audit",
+      "event"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "isFree": false,
+    "recommendedRetentionDays": 365,
+    "domainId": "identity",
+    "logTypeId": "authentication",
+    "sourceIds": [
+      "azure-sentinel-rule-corpus"
+    ]
+  },
+  {
+    "tableName": "SOCRadar_Alarms_CL",
+    "connector": "SOCRadar",
+    "classification": "primary",
+    "category": "Security Alerts",
+    "description": "SOCRadar alarms used for critical-alarm detection, volume monitoring, and investigation",
+    "keywords": [
+      "socradar",
+      "alarm",
+      "threat",
+      "severity",
+      "investigation"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "isFree": false,
+    "recommendedRetentionDays": 365,
+    "domainId": "security-operations",
+    "logTypeId": "alert",
+    "sourceIds": [
+      "azure-sentinel-rule-corpus"
+    ]
+  },
+  {
+    "tableName": "Speculus_Indicators_CL",
+    "connector": "Speculus Threat Intelligence",
+    "classification": "secondary",
+    "category": "Threat Intelligence",
+    "description": "Speculus threat indicators used to enrich and match activity in other security tables",
+    "keywords": [
+      "speculus",
+      "threat intelligence",
+      "indicator",
+      "ip address",
+      "enrichment"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "isFree": false,
+    "recommendedRetentionDays": 180,
+    "domainId": "threat-intelligence",
+    "logTypeId": "threat-indicator",
+    "sourceIds": [
+      "azure-sentinel-rule-corpus"
+    ]
+  },
+  {
+    "tableName": "SpyCloudBreachWatchlistV2_CL",
+    "connector": "SpyCloud Enterprise Protection",
+    "classification": "primary",
+    "category": "Threat Intelligence",
+    "description": "SpyCloud breach and malware exposure records for identifying affected users and credentials",
+    "keywords": [
+      "spycloud",
+      "breach",
+      "credential",
+      "malware",
+      "exposure"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "isFree": false,
+    "recommendedRetentionDays": 365,
+    "domainId": "threat-intelligence",
+    "logTypeId": "threat-indicator",
+    "sourceIds": [
+      "azure-sentinel-rule-corpus"
+    ]
+  },
+  {
+    "tableName": "StealthTalkAnomalousAuth_CL",
+    "connector": "StealthTalk",
+    "classification": "primary",
+    "category": "Identity & Access",
+    "description": "StealthTalk anomalous authentication events normalized for identity investigation",
+    "keywords": [
+      "stealthtalk",
+      "authentication",
+      "anomaly",
+      "identity",
+      "brute force"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "isFree": false,
+    "recommendedRetentionDays": 365,
+    "domainId": "identity",
+    "logTypeId": "authentication",
+    "sourceIds": [
+      "azure-sentinel-rule-corpus"
+    ]
+  },
+  {
+    "tableName": "StratoSecure_Findings_CL",
+    "connector": "StratoSecure Security Platform",
+    "classification": "primary",
+    "category": "Posture Management",
+    "description": "StratoSecure application security posture management findings",
+    "keywords": [
+      "stratosecure",
+      "aspm",
+      "finding",
+      "application security",
+      "posture"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "isFree": false,
+    "recommendedRetentionDays": 180,
+    "domainId": "security-operations",
+    "logTypeId": "posture",
+    "sourceIds": [
+      "azure-sentinel-rule-corpus"
+    ]
+  },
+  {
+    "tableName": "Tailscale_Audit_CL",
+    "connector": "Tailscale",
+    "classification": "primary",
+    "category": "Network Security",
+    "description": "Tailscale administrative audit events for network, identity, device, and policy changes",
+    "keywords": [
+      "tailscale",
+      "audit",
+      "network",
+      "device",
+      "policy"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "isFree": false,
+    "recommendedRetentionDays": 365,
+    "domainId": "network",
+    "logTypeId": "security-event",
+    "sourceIds": [
+      "azure-sentinel-rule-corpus"
+    ]
+  },
+  {
+    "tableName": "UniqkeyEvents_CL",
+    "connector": "Uniqkey",
+    "classification": "primary",
+    "category": "Identity & Access",
+    "description": "Uniqkey password and credential management audit events including credential and data exports",
+    "keywords": [
+      "uniqkey",
+      "credential",
+      "password",
+      "export",
+      "audit"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "isFree": false,
+    "recommendedRetentionDays": 365,
+    "domainId": "identity",
+    "logTypeId": "authentication",
+    "sourceIds": [
+      "azure-sentinel-rule-corpus"
+    ]
+  },
+  {
+    "tableName": "UtimacoESKMKmipServerLogs_CL",
+    "connector": "Utimaco Enterprise Secure Key Manager",
+    "classification": "primary",
+    "category": "Data Security",
+    "description": "Utimaco Enterprise Secure Key Manager KMIP server security and key-management events",
+    "keywords": [
+      "utimaco",
+      "kmip",
+      "key management",
+      "authentication",
+      "cryptography"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "isFree": false,
+    "recommendedRetentionDays": 365,
+    "domainId": "data-security",
+    "logTypeId": "security-event",
+    "sourceIds": [
+      "azure-sentinel-rule-corpus"
+    ]
+  },
+  {
+    "tableName": "Vaikora_AgentSignals_CL",
+    "connector": "Vaikora AI Agent Behavioral Signals",
+    "classification": "primary",
+    "category": "Cloud Security",
+    "description": "Vaikora AI agent actions, policy decisions, anomaly scores, and risk levels",
+    "keywords": [
+      "vaikora",
+      "ai agent",
+      "behavior",
+      "policy",
+      "anomaly"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "isFree": false,
+    "recommendedRetentionDays": 180,
+    "domainId": "cloud",
+    "logTypeId": "security-event",
+    "sourceIds": [
+      "azure-sentinel-rule-corpus"
+    ]
+  },
+  {
+    "tableName": "VaikoraO365_Quarantine_CL",
+    "connector": "Vaikora for Microsoft 365",
+    "classification": "primary",
+    "category": "Email Security",
+    "description": "Vaikora Microsoft 365 mailbox quarantine events classified for phishing risk",
+    "keywords": [
+      "vaikora",
+      "microsoft 365",
+      "email",
+      "quarantine",
+      "phishing"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "isFree": false,
+    "recommendedRetentionDays": 365,
+    "domainId": "email-collaboration",
+    "logTypeId": "security-event",
+    "sourceIds": [
+      "azure-sentinel-rule-corpus"
+    ]
+  },
+  {
+    "tableName": "ValimailEnforceEvents_CL",
+    "connector": "Valimail Enforce",
+    "classification": "primary",
+    "category": "Email Security",
+    "description": "Valimail Enforce audit events for authentication keys, DMARC policy, and user-management changes",
+    "keywords": [
+      "valimail",
+      "dmarc",
+      "email authentication",
+      "policy",
+      "audit"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "isFree": false,
+    "recommendedRetentionDays": 365,
+    "domainId": "email-collaboration",
+    "logTypeId": "security-event",
+    "sourceIds": [
+      "azure-sentinel-rule-corpus"
+    ]
+  },
+  {
+    "tableName": "WhisperASNReputation_CL",
+    "connector": "Whisper Security",
+    "classification": "secondary",
+    "category": "Threat Intelligence",
+    "description": "Whisper Security autonomous system number reputation and threat-score context",
+    "keywords": [
+      "whisper",
+      "asn",
+      "reputation",
+      "bgp",
+      "threat intelligence"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "isFree": false,
+    "recommendedRetentionDays": 180,
+    "domainId": "threat-intelligence",
+    "logTypeId": "threat-indicator",
+    "sourceIds": [
+      "azure-sentinel-rule-corpus"
+    ]
+  },
+  {
+    "tableName": "WhisperInfraContext_CL",
+    "connector": "Whisper Security",
+    "classification": "secondary",
+    "category": "Threat Intelligence",
+    "description": "Whisper Security DNS, WHOIS, BGP, and infrastructure context for indicators",
+    "keywords": [
+      "whisper",
+      "dns",
+      "whois",
+      "bgp",
+      "infrastructure"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "isFree": false,
+    "recommendedRetentionDays": 180,
+    "domainId": "threat-intelligence",
+    "logTypeId": "threat-indicator",
+    "sourceIds": [
+      "azure-sentinel-rule-corpus"
+    ]
+  },
+  {
+    "tableName": "WhisperThreatIntel_CL",
+    "connector": "Whisper Security",
+    "classification": "secondary",
+    "category": "Threat Intelligence",
+    "description": "Whisper Security threat-intelligence enrichment for IP addresses, domains, command-and-control, and malware associations",
+    "keywords": [
+      "whisper",
+      "threat intelligence",
+      "indicator",
+      "c2",
+      "malware"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "isFree": false,
+    "recommendedRetentionDays": 180,
+    "domainId": "threat-intelligence",
+    "logTypeId": "threat-indicator",
+    "sourceIds": [
+      "azure-sentinel-rule-corpus"
+    ]
   }
 ]
