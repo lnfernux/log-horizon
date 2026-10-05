@@ -6,6 +6,7 @@
 
 ![PowerShell 7+](https://img.shields.io/badge/PowerShell-7%2B-blue)
 ![Module Version](https://img.shields.io/badge/version-0.9.0-green)
+[![Log Baseline](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Flnfernux%2Flog-horizon%2Fmain%2FData%2Fbaseline-version.json&query=%24.dataVersion&label=log-baseline&color=00cc00)](https://github.com/lnfernux/log-baseline/releases)
 
 ---
 I've had to answer *"what are we actually getting out of these logs?"* or *"what is the recommended logs for Microsoft Sentinel"* more times than I can count. The answer always depend on so many things, but we can be generic. So I built this thingy right here.
