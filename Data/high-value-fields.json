@@ -6,17 +6,10 @@
       "ClientAppUsed",
       "ConditionalAccessStatus",
       "CorrelationId",
-      "DeviceDetail_dynamic",
-      "DeviceId",
-      "GitHub",
       "IPAddress",
       "Location",
       "LocationDetails",
-      "Name",
-      "Operation",
-      "Place",
       "ResourceDisplayName",
-      "Result",
       "ResultDescription",
       "ResultType",
       "RiskLevelDuringSignIn",
@@ -36,27 +29,13 @@
     "description": "Identity & Access - Mined from 4 community rules",
     "highValueFields": [
       "TimeGenerated",
-      "Result",
       "ResultType",
       "OperationName",
-      "IsActive",
-      "DeleterIPAddress",
-      "Place",
-      "credentialCreationTime",
-      "CreatorIPAddress",
-      "list_AssignedRoles",
       "ServicePrincipalName",
-      "DeleterName",
       "SourceSystem",
       "AppID",
-      "CreatorName",
       "Id",
-      "CreatorUserPrincipalName",
-      "AssignedRole",
-      "ValidUntil",
-      "DeleterUserPrincipalName",
-      "AADTenantId",
-      "Activities"
+      "AADTenantId"
     ],
     "splitHints": []
   },
@@ -91,30 +70,38 @@
     ],
     "splitHints": []
   },
-  "ADOAuditLogs": {
-    "description": "Mined from 34 community rules",
+  "ABNORMAL_SECURITY_THREAT_LOG_CL": {
+    "description": "Unclassified - Mined from 3 public rules, fields not schema-verified",
     "highValueFields": [
-      "OperationName",
-      "AccountName",
+      "RecipientEmail",
+      "AttackType",
+      "MessageId",
+      "RemediationStatus",
+      "SenderEmail",
+      "Subject",
       "TimeGenerated",
-      "ActorUPN",
-      "Details",
-      "Data",
-      "Area",
-      "PipelineName",
-      "UserAgent",
-      "IpAddress",
-      "ProviderName",
-      "AadUserId",
-      "AuthenticationMechanism",
-      "ProjectName",
-      "AgentPoolName",
-      "VariableGroupName",
-      "IsLegacy",
-      "Type",
-      "CurrentCount",
-      "PipelineId",
-      "ReleaseName"
+      "AttackScore",
+      "PortalUrl",
+      "SenderIP",
+      "SenderName",
+      "ThreatCount"
+    ],
+    "splitHints": []
+  },
+  "AgentsInfo": {
+    "description": "Cloud Security - Mined from 11 public rules",
+    "highValueFields": [
+      "AgentId",
+      "LifecycleStatus",
+      "CreatedDateTime",
+      "Name",
+      "Platform",
+      "Instructions",
+      "Timestamp",
+      "PublishedStatus",
+      "Owners",
+      "McpServers",
+      "SharedWith"
     ],
     "splitHints": []
   },
@@ -126,19 +113,10 @@
       "Action",
       "Hostname",
       "RequestUri",
-      "Uri",
       "TransactionId",
       "Message",
-      "Total_TransactionId",
       "DetailedMessage",
-      "DetailedData",
-      "transactionId_g",
-      "BlockvsSuccessRatio",
-      "SessionBlockedCount",
-      "TimeKey",
-      "OriginalRequestUriWithArgs",
-      "SessionBlockedStarted",
-      "HttpStatus"
+      "DetailedData"
     ],
     "splitHints": []
   },
@@ -170,42 +148,23 @@
     ],
     "splitHints": []
   },
-  "AIShield": {
-    "description": "Mined from 9 community rules",
-    "highValueFields": [
-      "Severity",
-      "Message",
-      "SuspiciousLevel",
-      "NTDomain"
-    ],
-    "splitHints": []
-  },
   "AlertEvidence": {
     "description": "Security Alerts - Mined from 35 community rules",
     "highValueFields": [
       "AlertId",
-      "Timestamp",
       "Title",
       "DeviceId",
       "DeviceName",
       "AccountName",
       "RemoteIP",
       "EntityType",
-      "LogonType",
-      "ActionType",
       "AccountSid",
       "AccountDomain",
-      "AlertTime",
       "NetworkMessageId",
-      "RemoteDeviceName",
       "RemoteUrl",
-      "InitiatingProcessFileName",
       "TimeGenerated",
       "ServiceSource",
-      "FileName",
-      "MachineCount",
-      "HostName",
-      "Command"
+      "FileName"
     ],
     "splitHints": []
   },
@@ -214,24 +173,6 @@
     "highValueFields": [
       "AlertId",
       "Title",
-      "Timestamp",
-      "DeviceId",
-      "EntityType",
-      "ActionType",
-      "RemoteUrl",
-      "NetworkMessageId",
-      "AccountName",
-      "DeviceName",
-      "RemoteIP",
-      "InitiatingProcessFileName",
-      "LogonType",
-      "FileName",
-      "AlertTime",
-      "InitiatingProcessCommandLine",
-      "AccountDomain",
-      "MachineCount",
-      "AccountSid",
-      "HasNearbyAlert",
       "ServiceSource"
     ],
     "splitHints": []
@@ -251,75 +192,30 @@
       "UserName",
       "DeviceInsights",
       "UserPrincipalName",
-      "TimeGeneratedMax",
-      "DestinationIPlist",
-      "Name",
-      "TotalAnomalies",
-      "DestinationPortlist",
-      "DestinationIP",
-      "Total",
-      "AnomalyDetails",
-      "DeviceVendor",
-      "AnomalyHour",
-      "HourlyCount",
-      "DistinctTemplates"
-    ],
-    "splitHints": []
-  },
-  "ApacheHTTPServer": {
-    "description": "Mined from 20 community rules",
-    "highValueFields": [
-      "TimeGenerated",
-      "HttpStatusCode",
-      "File",
-      "UrlOriginal",
-      "TopUrls",
-      "SrcIpAddr",
-      "HttpUserAgentOriginal",
-      "TotalFile",
-      "Total_UA_Count",
-      "HttpRequestMethod",
-      "EventType",
-      "MultipleServerErrors",
-      "RareFiles",
-      "MultipleClientErrors",
-      "UAs",
-      "EventMessage"
+      "AnomalyDetails"
     ],
     "splitHints": []
   },
   "AuditLogs": {
     "description": "Azure AD audit logs - directory changes, app registrations, role assignments, group changes",
     "highValueFields": [
-      "AccountName",
       "ActivityDisplayName",
       "AdditionalDetails",
       "Category",
       "CorrelationId",
       "Identity",
       "InitiatedBy",
-      "InitiatingAadUserId",
-      "InitiatingAccountName",
-      "InitiatingAppName",
-      "InitiatingAppServicePrincipalId",
-      "InitiatingIPAddress",
-      "InitiatingUserPrincipalName",
-      "IPAddress",
       "LoggedByService",
       "OperationName",
       "Result",
       "ResultReason",
-      "TargetName",
       "TargetResources",
-      "TargetUserPrincipalName",
-      "TimeGenerated",
-      "UPNSuffix",
-      "UserPrincipalName"
+      "TimeGenerated"
     ],
     "splitHints": [
       {
         "description": "Keep role/group changes, credential changes, and app modifications in Analytics",
-        "kql": "OperationName has_any (\"Add member\", \"Remove member\", \"Add owner\", \"Remove owner\", \"role\", \"password\", \"credential\", \"application\", \"service principal\", \"policy\", \"conditional access\")"
+        "kql": "(OperationName has \"Add member\" or OperationName has \"Remove member\" or OperationName has \"Add owner\" or OperationName has \"Remove owner\" or OperationName has \"role\" or OperationName has \"password\" or OperationName has \"credential\" or OperationName has \"application\" or OperationName has \"service principal\" or OperationName has \"policy\" or OperationName has \"conditional access\")"
       }
     ]
   },
@@ -345,25 +241,16 @@
       "ErrorMessage",
       "UserIdentityArn",
       "ErrorCode",
-      "UserName",
-      "AccountName",
       "SourceIpAddress",
       "TimeGenerated",
       "EventSource",
       "UserAgent",
       "UserIdentityAccountId",
       "AWSRegion",
-      "Action",
       "RecipientAccountId",
-      "AccountUPNSuffix",
       "UserIdentityPrincipalid",
-      "Effect",
-      "Statement",
-      "Condition",
       "SessionMfaAuthenticated",
-      "Resource",
-      "EventTypeName",
-      "PolicyName"
+      "EventTypeName"
     ],
     "splitHints": []
   },
@@ -378,68 +265,42 @@
       "AwsSecurityFindingId",
       "AwsSecurityFindingTitle",
       "AwsSecurityFindingDescription",
-      "Resource",
       "AwsSecurityFindingGeneratorId",
-      "TimeGenerated",
-      "RootUserARN",
-      "QueueArn",
-      "TrailId",
-      "Perm",
-      "UserId",
-      "SGDetails",
-      "IAMPolicyName",
-      "OpenHighRiskPorts",
-      "InstanceArn",
-      "IAMPolicyDescription",
-      "UserName",
-      "IAMPolicyId",
-      "Details",
-      "TrailName"
+      "TimeGenerated"
     ],
     "splitHints": []
   },
   "AZFWApplicationRule": {
     "description": "Network Flow - Mined from 4 community rules",
     "highValueFields": [
-      "OperationName",
       "Fqdn",
       "SourceIp",
       "Protocol",
-      "BinTime",
       "TargetUrl",
-      "RemoteIP",
-      "srcAddr_a",
-      "IndicatorId",
       "Type",
-      "SourceAddress",
-      "Id",
-      "Confidence",
-      "Description",
       "Action",
-      "IndicatorType",
-      "TimeGenerated",
-      "NetworkSourceIP",
-      "TrafficLightProtocolLevel",
-      "AlertTimedCountPortsInBinTime",
-      "AzureFirewall_TimeGenerated",
-      "Firewall_Action"
+      "TimeGenerated"
     ],
     "splitHints": []
   },
   "AZFWIdpsSignature": {
     "description": "Network Security - Mined from 5 community rules",
     "highValueFields": [
-      "Actions",
-      "StartTime",
       "Severity",
-      "EndTime",
       "SourceIp",
       "Description",
-      "TotalHits",
-      "ThreatCategory",
-      "Signatures",
+      "TimeGenerated"
+    ],
+    "splitHints": []
+  },
+  "AZFWNetworkRule": {
+    "description": "Network Flow - Mined from 3 public rules",
+    "highValueFields": [
+      "DestinationPort",
+      "SourcePort",
+      "Protocol",
       "TimeGenerated",
-      "MaxSeverity"
+      "Type"
     ],
     "splitHints": []
   },
@@ -447,7 +308,6 @@
     "description": "Azure platform activity log - resource CRUD, RBAC changes, policy events, service health",
     "highValueFields": [
       "_ResourceId",
-      "AadUserId",
       "ActivityStatusValue",
       "Authorization",
       "Caller",
@@ -455,7 +315,6 @@
       "CategoryValue",
       "HTTPRequest",
       "Level",
-      "Name",
       "OperationName",
       "OperationNameValue",
       "Properties",
@@ -464,13 +323,12 @@
       "ResourceId",
       "ResourceProviderValue",
       "SubscriptionId",
-      "TimeGenerated",
-      "UPNSuffix"
+      "TimeGenerated"
     ],
     "splitHints": [
       {
         "description": "Keep write/delete operations and failures in Analytics; read-only success events to Data Lake",
-        "kql": "CategoryValue in (\"Administrative\", \"Security\", \"Policy\") or ActivityStatusValue == \"Failed\" or OperationNameValue has_any (\"delete\", \"write\", \"action\")"
+        "kql": "CategoryValue in (\"Administrative\", \"Security\", \"Policy\") or ActivityStatusValue == \"Failed\" or (OperationNameValue has \"delete\" or OperationNameValue has \"write\" or OperationNameValue has \"action\")"
       }
     ]
   },
@@ -504,7 +362,7 @@
     "splitHints": [
       {
         "description": "Keep failures, Key Vault access, NSG flow denies, and high-severity events in Analytics",
-        "kql": "ResultType == \"Failed\" or Level == \"Error\" or Level == \"Critical\" or Category in (\"AuditEvent\", \"NetworkSecurityGroupEvent\", \"NetworkSecurityGroupRuleCounter\") or OperationName has_any (\"SecretGet\", \"SecretSet\", \"SecretDelete\", \"KeyGet\", \"VaultGet\")"
+        "kql": "ResultType == \"Failed\" or Level == \"Error\" or Level == \"Critical\" or Category in (\"AuditEvent\", \"NetworkSecurityGroupEvent\", \"NetworkSecurityGroupRuleCounter\") or (OperationName has \"SecretGet\" or OperationName has \"SecretSet\" or OperationName has \"SecretDelete\" or OperationName has \"KeyGet\" or OperationName has \"VaultGet\")"
       }
     ]
   },
@@ -548,18 +406,7 @@
       "InvestigationPriority",
       "DevicesInsights",
       "ActionType",
-      "Name",
-      "ResultType",
-      "AssignedRoles",
-      "UserType",
-      "GroupMembership",
-      "AccountUPN",
-      "Tags",
-      "UEBARiskScore",
-      "SourceIPLocation",
-      "JobTitle",
-      "IsAccountEnabled",
-      "IPAddress"
+      "SourceIPLocation"
     ],
     "splitHints": []
   },
@@ -570,188 +417,18 @@
     ],
     "splitHints": []
   },
-  "Bitglass": {
-    "description": "Mined from 20 community rules",
+  "CheckpointHEC_CL": {
+    "description": "Email Security - Mined from 6 public rules, fields not schema-verified",
     "highValueFields": [
-      "EventType",
+      "EventCategory",
       "TimeGenerated",
-      "EventResultDetails",
-      "User",
-      "EventMessage",
-      "Action",
-      "HttpRequestMethod",
-      "Dvc",
-      "WebCategories",
-      "DlpPattern",
-      "NetworkProtocol",
-      "Application"
-    ],
-    "splitHints": []
-  },
-  "BoxEvents": {
-    "description": "Mined from 20 community rules",
-    "highValueFields": [
-      "EventType",
-      "EventEndTime",
-      "SourceLogin",
-      "SourceName",
-      "SrcUserName",
-      "SourceItemName",
-      "FileDirectory",
-      "LastLoginTime",
-      "AdditionalDetailsRole",
-      "SourceFileName",
-      "User",
-      "AccessibleByLogin",
-      "AdditionalDetailsGroupName",
-      "EventsPerDay",
-      "AccessibleByName",
-      "NewRole"
-    ],
-    "splitHints": []
-  },
-  "Cisco_Umbrella": {
-    "description": "Mined from 30 community rules",
-    "highValueFields": [
-      "TimeGenerated",
-      "EventType",
-      "SrcIpAddr",
-      "DstIpAddr",
-      "UrlOriginal",
-      "Message",
-      "DvcAction",
-      "HttpUserAgentOriginal",
-      "Identities",
-      "UrlCategory",
-      "SrcBytes",
-      "Filename",
-      "TotalEvents",
-      "Hostname",
-      "FQDNs",
-      "Domain",
-      "sum_SrcBytes",
-      "DnsQueryName",
-      "DnsResponseCodeName"
-    ],
-    "splitHints": []
-  },
-  "CiscoDuo": {
-    "description": "Mined from 21 community rules",
-    "highValueFields": [
-      "DstUserName",
-      "TimeGenerated",
-      "SrcIpAddr",
-      "EventType",
-      "DvcAction",
-      "EventResult",
-      "SrcUserName",
-      "EventResultDetails",
-      "AccessDvcIpAddr",
-      "SrcGeoCity",
-      "AccessDvcOsVersion",
-      "Duo_TimeGenerated",
-      "SrcGeoCountry",
-      "TransactionId",
-      "TrafficLightProtocolLevel",
-      "AccessDvcPasswordSet",
-      "NetworkSourceIP",
-      "Id",
-      "Confidence"
-    ],
-    "splitHints": []
-  },
-  "CiscoISEEvent": {
-    "description": "Mined from 20 community rules",
-    "highValueFields": [
-      "TimeGenerated",
-      "EventId",
-      "DstUserName",
-      "SrcIpAddr",
-      "DstIpAddr",
-      "DvcIpAddr",
-      "DvcHostname",
-      "TotalEvents",
-      "CmdSet",
-      "PrivilegeLevel",
-      "HttpUserAgentOriginal",
-      "EventCount",
-      "DvcHostname1",
-      "PostureStatus"
-    ],
-    "splitHints": []
-  },
-  "CiscoSecureEndpoint": {
-    "description": "Mined from 20 community rules",
-    "highValueFields": [
-      "EventMessage",
-      "TimeGenerated",
-      "ThreatName",
-      "EventSubType",
-      "DstHostname",
-      "SrcFileName",
-      "IndicatorThreatType",
-      "SrcFilePath"
-    ],
-    "splitHints": []
-  },
-  "CiscoSEGEvent": {
-    "description": "Mined from 21 community rules",
-    "highValueFields": [
-      "NetworkDirection",
-      "TimeGenerated",
-      "SimplifiedDeviceAction",
-      "DstUserName",
-      "SrcUserName",
-      "EventMessage",
-      "SourceIP"
-    ],
-    "splitHints": []
-  },
-  "CiscoSyslogUTD": {
-    "description": "Mined from 4 community rules",
-    "highValueFields": [
-      "SourceIP",
-      "NetflowFwSrcAddrIpv4",
-      "Malware",
-      "SignatureId",
-      "Classification",
-      "Username",
-      "NetflowUsername"
-    ],
-    "splitHints": []
-  },
-  "CiscoWSAEvent": {
-    "description": "Mined from 21 community rules",
-    "highValueFields": [
-      "SrcUserName",
-      "UrlOriginal",
-      "TimeGenerated",
-      "DvcAction",
-      "AmpFileName",
-      "SrcIpAddr",
-      "AvcApplicationName",
-      "AmpThreatName",
-      "DstBytes",
-      "ThreatName",
-      "ResponseBodyMimeType",
-      "AmpScanningVerdict",
-      "UrlCategory"
-    ],
-    "splitHints": []
-  },
-  "ClarotyEvent": {
-    "description": "Mined from 20 community rules",
-    "highValueFields": [
-      "TimeGenerated",
-      "EventType",
-      "EventOriginalType",
-      "DstIpAddr",
-      "SrcUsername",
-      "EventSeverity",
-      "CategoryAccess",
-      "Site",
-      "SrcIpAddr",
-      "ResolvedAs"
+      "EmailFromEmail",
+      "EmailMessageId",
+      "EmailSubject",
+      "EventCurrentState",
+      "PhishingDetections",
+      "SpamDetections",
+      "User"
     ],
     "splitHints": []
   },
@@ -759,51 +436,42 @@
     "description": "Cloud Security - Mined from 167 community rules",
     "highValueFields": [
       "ActionType",
-      "SubmissionType",
-      "SubmissionContentType",
-      "Timestamp",
-      "NetworkMessageId",
-      "Record",
       "AccountObjectId",
       "Application",
-      "Details",
       "AccountDisplayName",
-      "EmailDirection",
       "TimeGenerated",
-      "TeamsMessages",
-      "SubmissionState",
-      "Admin_SubmissionType",
-      "User_SubmissionType",
-      "UserSubmissions",
-      "ThreatTypes",
       "IPAddress",
-      "ReportId",
-      "SessionId",
-      "P2SenderDomain",
-      "DetectionVerdict",
-      "ActionResult"
+      "ReportId"
     ],
     "splitHints": []
   },
-  "Cloudflare": {
-    "description": "Mined from 40 community rules",
+  "CloudAuditEvents": {
+    "description": "Cloud Control Plane - Mined from 3 public rules",
+    "highValueFields": [
+      "ActionType",
+      "AzureResourceId",
+      "CountryCode",
+      "DataSource",
+      "IsAnonymousProxy",
+      "OperationName"
+    ],
+    "splitHints": []
+  },
+  "CloudStorageAggregatedEvents": {
+    "description": "Storage Access - Mined from 3 public rules",
     "highValueFields": [
       "TimeGenerated",
-      "SrcIpAddr",
-      "CompleteUrl",
-      "HttpStatusCode",
-      "HttpRequestMethod",
-      "DstBytes",
-      "ClientRequestURI",
-      "HttpUserAgentOriginal",
-      "SrcBytes",
-      "WAFRuleID",
-      "EdgeRequestHost",
-      "WAFRuleMessage",
-      "NetworkRuleName",
-      "SrcGeoCountry",
-      "WAFAction",
-      "File"
+      "OperationsCount",
+      "ServiceType",
+      "StorageAccount",
+      "StorageContainer",
+      "SuccessfulOperationsCount",
+      "SuccessfulReadOperations",
+      "UserAgentHeader",
+      "DistinctGetOperations",
+      "FailedOperationsCount",
+      "OperationNamesList",
+      "TotalResponseLength"
     ],
     "splitHints": []
   },
@@ -821,7 +489,6 @@
     "highValueFields": [
       "Activity",
       "ApplicationProtocol",
-      "CommonSecurityLog_TimeGenerated",
       "DestinationIP",
       "DestinationPort",
       "DestinationUserName",
@@ -830,7 +497,6 @@
       "DeviceName",
       "DeviceProduct",
       "DeviceVendor",
-      "IndicatorId",
       "LogSeverity",
       "Message",
       "Protocol",
@@ -846,9 +512,31 @@
     "splitHints": [
       {
         "description": "Keep denied/blocked/alert actions and high-severity events in Analytics",
-        "kql": "DeviceAction has_any (\"Deny\", \"Block\", \"Drop\", \"Reject\", \"Alert\", \"Reset\") or toint(LogSeverity) >= 7"
+        "kql": "(DeviceAction has \"Deny\" or DeviceAction has \"Block\" or DeviceAction has \"Drop\" or DeviceAction has \"Reject\" or DeviceAction has \"Alert\" or DeviceAction has \"Reset\") or toint(LogSeverity) >= 7"
       }
     ]
+  },
+  "ContraForceEvents_CL": {
+    "description": "Security Alerts - Mined from 3 public rules, fields not schema-verified",
+    "highValueFields": [
+      "ActivityAction",
+      "ActivityType",
+      "ActorEmail",
+      "ActorName",
+      "CfWorkspaceId",
+      "EventId",
+      "TargetResourceId",
+      "TargetResourceName",
+      "TargetResourceType",
+      "TimeGenerated",
+      "Metadata",
+      "FromRole",
+      "MemberEmail",
+      "Members",
+      "MemberType",
+      "ToRole"
+    ],
+    "splitHints": []
   },
   "ContrastADR_CL": {
     "description": "Application Logs - Mined from 5 community rules",
@@ -873,17 +561,9 @@
       "RecordType",
       "SrcIpAddr",
       "TimeGenerated",
-      "Old",
-      "Data",
-      "New",
       "ActorUserId",
       "LLMEventData",
-      "Plugin",
-      "Jailbreak",
-      "Actions",
       "AIModelName",
-      "Resource",
-      "Property",
       "ActorUserType"
     ],
     "splitHints": []
@@ -895,26 +575,54 @@
     ],
     "splitHints": []
   },
-  "CyberArkEPM": {
-    "description": "Mined from 20 community rules",
+  "CyberArk_AuditEvents_CL": {
+    "description": "Identity & Access - Mined from 3 public rules, fields not schema-verified",
     "highValueFields": [
-      "ActingProcessFileInternalName",
+      "actionType",
       "TimeGenerated",
-      "EventSubType",
-      "ActorUsername",
-      "ActingProcessName",
-      "EventMessage",
-      "ActingProcessCommandLine",
-      "EventEndTime",
-      "Hash",
-      "ThreatProtectionAction",
-      "EventSourceName",
-      "Evidences",
-      "AppType",
-      "EventStartTime",
-      "ActingProcessFileCompany",
-      "UserIsAdmin",
-      "DvcId"
+      "auditType",
+      "CyberArkTenantId",
+      "serviceName",
+      "targetAccount",
+      "cd_changeType",
+      "Fails",
+      "firstFail",
+      "firstSuccess",
+      "identityType",
+      "lastFail",
+      "Successes",
+      "userId"
+    ],
+    "splitHints": []
+  },
+  "CybereinforceCTE_CL": {
+    "description": "Network Security - Mined from 18 public rules, fields not schema-verified",
+    "highValueFields": [
+      "EventType",
+      "TenantId",
+      "TimeGenerated",
+      "Category",
+      "Severity",
+      "AppName",
+      "DeviceId",
+      "HostName",
+      "DeviceOs",
+      "DeviceUser",
+      "Actor",
+      "IsIoc",
+      "Pattern",
+      "UsedPct",
+      "AccountName",
+      "DeviceVersion",
+      "RuleId",
+      "RuleName",
+      "UPNSuffix",
+      "Url",
+      "Action",
+      "ActiveDevices",
+      "ClientIp",
+      "ClientPort",
+      "DaysRemaining"
     ],
     "splitHints": []
   },
@@ -986,58 +694,13 @@
     "highValueFields": [
       "UserId",
       "InstanceUrl",
-      "CloudAppId",
       "TimeGenerated",
-      "AccountName",
-      "UPNSuffix",
       "ClientIp",
       "Message",
       "EntityName",
-      "FirstEvent",
       "Fields",
       "UserAgent",
-      "LastEvent",
-      "Details",
-      "FirstSeen",
-      "OriginalObjectId",
-      "Entities",
-      "Tags",
-      "Description",
-      "IPAddress",
-      "TotalEvents",
-      "LatestEvent",
-      "ConfidenceScore",
-      "ThreatType",
-      "ResultType"
-    ],
-    "splitHints": []
-  },
-  "DataverseSharePointSites": {
-    "description": "Mined from 3 community rules",
-    "highValueFields": [
-      "ClientIP",
-      "OfficeWorkload",
-      "SharePointUrl",
-      "AccountName",
-      "CloudAppId",
-      "SharePointId",
-      "Operation",
-      "UserId",
-      "TimeGenerated",
-      "UPNSuffix",
-      "InstanceUrl",
-      "SourceFileName",
-      "Message",
-      "FileDownloadCount",
-      "SourceFileExtension"
-    ],
-    "splitHints": []
-  },
-  "DefendAuditData": {
-    "description": "Mined from 4 community rules",
-    "highValueFields": [
-      "ThreatLevel",
-      "LinksClicked"
+      "OriginalObjectId"
     ],
     "splitHints": []
   },
@@ -1045,7 +708,6 @@
     "description": "Endpoint Detection - Mined from 85 community rules",
     "highValueFields": [
       "ActionType",
-      "Timestamp",
       "DeviceName",
       "InitiatingProcessFileName",
       "FileName",
@@ -1053,9 +715,7 @@
       "InitiatingProcessCommandLine",
       "AdditionalFields",
       "TimeGenerated",
-      "ParsedFields",
       "RemoteUrl",
-      "HostName",
       "FolderPath",
       "SHA1",
       "AccountName",
@@ -1064,8 +724,6 @@
       "InitiatingProcessAccountDomain",
       "InitiatingProcessAccountName",
       "InitiatingProcessAccountUpn",
-      "AlertId",
-      "MachineCount",
       "InitiatingProcessParentFileName"
     ],
     "splitHints": []
@@ -1074,7 +732,6 @@
     "description": "Endpoint Detection - Mined from 52 community rules",
     "highValueFields": [
       "DeviceName",
-      "Timestamp",
       "Signer",
       "DeviceId",
       "CertificateExpirationTime",
@@ -1094,7 +751,6 @@
   "DeviceFileEvents": {
     "description": "Defender for Endpoint file creation, modification, and deletion events",
     "highValueFields": [
-      "AccountName",
       "ActionType",
       "DeviceId",
       "DeviceName",
@@ -1102,7 +758,6 @@
       "FileOriginReferrerUrl",
       "FileOriginUrl",
       "FolderPath",
-      "HostName",
       "InitiatingProcessAccountDomain",
       "InitiatingProcessAccountName",
       "InitiatingProcessCommandLine",
@@ -1110,19 +765,14 @@
       "InitiatingProcessFolderPath",
       "InitiatingProcessParentFileName",
       "MD5",
-      "ParsedFields",
-      "ProcessCommandLine",
-      "RegistryKey",
-      "RemoteUrl",
       "SHA1",
       "SHA256",
-      "TimeGenerated",
-      "Timestamp"
+      "TimeGenerated"
     ],
     "splitHints": [
       {
         "description": "Keep file events from suspicious processes and in sensitive paths in Analytics",
-        "kql": "ActionType in (\"FileCreated\", \"FileModified\") and (FolderPath has_any (\"\\\\System32\\\\\", \"\\\\Startup\\\\\", \"\\\\Tasks\\\\\", \"\\\\Temp\\\\\") or FileName endswith_cs \".exe\" or FileName endswith_cs \".dll\" or FileName endswith_cs \".ps1\" or FileName endswith_cs \".bat\" or FileName endswith_cs \".vbs\")"
+        "kql": "ActionType in (\"FileCreated\", \"FileModified\") and ((FolderPath has \"\\\\System32\\\\\" or FolderPath has \"\\\\Startup\\\\\" or FolderPath has \"\\\\Tasks\\\\\" or FolderPath has \"\\\\Temp\\\\\") or FileName endswith_cs \".exe\" or FileName endswith_cs \".dll\" or FileName endswith_cs \".ps1\" or FileName endswith_cs \".bat\" or FileName endswith_cs \".vbs\")"
       }
     ]
   },
@@ -1133,26 +783,13 @@
       "InitiatingProcessFileName",
       "FileName",
       "DeviceName",
-      "Timestamp",
       "InitiatingProcessParentFileName",
       "DeviceId",
       "ActionType",
       "TimeGenerated",
-      "RemoteUrl",
-      "RemoteIP",
       "InitiatingProcessCommandLine",
-      "RemoteIPType",
-      "ServiceProcessCmdline",
-      "ServiceProcess",
-      "ServiceProcessUser",
       "SHA1",
-      "ServiceProcessID",
-      "ServiceProcessSHA1",
-      "FolderPath1",
-      "SHA256",
-      "RemotePort",
-      "ServiceProcessCreationTime",
-      "ProcessCommandLine"
+      "SHA256"
     ],
     "splitHints": []
   },
@@ -1162,55 +799,30 @@
       "DeviceId",
       "DeviceName",
       "PublicIP",
-      "Timestamp",
-      "HostName",
-      "AlertSeverity",
-      "ThreatName",
-      "Description",
       "TenantId",
-      "CompromisedEntity",
-      "ProviderName",
-      "DisplayName",
-      "ThreatFamilyName",
-      "ProductName",
-      "Entities",
-      "HostNameDomain",
       "OnboardingStatus",
-      "DomainIndex",
-      "ActionType",
-      "AccountName",
-      "LoggedOnUsers",
-      "TimeDifference"
+      "LoggedOnUsers"
     ],
     "splitHints": []
   },
   "DeviceLogonEvents": {
     "description": "Defender for Endpoint logon and authentication events",
     "highValueFields": [
-      "Account",
       "AccountDomain",
       "AccountName",
       "AccountSid",
       "ActionType",
-      "AlertId",
-      "AlertTime",
       "DeviceId",
       "DeviceName",
-      "FailedAccountsCount",
       "FailureReason",
-      "FileName",
       "InitiatingProcessCommandLine",
       "InitiatingProcessFileName",
       "IsLocalAdmin",
       "LogonType",
-      "ProcessCommandLine",
       "RemoteDeviceName",
       "RemoteIP",
       "RemoteIPType",
-      "Successful",
-      "TimeGenerated",
-      "Timestamp",
-      "Title"
+      "TimeGenerated"
     ],
     "splitHints": [
       {
@@ -1222,13 +834,9 @@
   "DeviceNetworkEvents": {
     "description": "Defender for Endpoint network connection events",
     "highValueFields": [
-      "AccountName",
       "ActionType",
       "DeviceId",
       "DeviceName",
-      "Domain",
-      "FileName",
-      "HostName",
       "InitiatingProcessCommandLine",
       "InitiatingProcessFileName",
       "InitiatingProcessParentFileName",
@@ -1236,21 +844,17 @@
       "InitiatingProcessVersionInfoProductName",
       "LocalIP",
       "LocalPort",
-      "Name",
       "Protocol",
       "RemoteIP",
       "RemoteIPType",
       "RemotePort",
       "RemoteUrl",
-      "SHA1",
-      "TimeGenerated",
-      "Timestamp",
-      "Url"
+      "TimeGenerated"
     ],
     "splitHints": [
       {
         "description": "Keep connections from suspicious processes and uncommon ports in Analytics",
-        "kql": "InitiatingProcessFileName in~ (\"powershell.exe\", \"pwsh.exe\", \"cmd.exe\", \"wscript.exe\", \"cscript.exe\", \"mshta.exe\", \"rundll32.exe\", \"certutil.exe\") or RemotePort in (22, 23, 445, 3389, 5985, 5986, 4444, 8080, 8443, 1337)"
+        "kql": "(InitiatingProcessFileName =~ \"powershell.exe\" or InitiatingProcessFileName =~ \"pwsh.exe\" or InitiatingProcessFileName =~ \"cmd.exe\" or InitiatingProcessFileName =~ \"wscript.exe\" or InitiatingProcessFileName =~ \"cscript.exe\" or InitiatingProcessFileName =~ \"mshta.exe\" or InitiatingProcessFileName =~ \"rundll32.exe\" or InitiatingProcessFileName =~ \"certutil.exe\") or RemotePort in (22, 23, 445, 3389, 5985, 5986, 4444, 8080, 8443, 1337)"
       }
     ]
   },
@@ -1258,30 +862,12 @@
     "description": "Endpoint Detection - Mined from 16 community rules",
     "highValueFields": [
       "DeviceId",
-      "Timestamp",
       "NetworkAdapterStatus",
-      "IpAddress",
-      "AccountName",
       "IPAddresses",
       "ConnectedNetworks",
       "DeviceName",
-      "FileName",
-      "LogonType",
       "IPv4Dhcp",
-      "TimeDifference",
-      "RemoteIP",
-      "TotalFiles",
-      "AlertId",
-      "Subnet",
-      "IPAddressEntry",
-      "DefaultGateways",
-      "AccountDomain",
-      "InitiatingProcessAccountName",
-      "ActionType",
-      "FirstRemoteIPAddress",
-      "Title",
-      "LogonTypeName",
-      "AccountType"
+      "DefaultGateways"
     ],
     "splitHints": []
   },
@@ -1293,16 +879,13 @@
       "AccountSid",
       "DeviceId",
       "DeviceName",
-      "DnsDomain",
       "FileName",
       "FolderPath",
-      "HostName",
       "InitiatingProcessCommandLine",
       "InitiatingProcessFileName",
       "InitiatingProcessFolderPath",
       "InitiatingProcessParentFileName",
       "LogonId",
-      "LogonType",
       "MD5",
       "ProcessCommandLine",
       "ProcessCreationTime",
@@ -1311,13 +894,12 @@
       "ProcessVersionInfoProductName",
       "SHA1",
       "SHA256",
-      "TimeGenerated",
-      "Timestamp"
+      "TimeGenerated"
     ],
     "splitHints": [
       {
         "description": "Keep suspicious process patterns in Analytics (LOLBins, scripting engines, unsigned, unusual paths)",
-        "kql": "FileName in~ (\"powershell.exe\", \"pwsh.exe\", \"cmd.exe\", \"wscript.exe\", \"cscript.exe\", \"mshta.exe\", \"regsvr32.exe\", \"rundll32.exe\", \"certutil.exe\", \"bitsadmin.exe\", \"msiexec.exe\", \"wmic.exe\", \"net.exe\", \"net1.exe\", \"nltest.exe\", \"dsquery.exe\", \"psexec.exe\", \"schtasks.exe\", \"sc.exe\", \"whoami.exe\", \"tasklist.exe\", \"systeminfo.exe\") or FolderPath has_any (\"\\\\Temp\\\\\", \"\\\\AppData\\\\\", \"\\\\ProgramData\\\\\", \"\\\\Downloads\\\\\")"
+        "kql": "(FileName =~ \"powershell.exe\" or FileName =~ \"pwsh.exe\" or FileName =~ \"cmd.exe\" or FileName =~ \"wscript.exe\" or FileName =~ \"cscript.exe\" or FileName =~ \"mshta.exe\" or FileName =~ \"regsvr32.exe\" or FileName =~ \"rundll32.exe\" or FileName =~ \"certutil.exe\" or FileName =~ \"bitsadmin.exe\" or FileName =~ \"msiexec.exe\" or FileName =~ \"wmic.exe\" or FileName =~ \"net.exe\" or FileName =~ \"net1.exe\" or FileName =~ \"nltest.exe\" or FileName =~ \"dsquery.exe\" or FileName =~ \"psexec.exe\" or FileName =~ \"schtasks.exe\" or FileName =~ \"sc.exe\" or FileName =~ \"whoami.exe\" or FileName =~ \"tasklist.exe\" or FileName =~ \"systeminfo.exe\") or (FolderPath has \"\\\\Temp\\\\\" or FolderPath has \"\\\\AppData\\\\\" or FolderPath has \"\\\\ProgramData\\\\\" or FolderPath has \"\\\\Downloads\\\\\")"
       }
     ]
   },
@@ -1325,29 +907,16 @@
     "description": "Endpoint Detection - Mined from 20 community rules",
     "highValueFields": [
       "RegistryKey",
-      "Timestamp",
       "ActionType",
       "RegistryValueData",
       "InitiatingProcessFileName",
       "DeviceName",
       "RegistryValueName",
       "InitiatingProcessCommandLine",
-      "FileName",
       "InitiatingProcessParentFileName",
       "InitiatingProcessAccountName",
       "PreviousRegistryValueData",
-      "AdditionalFields",
-      "HostName",
-      "DeviceId",
-      "ServiceName",
-      "ExtractedB64",
-      "RegTimestamp",
-      "DecodedCommand",
-      "SCCM",
-      "HostNameDomain",
-      "ConnectedNetworks",
-      "DataType",
-      "AccountName"
+      "DeviceId"
     ],
     "splitHints": []
   },
@@ -1382,21 +951,19 @@
       "Context",
       "IsApplicable",
       "IsCompliant",
-      "AVEngineVersion",
-      "AVSigLastUpdateTime",
-      "DeviceId1",
+      "DeviceName"
+    ],
+    "splitHints": []
+  },
+  "DeviceTvmSoftwareInventory": {
+    "description": "Vulnerability Management - Mined from 3 public rules",
+    "highValueFields": [
       "DeviceName",
-      "AVSigVersion",
-      "AVMode",
-      "RealtimeProtection",
-      "SensorDataCollection",
-      "TamperProtection",
-      "CloudProtection",
-      "ImpairedCommunications",
-      "PUAProtection",
-      "AntivirusSignatureVersion",
-      "Test",
-      "AVProductVersion"
+      "SoftwareName",
+      "DeviceId",
+      "SoftwareVersion",
+      "OSPlatform",
+      "SoftwareVendor"
     ],
     "splitHints": []
   },
@@ -1405,33 +972,9 @@
     "highValueFields": [
       "SoftwareName",
       "CveId",
-      "VulnerabilitySeverityLevel1",
       "DeviceName",
-      "FileName",
-      "CveId1",
-      "AffectedSoftware",
       "SoftwareVendor",
-      "HostNameDomain",
-      "HostName",
-      "ParsedFields",
-      "Name",
-      "DeviceId",
-      "ProcessCommandLine"
-    ],
-    "splitHints": []
-  },
-  "DigitalGuardianDLPEvent": {
-    "description": "Mined from 20 community rules",
-    "highValueFields": [
-      "TimeGenerated",
-      "SrcUserName",
-      "NetworkApplicationProtocol",
-      "DstPortNumber",
-      "IncidentStatus",
-      "MatchedPolicies",
-      "DstIpAddr",
-      "SrcIpAddr",
-      "DstUserName"
+      "DeviceId"
     ],
     "splitHints": []
   },
@@ -1460,33 +1003,37 @@
       "Name",
       "TimeGenerated",
       "ClientIP",
-      "HostName",
       "IPAddresses",
       "SubType",
-      "DNS_TimeGenerated",
-      "IndicatorId",
-      "DnsDomain",
       "Computer",
-      "DomainName",
-      "ExpirationDateTime",
       "Type",
-      "Active",
-      "Url",
-      "Domain",
       "EventID",
-      "ActivityGroupNames",
-      "SourceSystem",
-      "Id"
+      "SourceSystem"
     ],
     "splitHints": []
   },
-  "DynatraceSecurityProblems": {
-    "description": "Mined from 3 community rules",
+  "DuoActivity_CL": {
+    "description": "Identity & Access - Mined from 11 public rules, fields not schema-verified",
     "highValueFields": [
-      "SecurityProblemId",
-      "DAVISRiskLevel",
-      "Muted",
-      "VulnerabilityType"
+      "ActionName",
+      "ActorName",
+      "AccessDeviceIp",
+      "TimeGenerated",
+      "TargetName",
+      "OutcomeResult"
+    ],
+    "splitHints": []
+  },
+  "DuoAuthentication_CL": {
+    "description": "Identity & Access - Mined from 9 public rules, fields not schema-verified",
+    "highValueFields": [
+      "UserName",
+      "AccessDeviceIp",
+      "Result",
+      "TimeGenerated",
+      "Reason",
+      "AccessDeviceOsVersion",
+      "AuthDeviceCountry"
     ],
     "splitHints": []
   },
@@ -1496,25 +1043,15 @@
       "FileName",
       "NetworkMessageId",
       "FileType",
-      "Timestamp",
       "SenderFromAddress",
       "RecipientEmailAddress",
       "ThreatTypes",
-      "EmailDirection",
       "SHA256",
       "SenderDisplayName",
-      "Subject",
-      "AttachmentCount",
       "DetectionMethods",
       "SenderObjectId",
-      "SenderFromDomain",
       "ThreatNames",
-      "ThreatFamily_wih_Attachment",
-      "DeliveryAction",
-      "LatestDeliveryLocation",
       "ReportId",
-      "ThreatFamilyAttachment",
-      "FirstFourFilesCount",
       "RecipientObjectId"
     ],
     "splitHints": []
@@ -1529,19 +1066,15 @@
       "SenderFromAddress",
       "DeliveryAction",
       "RecipientEmailAddress",
-      "ActionType",
       "TimeGenerated",
-      "Details",
       "DeliveryLocation",
       "Subject",
       "SenderFromDomain",
-      "Url",
       "OrgLevelAction",
       "UserLevelAction",
       "OrgLevelPolicy",
       "SenderMailFromAddress",
-      "LatestDeliveryLocation",
-      "SubmissionType"
+      "LatestDeliveryLocation"
     ],
     "splitHints": []
   },
@@ -1549,28 +1082,14 @@
     "description": "Email Security - Mined from 19 community rules",
     "highValueFields": [
       "ActionType",
-      "Timestamp",
-      "Details",
       "ActionResult",
       "ThreatTypes",
       "EmailDirection",
       "NetworkMessageId",
       "TimeGenerated",
       "Action",
-      "Record",
-      "FirstDetection",
-      "SubmissionState",
       "DeliveryLocation",
-      "MDO_detection",
-      "FirstSubcategory",
-      "SubmissionType",
-      "DeviceName",
       "InternetMessageId",
-      "RawEvent_Folders",
-      "StatisticName",
-      "Value",
-      "RawEvent",
-      "Key",
       "ActionTrigger"
     ],
     "splitHints": []
@@ -1581,25 +1100,8 @@
       "NetworkMessageId",
       "Url",
       "UrlLocation",
-      "EmailDirection",
       "UrlDomain",
-      "SenderFromAddress",
-      "DeliveryAction",
-      "Subject",
-      "LatestDeliveryAction",
-      "ThreatTypes",
-      "TimeGenerated",
-      "TeamsMessageId",
-      "TotalEmailCount",
-      "RecipientEmailAddress",
-      "SenderDisplayName",
-      "SenderIPv4",
-      "RecipientObjectId",
-      "ExpirationDateTime",
-      "Spam",
-      "Normalized",
-      "Lookalikes",
-      "SenderFromDomain"
+      "TimeGenerated"
     ],
     "splitHints": []
   },
@@ -1610,32 +1112,50 @@
     ],
     "splitHints": []
   },
+  "EntraIdSignInEvents": {
+    "description": "Identity & Access - Mined from 9 public rules, fields verified against the Defender XDR schema reference",
+    "highValueFields": [
+      "AccountObjectId",
+      "RiskLevelDuringSignIn",
+      "SessionId",
+      "Timestamp",
+      "AccountDisplayName",
+      "ApplicationId",
+      "AccountUpn",
+      "ErrorCode",
+      "IPAddress",
+      "ReportId",
+      "Application",
+      "DeviceName",
+      "RequestId",
+      "City",
+      "ClientAppUsed",
+      "Country"
+    ],
+    "splitHints": []
+  },
   "Event": {
     "description": "Endpoint Telemetry - Mined from 33 community rules",
     "highValueFields": [
       "EventID",
       "Computer",
-      "HostName",
       "EventLog",
       "EventData",
-      "CommandLine",
-      "Image",
-      "Key",
-      "ParentImage",
       "TimeGenerated",
-      "AccountName",
-      "User",
       "RenderedDescription",
       "UserName",
-      "Account",
-      "ProcessGuid",
-      "ParentCommandLine",
-      "ParentProcessGuid",
-      "HostNameDomain",
-      "ParentUser",
-      "OriginalFileName",
-      "Process",
       "Type"
+    ],
+    "splitHints": []
+  },
+  "FileMaliciousContentInfo": {
+    "description": "Data Security - Mined from 18 public rules",
+    "highValueFields": [
+      "ThreatTypes",
+      "Workload",
+      "FileOwnerUpn",
+      "SHA256",
+      "ThreatNames"
     ],
     "splitHints": []
   },
@@ -1677,74 +1197,18 @@
     ],
     "splitHints": []
   },
-  "Fortiweb": {
-    "description": "Mined from 3 community rules",
-    "highValueFields": [
-      "SrcIpAddr",
-      "owaspCount",
-      "owaspTop10",
-      "EventSubType",
-      "EventType",
-      "srcCountry",
-      "DvcAction",
-      "TimeGenerated"
-    ],
-    "splitHints": []
-  },
-  "GCP_IAM": {
-    "description": "Mined from 20 community rules",
-    "highValueFields": [
-      "PayloadMethodname",
-      "TimeGenerated",
-      "AccountName",
-      "PayloadAuthenticationinfoPrincipalemail",
-      "HttpUserAgentOriginal",
-      "ResourceType",
-      "ResourceLabelsProjectId",
-      "SrcIpAddr"
-    ],
-    "splitHints": []
-  },
   "GCPAuditLogs": {
     "description": "Cloud Control Plane - Mined from 14 community rules",
     "highValueFields": [
       "ServiceName",
       "MethodName",
-      "AccountName",
       "GCPResourceType",
       "Severity",
-      "RequestMetadataJson",
       "PrincipalEmail",
-      "UserAgent",
       "TimeGenerated",
-      "PermissionType",
       "ProjectId",
-      "Action",
-      "AuthzInfoJson",
-      "CallerIpAddress",
       "LogName",
-      "CallerIP",
-      "PolicyDelta",
-      "GCPResourceName",
-      "SourceIPs",
-      "OperationTypes",
-      "ConfigDelta",
-      "AuthEmail",
-      "TotalOperations",
-      "FirewallRuleName",
-      "PolicyName"
-    ],
-    "splitHints": []
-  },
-  "GCPCloudDNS": {
-    "description": "Mined from 21 community rules",
-    "highValueFields": [
-      "Query",
-      "TimeGenerated",
-      "EventResultDetails",
-      "SrcIpAddr",
-      "NetworkProtocol",
-      "payload_serverLatency_d"
+      "GCPResourceName"
     ],
     "splitHints": []
   },
@@ -1777,26 +1241,6 @@
     ],
     "splitHints": []
   },
-  "GitHubAuditData": {
-    "description": "Mined from 16 community rules",
-    "highValueFields": [
-      "Action",
-      "Actor",
-      "AccountName",
-      "Name",
-      "UPNSuffix",
-      "Country",
-      "TimeGenerated",
-      "Repository",
-      "PreviousVisibility",
-      "Visibility",
-      "PreviousPermission",
-      "CurrentPermission",
-      "ImpactedUser",
-      "secondEventTime"
-    ],
-    "splitHints": []
-  },
   "GitHubRepo": {
     "description": "Mined from 3 community rules",
     "highValueFields": [
@@ -1818,88 +1262,10 @@
     ],
     "splitHints": []
   },
-  "GitLabAudit": {
-    "description": "Mined from 5 community rules",
-    "highValueFields": [
-      "TargetType",
-      "TimeGenerated",
-      "AuthorName",
-      "UserAdded",
-      "ActionTime",
-      "TargetDetails",
-      "EventTime",
-      "ChangeType",
-      "SourceVisibility",
-      "AuthenticationType",
-      "TargetVisibility",
-      "ImpStartTime",
-      "CustomMessage",
-      "EntityName",
-      "AddAction",
-      "Repository",
-      "IPAddress",
-      "User",
-      "EventTime1"
-    ],
-    "splitHints": []
-  },
   "GoogleCloudSCC": {
     "description": "Security Alerts - Mined from 10 community rules",
     "highValueFields": [
-      "ResourceName",
-      "FindingCategory",
-      "Severity",
-      "FindingsJson",
-      "ResourceType",
-      "ProjectName",
-      "ExternalUri",
-      "Description",
-      "TimeGenerated",
-      "CloudResource",
-      "SourcePropertiesJson",
-      "Instance",
-      "ProjectId",
-      "FirewallName",
-      "OffendingRoles",
-      "ResourceDisplayName",
-      "Protocols",
-      "MinPort",
-      "MaxPort",
-      "FindingName",
-      "FindingsCount",
-      "PortRanges",
-      "AllowedIpRules",
-      "PortInfo",
-      "Role"
-    ],
-    "splitHints": []
-  },
-  "Guardian": {
-    "description": "Mined from 29 community rules",
-    "highValueFields": [
-      "PolicyViolatedControlFeature",
-      "Severity"
-    ],
-    "splitHints": []
-  },
-  "GWorkspaceActivityReports": {
-    "description": "Mined from 24 community rules",
-    "highValueFields": [
-      "TimeGenerated",
-      "EventMessage",
-      "Visibility",
-      "ActorEmail",
-      "SrcIpAddr",
-      "EventType",
-      "DocTitle",
-      "Name",
-      "UserAgentOriginal",
-      "OldValue",
-      "ActorCallerType",
-      "NeqValue",
-      "NewVersion3",
-      "NewVersion1",
-      "VersionCheck"
+      "TimeGenerated"
     ],
     "splitHints": []
   },
@@ -1915,11 +1281,6 @@
       "ResourceId",
       "ComputerIP",
       "ComputerEnvironment",
-      "Minor",
-      "LastHeartbeat_Time",
-      "Patch",
-      "LastHeartbeat_Hours",
-      "Major",
       "RemoteIPCountry",
       "Type",
       "Solutions",
@@ -1933,28 +1294,12 @@
     "highValueFields": [
       "ActionType",
       "AdditionalFields",
-      "Timestamp",
       "Application",
       "TargetDeviceName",
-      "FROMSAM",
-      "TOSAM",
-      "INITIATED_BY",
       "ReportId",
-      "ActivityType",
-      "TargetGroup",
       "TimeGenerated",
-      "DEVICE_ADDED",
-      "AccountLockStatus",
-      "GROUP_ADDED",
-      "TargetType",
       "TargetAccountUpn",
-      "Affected_User",
-      "GROUP_CHANGED",
-      "USER_ADDED",
-      "ACTOR_ENTITY_USER",
-      "AccountName",
-      "TargetObject",
-      "FROM_Account_Path"
+      "AccountName"
     ],
     "splitHints": []
   },
@@ -1969,21 +1314,8 @@
       "UserType",
       "Tags",
       "JobTitle",
-      "UserPrincipalName",
-      "ActivityType",
-      "ResultType",
-      "DevicesInsights",
       "InvestigationPriority",
-      "UEBARiskScore",
-      "UsersInsights",
-      "ActivityInsights",
-      "SourceIPAddress",
-      "IPAddress",
-      "ActionType",
-      "DeviceName",
-      "ProductName",
-      "AccountName",
-      "Name"
+      "AccountName"
     ],
     "splitHints": []
   },
@@ -1994,21 +1326,11 @@
       "AccountSid",
       "DeviceName",
       "AccountUpn",
-      "SPNS",
       "Protocol",
       "LogonType",
-      "SPNType",
-      "SPN",
-      "Timestamp",
       "AccountName",
-      "AttackTechniques",
       "AccountDomain",
-      "LastLogon",
-      "RemoteIPType",
-      "Application",
-      "HostName",
-      "KerberosType",
-      "DnsDomain"
+      "Application"
     ],
     "splitHints": []
   },
@@ -2016,15 +1338,7 @@
     "description": "Identity & Access - Mined from 6 community rules",
     "highValueFields": [
       "ActionType",
-      "SearchFilter",
-      "NumberOfDistinctLdapQueries",
-      "DeviceName",
-      "BinTime",
-      "SensitiveObjects",
-      "isExclude",
-      "RemotePort",
-      "InitiatingProcessAccountDomain",
-      "DeviceNameWithoutDomain"
+      "DeviceName"
     ],
     "splitHints": []
   },
@@ -2032,77 +1346,6 @@
     "description": "Network Security - Mined from 6 community rules",
     "highValueFields": [
       "TimeGenerated"
-    ],
-    "splitHints": []
-  },
-  "IllumioSyslogAuditEvents": {
-    "description": "Mined from 6 community rules",
-    "highValueFields": [
-      "TimeGenerated"
-    ],
-    "splitHints": []
-  },
-  "ImpervaWAFCloud": {
-    "description": "Mined from 20 community rules",
-    "highValueFields": [
-      "TimeGenerated",
-      "SrcIpAddr",
-      "DstIpAddr",
-      "DvcAction",
-      "NetworkApplicationProtocol",
-      "DstPortNumber",
-      "QueryString",
-      "ClientApp",
-      "DstDomainHostname",
-      "EventSeverity",
-      "Country",
-      "HttpUserAgentOriginal",
-      "DomainNameCustom"
-    ],
-    "splitHints": []
-  },
-  "InfobloxCDC": {
-    "description": "Mined from 6 community rules",
-    "highValueFields": [
-      "DeviceEventClassID",
-      "SourceIP",
-      "ThreatLevel_Score",
-      "DestinationDnsDomain",
-      "InfobloxB1FeedName",
-      "InfobloxB1PolicyAction",
-      "Description",
-      "SourceMACAddress",
-      "InfobloxB1Network",
-      "InfobloxB1SrcOSVersion",
-      "ThreatType",
-      "ThreatLevel",
-      "TrafficLightProtocolLevel",
-      "IndicatorId",
-      "SimplifiedDeviceAction",
-      "SourceSystem",
-      "TimeGenerated",
-      "DeviceAction",
-      "Tags",
-      "ExpirationDateTime",
-      "ThreatClass",
-      "SourceUserName",
-      "ThreatProperty",
-      "DomainName"
-    ],
-    "splitHints": []
-  },
-  "JiraAudit": {
-    "description": "Mined from 20 community rules",
-    "highValueFields": [
-      "EventMessage",
-      "ObjectItemName",
-      "EventCreationTime",
-      "UserName",
-      "SrcIpAddr",
-      "TimeGenerated",
-      "AssociatedItems",
-      "ChangedValues",
-      "ObjectItemTypeName"
     ],
     "splitHints": []
   },
@@ -2116,14 +1359,9 @@
       "QueryText",
       "ResponseCode",
       "ResponseRowCount",
-      "QueriedClusterAddress",
-      "CurrWorkspaceCount",
       "AADClientId",
-      "RequestContextExtended",
       "ResponseDurationMs",
-      "Subscription",
-      "CorrelationId",
-      "set_QueryText"
+      "CorrelationId"
     ],
     "splitHints": []
   },
@@ -2153,37 +1391,6 @@
     ],
     "splitHints": []
   },
-  "LookoutEvents": {
-    "description": "Mined from 5 community rules",
-    "highValueFields": [
-      "TimeGenerated",
-      "EventType",
-      "ActorGuid",
-      "DeviceEmailAddress",
-      "EventId",
-      "ActorType",
-      "DeviceGuid",
-      "DeviceOSVersion",
-      "DeviceSecurityStatus",
-      "DeviceManufacturer",
-      "DevicePlatform",
-      "DeviceModel",
-      "ChangeType",
-      "TargetEmailAddress",
-      "ClientLookoutSDKVersion",
-      "ThreatCategory",
-      "ThreatClassifications",
-      "MDMExternalId",
-      "MDMConnectorId",
-      "SmishingAlertSeverity",
-      "TargetPlatform",
-      "DeviceRiskLevel",
-      "ThreatSeverity",
-      "DeviceComplianceStatus",
-      "ComplianceReason"
-    ],
-    "splitHints": []
-  },
   "MailGuard365_Threats_CL": {
     "description": "Email Security - Mined from 3 community rules",
     "highValueFields": [
@@ -2192,47 +1399,20 @@
     ],
     "splitHints": []
   },
-  "McAfeeEPOEvent": {
-    "description": "Mined from 24 community rules",
-    "highValueFields": [
-      "EventId",
-      "DvcIpAddr",
-      "TimeGenerated",
-      "EventMessage",
-      "DstFileName",
-      "Reason",
-      "ThreatName",
-      "LastScanTimeInfected",
-      "ThreatList",
-      "SystemStatus",
-      "DvcHostname"
-    ],
-    "splitHints": []
-  },
   "MessageEvents": {
     "description": "Mined from 49 community rules",
     "highValueFields": [
       "IsExternalThread",
       "IsOwnedThread",
-      "Timestamp",
       "ThreatTypes",
       "SenderEmailAddress",
       "TeamsMessageId",
       "SenderDisplayName",
       "RecipientDetails",
-      "Url",
       "ThreadType",
       "DetectionMethods",
-      "Recipients",
-      "SenderDomain",
       "ReportId",
-      "UrlDomain",
-      "RecipientEmailAddress",
-      "Workload",
-      "Domain",
-      "TimeGenerated",
-      "ActionType",
-      "Details"
+      "TimeGenerated"
     ],
     "splitHints": []
   },
@@ -2240,14 +1420,7 @@
     "description": "Mined from 14 community rules",
     "highValueFields": [
       "ActionType",
-      "Teams",
-      "Url",
-      "TeamsMessageId",
-      "ActionType1",
-      "URLs",
-      "Timestamp",
-      "Workload",
-      "NetworkMessageId"
+      "TeamsMessageId"
     ],
     "splitHints": []
   },
@@ -2256,35 +1429,10 @@
     "highValueFields": [
       "TeamsMessageId",
       "Url",
-      "Timestamp",
       "UrlDomain",
-      "Workload",
-      "IsExternalThread",
       "ReportId",
-      "NetworkMessageId",
-      "ActionType",
-      "TLD",
-      "Domain",
       "TimeGenerated",
-      "RecipientDetails",
-      "SenderEmailAddress",
-      "Normalized",
-      "Teams",
-      "IsOwnedThread",
-      "SenderDisplayName",
-      "ThreatTypes",
-      "Timestamp2",
-      "DomainUnicode",
-      "Lookalikes",
-      "URLs"
-    ],
-    "splitHints": []
-  },
-  "MimecastCG": {
-    "description": "Mined from 7 community rules",
-    "highValueFields": [
-      "Type",
-      "SenderEnvelope"
+      "ThreatTypes"
     ],
     "splitHints": []
   },
@@ -2305,34 +1453,34 @@
     ],
     "splitHints": []
   },
-  "MSBizAppsTerminatedEmployees": {
-    "description": "Mined from 4 community rules",
+  "NetskopeAlertEvents_CL": {
+    "description": "Security Alerts - Mined from 3 public rules, fields not schema-verified",
     "highValueFields": [
-      "CloudAppId",
-      "UPNSuffix",
-      "AccountName",
+      "Actions",
+      "Activities",
+      "Hostname",
+      "LastSeen",
       "TimeGenerated",
-      "InstanceUrl",
-      "UserId",
-      "LatestEvent",
-      "RecipientAddresses",
-      "RecipientDomain",
-      "ActorName",
-      "Entities",
-      "AccountEntities",
-      "FlowId",
-      "TerminationDate",
-      "Message",
-      "Files",
-      "ClientIp",
-      "UserState",
-      "PublicIP",
-      "DeviceName",
-      "DriveLetter",
-      "ActionType",
-      "LastEvent",
-      "EventOriginalType",
-      "Tactics"
+      "User",
+      "Userip",
+      "AlertType",
+      "Applications",
+      "FirstSeen",
+      "Action",
+      "Alert",
+      "AlertCount",
+      "AlertName",
+      "App",
+      "Apps",
+      "Categories",
+      "CCLs",
+      "DeviceClassification",
+      "DistinctApps",
+      "DistinctIncidents",
+      "DlpIncidentId",
+      "DlpProfile",
+      "EventCount",
+      "Files"
     ],
     "splitHints": []
   },
@@ -2370,26 +1518,14 @@
     "highValueFields": [
       "TimeGenerated",
       "SourceIp",
-      "IndicatorType",
-      "ValidUntil",
       "TrafficType",
       "Description",
       "Action",
-      "Id",
-      "GSAThreatType",
       "DestinationFqdn",
       "DestinationIp",
-      "TrafficLightProtocolLevel",
       "DestinationPort",
-      "ObservableValue",
       "DeviceOperatingSystem",
-      "DestinationUrl",
-      "HourOfDay",
-      "IndicatorId",
-      "PortsScanned",
-      "AlertTimeProtocol",
-      "GSANetworkAccessTraffic_TimeGenerated",
-      "AlertTimeDstPort"
+      "DestinationUrl"
     ],
     "splitHints": []
   },
@@ -2449,51 +1585,12 @@
     ],
     "splitHints": []
   },
-  "NGINXHTTPServer": {
-    "description": "Mined from 20 community rules",
-    "highValueFields": [
-      "TimeGenerated",
-      "File",
-      "UrlOriginal",
-      "SrcIpAddr",
-      "HttpStatusCode",
-      "EventType",
-      "TopUrls",
-      "TotalFile",
-      "HttpUserAgentOriginal",
-      "EventMessage",
-      "EventStartTime",
-      "HttpRequestMethod",
-      "MultipleServerErrors",
-      "MultipleClientErrors"
-    ],
-    "splitHints": []
-  },
-  "OCILogs": {
-    "description": "Mined from 20 community rules",
-    "highValueFields": [
-      "data_eventName_s",
-      "TimeGenerated",
-      "EventType",
-      "SrcIpAddr",
-      "DstPortNumber",
-      "DstIpAddr",
-      "data_definedTags_Oracle_Tags_CreatedBy_s",
-      "HttpStatusCode",
-      "HttpUserAgentOriginal"
-    ],
-    "splitHints": []
-  },
   "OfficeActivity": {
     "description": "Office 365 unified audit log - Exchange, SharePoint, OneDrive, Teams, Power Platform activity",
     "highValueFields": [
-      "AccountName",
-      "ActivityGroupNames",
       "ClientIP",
-      "Description",
       "ExternalAccess",
       "ItemName",
-      "OfficeActivity_TimeGenerated",
       "OfficeObjectId",
       "OfficeWorkload",
       "Operation",
@@ -2501,7 +1598,6 @@
       "Parameters",
       "RecordType",
       "ResultStatus",
-      "SiteUrl",
       "SourceFileName",
       "SourceRelativeUrl",
       "TimeGenerated",
@@ -2512,123 +1608,49 @@
     "splitHints": [
       {
         "description": "Keep file sharing, permission changes, mailbox delegation, and external access events in Analytics",
-        "kql": "Operation has_any (\"SharingSet\", \"AnonymousLinkCreated\", \"SharingInvitationCreated\", \"AddedToSecureLink\", \"MemberAdded\", \"MemberRemoved\", \"Add-MailboxPermission\", \"Set-Mailbox\", \"New-InboxRule\", \"Set-InboxRule\", \"UpdateInboxRules\", \"FileDownloaded\", \"FileSyncDownloadedFull\") or ExternalAccess == true"
+        "kql": "(Operation has \"SharingSet\" or Operation has \"AnonymousLinkCreated\" or Operation has \"SharingInvitationCreated\" or Operation has \"AddedToSecureLink\" or Operation has \"MemberAdded\" or Operation has \"MemberRemoved\" or Operation has \"Add-MailboxPermission\" or Operation has \"Set-Mailbox\" or Operation has \"New-InboxRule\" or Operation has \"Set-InboxRule\" or Operation has \"UpdateInboxRules\" or Operation has \"FileDownloaded\" or Operation has \"FileSyncDownloadedFull\") or ExternalAccess == true"
       }
     ]
   },
-  "OktaSSO": {
-    "description": "Identity & Access - Mined from 17 community rules",
+  "OnePasswordEventLogs_CL": {
+    "description": "Identity & Access - Mined from 18 public rules, fields not schema-verified",
     "highValueFields": [
-      "eventType_s",
-      "Location",
-      "actor_alternateId_s",
       "TimeGenerated",
-      "Target",
-      "actor_displayName_s",
-      "Target_Id",
-      "oktaDeviceId_",
-      "client_ipAddress_s",
-      "debugContext_debugData_logOnlySecurityData_s",
-      "debugContext_debugData_requestUri_s",
-      "authenticationContext_externalSessionId_s",
-      "SuspiciousIP",
-      "NumOfCountries"
+      "SearchKey",
+      "userUuid",
+      "SrcIpAddr",
+      "TargetUsername",
+      "creationActivityFound",
+      "vaultUuid"
     ],
     "splitHints": []
   },
-  "OracleDatabaseAuditEvent": {
-    "description": "Mined from 20 community rules",
+  "Pathlock_TDnR_CL": {
+    "description": "SAP Security - Mined from 77 public rules, fields not schema-verified",
     "highValueFields": [
-      "DstUserName",
-      "TimeGenerated",
-      "DbAction",
-      "SrcIpAddr",
-      "Action",
-      "TableName",
-      "Privilege",
-      "ActionLength",
-      "Privileges"
-    ],
-    "splitHints": []
-  },
-  "OracleWebLogicServerEvent": {
-    "description": "Mined from 20 community rules",
-    "highValueFields": [
-      "TimeGenerated",
-      "HttpStatusCode",
-      "File",
-      "SrcIpAddr",
-      "UrlOriginal",
-      "HttpUserAgentOriginal",
-      "HttpRequestMethod",
-      "TopUrls",
-      "UAs",
-      "EventStartTime",
-      "TotalFile",
-      "EventSeverity",
-      "MultipleServerErrors",
-      "MultipleClientErrors"
-    ],
-    "splitHints": []
-  },
-  "PaloAltoCDLEvent": {
-    "description": "Mined from 20 community rules",
-    "highValueFields": [
-      "TimeGenerated",
-      "EventResourceId",
-      "DstUsername",
-      "SrcIpAddr",
-      "DstPortNumber",
-      "EventResult",
-      "NetworkApplicationProtocol",
-      "FileType",
-      "HttpRequestMethod",
-      "DstBytes",
-      "PanOSAgentVersion",
-      "DstIpAddr",
-      "PanOSConfigVersion",
-      "SrcFileName",
-      "DestinationMACAddress",
-      "DvcAction",
-      "RarePorts",
-      "DenyCount"
-    ],
-    "splitHints": []
-  },
-  "PaloAltoPrismaCloud": {
-    "description": "Mined from 20 community rules",
-    "highValueFields": [
-      "Reason",
-      "Status",
-      "TimeGenerated",
-      "AlertMessage",
-      "ResourceType",
-      "UserName",
-      "AlertSeverity",
-      "EventMessage",
-      "SrcIpAddr",
-      "i_RiskDetailRiskScoreScore",
-      "EventResult",
-      "RiskDetailRiskScoreScore",
-      "ResourceName",
-      "AlertId"
-    ],
-    "splitHints": []
-  },
-  "PingFederateEvent": {
-    "description": "Mined from 21 community rules",
-    "highValueFields": [
-      "TimeGenerated",
-      "EventType",
-      "SrcIpAddr",
-      "DstUserName",
-      "DstGeoCountry",
-      "EventMessage",
-      "DeviceCustomString1",
-      "EventSubType",
-      "DeviceCustomString3",
-      "EventResultDetails",
-      "SamlSubject"
+      "AffectedUser",
+      "Area",
+      "Bname",
+      "CentralTs",
+      "DataSource",
+      "DestIp",
+      "Eventid",
+      "Hostname",
+      "Instance",
+      "LogLine",
+      "MessageV1",
+      "MessageV2",
+      "MessageV3",
+      "MessageV4",
+      "MsgId",
+      "MsgNo",
+      "MsgType",
+      "Report",
+      "SrcIp",
+      "Subid",
+      "Sysid",
+      "Tcode",
+      "TimeGenerated"
     ],
     "splitHints": []
   },
@@ -2638,73 +1660,61 @@
       "EventOriginalType",
       "TimeGenerated",
       "Properties",
-      "AccountName",
-      "UPNSuffix",
       "ActorName",
-      "PowerAppsEntityId",
-      "AppId",
       "EnvironmentId",
       "PropertyCollection",
-      "SrcIpAddr",
-      "OperationName",
-      "StartTime",
-      "InvitedById",
-      "InvitedByUPN",
-      "Result",
-      "InvitedOrgEmail",
-      "InvitedId",
-      "AppName",
-      "DataverseId",
-      "SourceSystem",
-      "TargetPrincipalId",
-      "Entities",
-      "InvitedOrgDomain",
-      "ActivityDateTime"
+      "SourceSystem"
     ],
     "splitHints": []
   },
-  "ProofpointPOD": {
-    "description": "Mined from 20 community rules",
+  "prancer_CL": {
+    "description": "Posture Management - Mined from 11 public rules, fields not schema-verified",
     "highValueFields": [
-      "EventType",
-      "NetworkDirection",
+      "deviceProduct_s",
+      "Collection",
+      "Company",
+      "Config_ID",
+      "CWE_ID",
+      "data_data_resourceID_s",
+      "Description",
+      "Evidence",
+      "MITRE",
+      "Name",
+      "Other_Data",
+      "Request_Body",
+      "Request_Header",
+      "Resource",
+      "Response_Body",
+      "Response_Header",
+      "Severity",
+      "Solution",
+      "URL",
+      "WASC_ID"
+    ],
+    "splitHints": []
+  },
+  "RedSiftEmailForensics_CL": {
+    "description": "Email Security - Mined from 3 public rules, fields not schema-verified",
+    "highValueFields": [
+      "CorrelationUid",
+      "DstHostname",
+      "EmailFrom",
+      "EmailMessageUid",
+      "EmailReturnPath",
+      "EmailSubject",
+      "Message",
+      "Severity",
+      "SrcIp",
       "TimeGenerated",
-      "SrcUserUpn",
-      "DstUserUpn",
-      "IndicatorId",
-      "ThreatType",
-      "ConfidenceScore",
-      "attachedMimeType",
-      "Active",
-      "NetworkBytes",
-      "isCorrupted",
-      "ExpirationDateTime",
-      "ProofpointPOD_TimeGenerated",
-      "FilterModulesSpamScoresOverall",
-      "SrcIpAddr",
-      "NetworkSourceIP",
-      "AvgMsgSize",
-      "EmailSourceIpAddress"
-    ],
-    "splitHints": []
-  },
-  "PulseConnectSecure": {
-    "description": "Mined from 3 community rules",
-    "highValueFields": [
-      "Messages",
-      "Source_IP",
-      "User",
-      "Computer",
-      "dcount_User"
-    ],
-    "splitHints": []
-  },
-  "RadiflowEvent": {
-    "description": "IoT/OT Security - Mined from 8 community rules",
-    "highValueFields": [
-      "DeviceProduct",
-      "EventMessage",
-      "EventClassID"
+      "UrlCount",
+      "UrlList",
+      "EmailUrls",
+      "NewDomainCount",
+      "NewUrlDomainList",
+      "NewUrlList",
+      "RepresentativeUrlDomain",
+      "UrlDomain",
+      "UrlString"
     ],
     "splitHints": []
   },
@@ -2716,23 +1726,17 @@
     ],
     "splitHints": []
   },
-  "SalesforceServiceCloud": {
-    "description": "Mined from 3 community rules",
+  "SailPointISC_Events_CL": {
+    "description": "Identity & Access - Mined from 5 public rules, fields not schema-verified",
     "highValueFields": [
+      "Status",
+      "TimeGenerated",
+      "Created",
       "EventType",
-      "LoginStatus",
-      "User",
-      "TimestampDerived",
-      "ClientIp",
-      "Dummy",
-      "UserType",
-      "FailureCount",
-      "Hour",
-      "SuccessCount",
-      "FailureEndTime",
-      "UserCount",
-      "NumOfCountries",
-      "UserId"
+      "TechnicalName",
+      "ActorName",
+      "Operation",
+      "TargetName"
     ],
     "splitHints": []
   },
@@ -2808,22 +1812,13 @@
       "ProductName",
       "AlertSeverity",
       "Description",
-      "DeviceId",
-      "HostName",
       "Tactics",
       "ExtendedProperties",
-      "ThreatName",
       "AlertLink",
       "RemediationSteps",
       "VendorOriginalId",
       "Techniques",
-      "SourceDeviceAddress",
-      "Protocol",
-      "DestDeviceAddress",
-      "AlertManagementUri",
       "ProductComponentName",
-      "AccountName",
-      "IPAddress",
       "CompromisedEntity"
     ],
     "splitHints": []
@@ -2837,7 +1832,6 @@
       "CommandLine",
       "Computer",
       "EventID",
-      "HostName",
       "IpAddress",
       "LogonProcessName",
       "LogonType",
@@ -2863,26 +1857,40 @@
       }
     ]
   },
+  "SecurityIncident": {
+    "description": "Security Alerts - Mined from 4 public rules",
+    "highValueFields": [
+      "Classification",
+      "IncidentName",
+      "IncidentNumber",
+      "Labels",
+      "Severity",
+      "Status",
+      "TimeGenerated",
+      "IncidentUrl",
+      "LastModifiedTime",
+      "Title"
+    ],
+    "splitHints": []
+  },
   "SecurityRecommendation": {
     "description": "Posture Management - Mined from 9 community rules",
     "highValueFields": [
       "AssessedResourceId",
       "RecommendationState",
-      "RemediationLink",
       "RecommendationDisplayName",
-      "PassedControls",
-      "MaturityLevel",
-      "Failed",
-      "Total",
-      "Passed",
-      "PassedControlsPercentage",
-      "NotApplicable",
-      "Applicable",
-      "CapabilityArea",
+      "RecommendationName"
+    ],
+    "splitHints": []
+  },
+  "SecurityRegulatoryCompliance": {
+    "description": "Posture Management - Mined from 3 public rules",
+    "highValueFields": [
+      "AssessedResourceId",
+      "ComplianceControl",
       "ComplianceStandard",
-      "ComplianceDomain",
       "RecommendationName",
-      "ControlFamily"
+      "State"
     ],
     "splitHints": []
   },
@@ -2891,29 +1899,6 @@
     "highValueFields": [
       "ControlName_s",
       "TimeGenerated"
-    ],
-    "splitHints": []
-  },
-  "SentinelOne": {
-    "description": "Mined from 21 community rules",
-    "highValueFields": [
-      "ActivityType",
-      "TimeGenerated",
-      "EventCreationTime",
-      "DstHostname",
-      "DataRuleName",
-      "DataRuleQueryDetails",
-      "EventType",
-      "DataUserName",
-      "RuleName",
-      "DataComputerName",
-      "SrcUserName",
-      "DataStatus",
-      "EventOriginalMessage",
-      "ComputerName",
-      "DataRole",
-      "LastLoggedInUserName",
-      "Properties"
     ],
     "splitHints": []
   },
@@ -2953,48 +1938,6 @@
       }
     ]
   },
-  "SlackAudit": {
-    "description": "Mined from 19 community rules",
-    "highValueFields": [
-      "TimeGenerated",
-      "DvcAction",
-      "SrcUserName",
-      "Action",
-      "FE",
-      "EntityFileName",
-      "UserAgentOriginal",
-      "SrcUserEmail",
-      "DetailsType",
-      "EntityUserId",
-      "EntityAppName",
-      "NewUserEmail",
-      "SrcIpAddr",
-      "EntityUserEmail",
-      "SrcUserIdentity"
-    ],
-    "splitHints": []
-  },
-  "Snowflake": {
-    "description": "Mined from 20 community rules",
-    "highValueFields": [
-      "TargetUsername",
-      "TimeGenerated",
-      "EventType",
-      "QueryType",
-      "QUERY_TEXT_s",
-      "QUERY_TYPE_s",
-      "QueryExecutionStatus",
-      "QueryText",
-      "IS_SUCCESS_s",
-      "LoginIsSuccess",
-      "EXECUTION_STATUS_s",
-      "TargetUsername1",
-      "SrcDvcIpAddr",
-      "CREDITS_USED_CLOUD_SERVICES_d",
-      "TOTAL_ELAPSED_TIME_d"
-    ],
-    "splitHints": []
-  },
   "SOCPrimeAuditLogs_CL": {
     "description": "Platform Health - Mined from 3 community rules",
     "highValueFields": [
@@ -3005,6 +1948,73 @@
       "Uri",
       "TimeGenerated",
       "Type"
+    ],
+    "splitHints": []
+  },
+  "SOCRadar_Alarms_CL": {
+    "description": "Security Alerts - Mined from 5 public rules, fields not schema-verified",
+    "highValueFields": [
+      "AlarmMainType",
+      "TimeGenerated",
+      "Severity",
+      "AlarmId",
+      "AlarmSubType",
+      "Status",
+      "Title",
+      "AccountName",
+      "AlarmUrl",
+      "RecentCount"
+    ],
+    "splitHints": []
+  },
+  "Speculus_Indicators_CL": {
+    "description": "Threat Intelligence - Mined from 3 public rules, fields not schema-verified",
+    "highValueFields": [
+      "Attribution",
+      "IndicatorDescription",
+      "IndicatorValue",
+      "Labels",
+      "RiskScore",
+      "SpeculusActivity",
+      "TimeGenerated",
+      "AppDisplayName",
+      "DestinationIP",
+      "DeviceProduct",
+      "DeviceVendor",
+      "IPAddress",
+      "LastReceived",
+      "MatchIP",
+      "ResultDescription",
+      "ResultType",
+      "SourceIP",
+      "UserDisplayName",
+      "UserPrincipalName"
+    ],
+    "splitHints": []
+  },
+  "SpyCloudBreachWatchlistV2_CL": {
+    "description": "Threat Intelligence - Mined from 3 public rules, fields not schema-verified",
+    "highValueFields": [
+      "AccountEmail",
+      "AccountName",
+      "AccountUpn",
+      "DocumentId",
+      "Email",
+      "IPAddress",
+      "Severity",
+      "SourceId",
+      "SpyCloudPublishDate",
+      "TimeGenerated",
+      "HostName",
+      "InfectedMachineId",
+      "InfectedTime",
+      "TargetDomain",
+      "UserOS",
+      "AccountType",
+      "IPAddresses",
+      "PasswordPlaintext",
+      "PasswordType",
+      "TargetUrl"
     ],
     "splitHints": []
   },
@@ -3032,6 +2042,37 @@
     ],
     "splitHints": []
   },
+  "StealthTalkAnomalousAuth_CL": {
+    "description": "Identity & Access - Mined from 7 public rules, fields not schema-verified",
+    "highValueFields": [
+      "EventType",
+      "TimeGenerated",
+      "UserId",
+      "AlertDetails",
+      "AlertName",
+      "DeviceId",
+      "IpAddress",
+      "LoginCountry",
+      "AppVersion",
+      "AppVersions",
+      "FirstSeen",
+      "LastSeen",
+      "LoginCity",
+      "PassedAttempts",
+      "RawEventId",
+      "AssignedCity",
+      "AssignedCountry",
+      "AttemptCount",
+      "Attempts",
+      "BF_Time",
+      "BlockingMinutes",
+      "BruteForceAt",
+      "CityMismatch",
+      "CountryMismatch",
+      "DeviationMinutes"
+    ],
+    "splitHints": []
+  },
   "StorageBlobLogs": {
     "description": "Storage Access - Mined from 3 community rules",
     "highValueFields": [
@@ -3039,24 +2080,10 @@
       "UserAgentHeader",
       "TimeGenerated",
       "OperationName",
-      "FilePathElems",
-      "base64Char",
-      "AttackerIP",
       "AuthenticationType",
-      "MaliciousFileDirectory",
-      "DisplayName",
-      "dcount_Uri",
-      "deleteWindow",
-      "hexChar",
-      "ClientIP",
       "RequestBodySize",
-      "FileName",
-      "IdentityKey",
       "CallerIpAddress",
-      "FullPath",
       "CorrelationId",
-      "DistinctObjCount",
-      "SourceTable",
       "StatusText"
     ],
     "splitHints": []
@@ -3068,24 +2095,42 @@
       "StatusText",
       "AccountName",
       "CallerIpAddress",
-      "ClientIP",
       "ResponseMd5",
-      "FileName",
-      "Md5Hash",
-      "hexChar",
-      "Entities",
-      "DeletedTime",
-      "AttackerIP",
-      "base64Char",
       "RequestBodySize",
       "Uri",
       "CorrelationId",
-      "SourceTable",
+      "TimeGenerated"
+    ],
+    "splitHints": []
+  },
+  "StratoSecure_Findings_CL": {
+    "description": "Posture Management - Mined from 5 public rules, fields not schema-verified",
+    "highValueFields": [
+      "ApplicationId",
+      "FixStatus",
+      "RuleIds",
+      "Severity",
+      "StraTenantId",
       "TimeGenerated",
-      "DisplayName",
-      "UploadedTime",
-      "MaliciousFileDirectory",
-      "DestinationIP"
+      "FindingCount",
+      "AppName",
+      "FailedAttempts",
+      "Owner",
+      "Repos",
+      "ResultType",
+      "WL_ApplicationId",
+      "WL_AppName",
+      "WL_Owner",
+      "AgeInDays",
+      "ApiId",
+      "AppDisplayName",
+      "AppId",
+      "ConditionalAccessStatus",
+      "CweId",
+      "DistinctCallers",
+      "DistinctIPs",
+      "DistinctUsers",
+      "ErrorCount"
     ],
     "splitHints": []
   },
@@ -3093,24 +2138,14 @@
     "description": "Linux syslog - system events, authentication, daemon logs, cron, kernel messages",
     "highValueFields": [
       "Computer",
-      "Domain",
-      "DomainName",
-      "EventType",
       "Facility",
       "HostIP",
-      "IndicatorId",
       "ProcessID",
       "ProcessName",
       "SeverityLevel",
-      "Syslog_TimeGenerated",
       "SyslogMessage",
-      "TenantName",
       "TimeGenerated",
-      "TLD",
-      "Type",
-      "Url",
-      "User",
-      "UserName"
+      "Type"
     ],
     "splitHints": [
       {
@@ -3118,6 +2153,99 @@
         "kql": "Facility in (\"auth\", \"authpriv\", \"kern\") or SeverityLevel in (\"emerg\", \"alert\", \"crit\", \"err\")"
       }
     ]
+  },
+  "Tailscale_Audit_CL": {
+    "description": "Network Security - Mined from 16 public rules, fields not schema-verified",
+    "highValueFields": [
+      "Action",
+      "ActorLogin",
+      "TimeGenerated",
+      "Origin",
+      "New",
+      "Old",
+      "Target",
+      "Provider",
+      "TargetId",
+      "TargetName",
+      "TargetType",
+      "ActionDetails",
+      "ActorType",
+      "Added",
+      "AddedDomains",
+      "Change",
+      "DayOfWeek",
+      "Domain",
+      "EditCount",
+      "Ephemeral",
+      "EventType",
+      "FirstEvent",
+      "FirstSeen",
+      "HourOfDay",
+      "KeyDescription"
+    ],
+    "splitHints": []
+  },
+  "Tailscale_Devices_CL": {
+    "description": "Configuration Management - Mined from 12 public rules, fields not schema-verified",
+    "highValueFields": [
+      "DeviceId",
+      "DeviceName",
+      "Hostname",
+      "LastSeen",
+      "User",
+      "Os",
+      "ClientVersion",
+      "TimeGenerated",
+      "Tags",
+      "Created",
+      "AdvertisedRoutes",
+      "Authorized",
+      "Distro",
+      "IsExternal",
+      "SshEnabled",
+      "ConnectedToControl",
+      "DaysSinceSeen",
+      "DaysToExpiry",
+      "DeviceCount",
+      "Devices",
+      "EnabledRoutes",
+      "Expires",
+      "FirstFlow",
+      "Flows",
+      "HasNewDevice"
+    ],
+    "splitHints": []
+  },
+  "Tailscale_Network_CL": {
+    "description": "Network Flow - Mined from 15 public rules, fields not schema-verified",
+    "highValueFields": [
+      "TimeGenerated",
+      "SrcUser",
+      "SrcNodeName",
+      "Src",
+      "Dst",
+      "NodeId",
+      "Proto",
+      "SrcOs",
+      "SrcTags",
+      "DstNodeName",
+      "FirstFlow",
+      "Flows",
+      "LastFlow",
+      "TotalFlows",
+      "DstTags",
+      "DstUser",
+      "TotalBytes",
+      "BeaconPercent",
+      "DeltaSec",
+      "DistinctSrcDevices",
+      "FirstSeen",
+      "RelayedFlows",
+      "RelayedPct",
+      "BaselineHourlyMB",
+      "Created"
+    ],
+    "splitHints": []
   },
   "TheomAlerts_CL": {
     "description": "Mined from 20 community rules",
@@ -3133,23 +2261,10 @@
       "Id",
       "TimeGenerated",
       "ObservableValue",
-      "IndicatorType",
-      "Description",
       "IsActive",
-      "ActivityGroupNames",
       "ObservableKey",
-      "TrafficLightProtocolLevel",
-      "IndicatorId",
-      "Url",
       "SourceSystem",
-      "NetworkSourceIP",
-      "Confidence",
-      "Domain",
-      "DomainName",
-      "Name",
-      "DstIpAddr",
-      "HostName",
-      "ThreatType"
+      "Confidence"
     ],
     "splitHints": []
   },
@@ -3171,105 +2286,162 @@
       "NetworkDestinationIP",
       "DomainName",
       "SourceSystem",
-      "Name",
-      "Type",
-      "ClientIP",
+      "Type"
+    ],
+    "splitHints": []
+  },
+  "Unifi_SiteManager_Devices_CL": {
+    "description": "Configuration Management - Mined from 10 public rules, fields not schema-verified",
+    "highValueFields": [
+      "TimeGenerated",
+      "Id",
+      "Model",
       "HostName",
-      "Computer",
-      "SrcIpAddr",
-      "SourceIP",
-      "Domain"
-    ],
-    "splitHints": []
-  },
-  "TMApexOneEvent": {
-    "description": "Mined from 20 community rules",
-    "highValueFields": [
-      "EventMessage",
-      "TimeGenerated",
-      "DstUserName",
-      "SrcIpAddr",
-      "DeviceCustomNumber3",
-      "DvcAction",
-      "ApplicationProtocol",
-      "NetworkDirection",
-      "DlpAction",
-      "EventSubType",
-      "FileName",
-      "Event_Type",
-      "PermissionCount",
-      "TranslatedAction",
-      "Permission",
-      "Policy",
-      "ActionCount",
-      "UrlOriginal",
-      "OperationCount",
-      "ActionResult",
-      "Translatedoperation",
-      "TypeOfEvent"
-    ],
-    "splitHints": []
-  },
-  "TomcatEvent": {
-    "description": "Mined from 21 community rules",
-    "highValueFields": [
-      "TimeGenerated",
-      "HttpStatusCode",
-      "SrcIpAddr",
-      "File",
-      "UrlOriginal",
-      "HttpUserAgentOriginal",
-      "TopUrls",
-      "EventStartTime",
-      "MultipleServerErrors",
-      "UAs",
-      "MultipleClientErrors",
-      "HttpRequestMethod",
-      "EventMessage",
-      "TotalFile"
-    ],
-    "splitHints": []
-  },
-  "TrendMicroCAS": {
-    "description": "Mined from 20 community rules",
-    "highValueFields": [
-      "TimeGenerated",
-      "DstUserName",
-      "SrcFileName",
-      "SecurityRiskName",
-      "DetectionTime",
-      "EventType",
-      "EventOriginalResultDetails",
-      "VirusName",
-      "MailMessageFileName",
-      "TriggeredDlpTemplate",
-      "RansomwareName",
-      "SrcFileSHA256",
-      "EventCategoryType",
-      "SrcFileSHA1",
-      "TriggeredPolicyName"
-    ],
-    "splitHints": []
-  },
-  "UbiquitiAuditEvent": {
-    "description": "Mined from 20 community rules",
-    "highValueFields": [
-      "EventCategory",
-      "TimeGenerated",
-      "DstPortNumber",
-      "DvcAction",
-      "DstIpAddr",
-      "SrcIpAddr",
-      "DnsQuery",
-      "NetworkProtocol",
-      "Domain",
+      "ProductLine",
+      "Status",
+      "Activity",
+      "DeviceId",
+      "DeviceName",
+      "FirmwareStatus",
+      "IPAddress",
+      "AdoptionTime",
+      "AffectedProductLines",
+      "Devices",
       "FirmwareVersion",
-      "NetworkIP",
-      "Name",
-      "Device",
-      "FQDNs",
-      "NetworkRuleName",
-      "EventMessage"
+      "MACAddress",
+      "UpdateAvailable",
+      "AdoptedAt",
+      "AdoptedDow",
+      "AdoptedHour",
+      "AdoptionDateTime",
+      "AffectedModels",
+      "availableMajor",
+      "availableMinor",
+      "AvailableVersion"
+    ],
+    "splitHints": []
+  },
+  "Unifi_SiteManager_Hosts_CL": {
+    "description": "Configuration Management - Mined from 4 public rules, fields not schema-verified",
+    "highValueFields": [
+      "TimeGenerated",
+      "Id",
+      "Activity",
+      "ConnectionChange",
+      "ConnectionChangeTime",
+      "currentState",
+      "Date",
+      "HostId",
+      "HostName",
+      "HostType",
+      "HostTypeDisplay",
+      "IPAddress",
+      "IsBlocked",
+      "IsOwner",
+      "LastConnectionStateChange",
+      "LastReceived",
+      "MemberCount",
+      "MinutesSinceData",
+      "prevChange",
+      "PreviousChangeTime",
+      "prevState",
+      "SiteName",
+      "Status",
+      "TableDisplay",
+      "TableName"
+    ],
+    "splitHints": []
+  },
+  "Unifi_SiteManager_ISPMetrics_CL": {
+    "description": "Infrastructure Diagnostics - Mined from 6 public rules, fields not schema-verified",
+    "highValueFields": [
+      "TimeGenerated",
+      "SiteId",
+      "ISPAsn",
+      "ISPName",
+      "metricTime",
+      "EventCount",
+      "FirstSeen",
+      "LastSeen",
+      "AvgLatencyMs",
+      "AvgUptimePct",
+      "TotalDowntimeSeconds",
+      "avgLatency",
+      "AvgUptime",
+      "DowntimeMinutes",
+      "LastReceived",
+      "maxLatency",
+      "MaxLatencyMs",
+      "MeasurementCount",
+      "MinUptimePct",
+      "MinutesSinceData",
+      "packetLoss",
+      "siteIdStr",
+      "SLATargetPct",
+      "Status",
+      "TableDisplay"
+    ],
+    "splitHints": []
+  },
+  "Unifi_SiteManager_Sites_CL": {
+    "description": "Configuration Management - Mined from 13 public rules, fields not schema-verified",
+    "highValueFields": [
+      "TimeGenerated",
+      "SiteId",
+      "SiteName",
+      "Activity",
+      "siteId_s",
+      "CurrentMaxCount",
+      "Delta",
+      "HostName",
+      "IssueIndex",
+      "PrevMaxCount",
+      "AvailabilityPct",
+      "CriticalCount",
+      "CurrentIp",
+      "CurrentRules",
+      "DropPct",
+      "InspectionState",
+      "IpsMode",
+      "IssueCount",
+      "LastReceived",
+      "MaxCount",
+      "MinPending",
+      "MinutesSinceData",
+      "NewCriticals",
+      "ObservedIps",
+      "OfflineDevices"
+    ],
+    "splitHints": []
+  },
+  "UniqkeyEvents_CL": {
+    "description": "Identity & Access - Mined from 9 public rules, fields not schema-verified",
+    "highValueFields": [
+      "ActorEmail",
+      "Category",
+      "SrcIpAddr",
+      "TimeGenerated",
+      "Action",
+      "ActorType",
+      "TargetType",
+      "ActionId",
+      "ClientSystem",
+      "TargetName",
+      "ActorId",
+      "AccessCount",
+      "CreationAction",
+      "CreationTime",
+      "DistinctTargets",
+      "EndTime",
+      "ExportAction",
+      "ExportedTargetName",
+      "ExportedTargetType",
+      "ExportTime",
+      "NewEmployeeId",
+      "NewEmployeeName",
+      "RemovalAction",
+      "RemovalActor",
+      "RemovalTime"
     ],
     "splitHints": []
   },
@@ -3280,38 +2452,118 @@
       "Url",
       "AccountUpn",
       "ActionType",
-      "Timestamp",
       "Workload",
-      "TeamsMessageId",
-      "ErrorPage",
       "IsClickedThrough",
-      "UrlPendingVerdict",
-      "UrlBlocked",
-      "UrlAllowed",
-      "Urls",
       "NetworkMessageId",
       "ReportId",
-      "Title",
-      "Blocked",
-      "UrlDomain",
-      "AlertId",
-      "EntityType",
       "TimeGenerated",
-      "AppName",
-      "IsExternalThread"
+      "AppName"
     ],
     "splitHints": []
   },
   "Usage": {
     "description": "Mined from 5 community rules",
     "highValueFields": [
-      "CloudApplication",
-      "DataType",
-      "NotLogged",
-      "RecommendedDataTable",
-      "MaturityLevel",
-      "Size",
-      "DataTable1"
+      "DataType"
+    ],
+    "splitHints": []
+  },
+  "UtimacoESKMKmipServerLogs_CL": {
+    "description": "Data Security - Mined from 7 public rules, fields not schema-verified",
+    "highValueFields": [
+      "TimeGenerated",
+      "User",
+      "Operation",
+      "IP",
+      "Result",
+      "DayOfWeek",
+      "DeniedCount",
+      "DestroyCount",
+      "DistinctObjects",
+      "Event",
+      "EventCount",
+      "FailureCount",
+      "HourOfDay",
+      "ObjectType",
+      "Reason",
+      "RetrievalCount"
+    ],
+    "splitHints": []
+  },
+  "Vaikora_AgentSignals_CL": {
+    "description": "Cloud Security - Mined from 6 public rules, fields not schema-verified",
+    "highValueFields": [
+      "TimeGenerated",
+      "AgentId",
+      "Severity",
+      "ActionId",
+      "ActionType",
+      "AnomalyScore",
+      "Status",
+      "Alert",
+      "IsAnomaly",
+      "Suggestion",
+      "ViolationCount"
+    ],
+    "splitHints": []
+  },
+  "VaikoraO365_Quarantine_CL": {
+    "description": "Email Security - Mined from 3 public rules, fields not schema-verified",
+    "highValueFields": [
+      "TenantId",
+      "TimeGenerated",
+      "TenantId_s",
+      "ActionId",
+      "ActionId_d",
+      "ActionName",
+      "AvgHourlyCount",
+      "Confidence",
+      "Confidence_d",
+      "EmailId",
+      "HoursOffline",
+      "LastSeen",
+      "ModelVersion",
+      "RatioOverBaseline",
+      "Reasoning",
+      "RecentCount",
+      "RecipientAddress",
+      "RiskScore",
+      "SenderAddress",
+      "SenderDomain",
+      "SourceMailbox",
+      "SubCategory",
+      "Subject"
+    ],
+    "splitHints": []
+  },
+  "ValimailEnforceEvents_CL": {
+    "description": "Email Security - Mined from 8 public rules, fields not schema-verified",
+    "highValueFields": [
+      "EventCategory",
+      "User",
+      "IsHighValueEvent",
+      "AccountDomain",
+      "AccountName",
+      "EventSeverity",
+      "PerformedAt",
+      "Actions",
+      "Domains",
+      "ChangeCount",
+      "DomainCount",
+      "FirstSeen",
+      "LastSeen",
+      "Categories",
+      "ChangedBy",
+      "ChangeDetail",
+      "ChangesPerMin",
+      "Domain",
+      "EventCount",
+      "EventType",
+      "ExceedsThreshold",
+      "HighValueCount",
+      "IsHighValue",
+      "PolicyAction",
+      "Severity"
     ],
     "splitHints": []
   },
@@ -3328,24 +2580,15 @@
       "TimeGenerated",
       "DestinationIP",
       "SourceIP",
-      "ActivityGroupNames",
       "RemoteIP",
-      "VMConnection_TimeGenerated",
       "Computer",
       "Description",
       "ProcessName",
-      "Url",
       "DestinationPort",
       "Protocol",
       "Direction",
       "Type",
-      "IndicatorId",
-      "SentBytes",
-      "TimeGeneratedMax",
-      "DestinationPortList",
-      "ValidUntil",
-      "BytesSent",
-      "SourceIPList"
+      "BytesSent"
     ],
     "splitHints": []
   },
@@ -3367,26 +2610,9 @@
     ],
     "splitHints": []
   },
-  "VMwareESXi": {
-    "description": "Mined from 24 community rules",
-    "highValueFields": [
-      "SyslogMessage",
-      "DstHostname",
-      "TimeGenerated",
-      "SrcUsername",
-      "SrcIpAddr",
-      "NTDomain",
-      "ImageName",
-      "LastPowerOffTime",
-      "Result",
-      "kImageName"
-    ],
-    "splitHints": []
-  },
   "W3CIISLog": {
     "description": "IIS web server access logs - HTTP requests, status codes, response times",
     "highValueFields": [
-      "AccountName",
       "cIP",
       "Computer",
       "csMethod",
@@ -3395,11 +2621,7 @@
       "csUriStem",
       "csUserAgent",
       "csUserName",
-      "HostName",
-      "HostNameDomain",
-      "sComputerName",
       "scStatus",
-      "scStatusFull_Friendly",
       "scSubStatus",
       "scWin32Status",
       "sIP",
@@ -3407,42 +2629,116 @@
       "sSiteName",
       "TimeGenerated",
       "TimeTaken",
-      "Type",
-      "UserAgent"
+      "Type"
     ],
     "splitHints": [
       {
         "description": "Keep error responses (4xx/5xx) and suspicious request patterns in Analytics",
-        "kql": "scStatus >= 400 or csUriStem has_any (\".asp\", \".php\", \".jsp\", \".cgi\", \"cmd.exe\", \"..\\\\\")"
+        "kql": "scStatus >= 400 or (csUriStem has \".asp\" or csUriStem has \".php\" or csUriStem has \".jsp\" or csUriStem has \".cgi\" or csUriStem has \"cmd.exe\" or csUriStem has \"..\\\\\")"
       }
     ]
+  },
+  "WhisperASNReputation_CL": {
+    "description": "Threat Intelligence - Mined from 3 public rules, fields not schema-verified",
+    "highValueFields": [
+      "AsnName",
+      "TimeGenerated",
+      "CurrentLevel",
+      "CurrentScore",
+      "PeerCount",
+      "PrefixCount",
+      "PreviousScore",
+      "ScoreDelta",
+      "ASN",
+      "Country",
+      "currentAvgThreat",
+      "currentMaxThreat",
+      "currentTime",
+      "DnsDomain",
+      "domainAge",
+      "hasThreateningPrefixes",
+      "IPAddress",
+      "maxThreatScore",
+      "NewScore",
+      "OldScore",
+      "parsedAsn",
+      "parsedIp",
+      "previousLevel",
+      "previousTime",
+      "reputationLevel"
+    ],
+    "splitHints": []
+  },
+  "WhisperInfraContext_CL": {
+    "description": "Threat Intelligence - Mined from 8 public rules, fields not schema-verified",
+    "highValueFields": [
+      "TimeGenerated",
+      "threatLevel",
+      "threatScore",
+      "feedNames",
+      "isThreat",
+      "DnsDomain",
+      "domainAge",
+      "maxThreatScore",
+      "asnNames",
+      "avgThreatScore",
+      "cohostedCount",
+      "IPAddress",
+      "ipAddresses",
+      "isMalware",
+      "parsedIp",
+      "ASN",
+      "asnName",
+      "clusterIndicators",
+      "clusterKey",
+      "clusterType",
+      "DnsDomains",
+      "indicatorCount",
+      "indicatorType",
+      "isPhishing",
+      "malwareCoHostCount"
+    ],
+    "splitHints": []
+  },
+  "WhisperThreatIntel_CL": {
+    "description": "Threat Intelligence - Mined from 8 public rules, fields not schema-verified",
+    "highValueFields": [
+      "threatLevel",
+      "threatScore",
+      "TimeGenerated",
+      "feedNames",
+      "isThreat",
+      "asnNames",
+      "avgThreatScore",
+      "cohostedCount",
+      "DestinationIP",
+      "DeviceAction",
+      "DeviceProduct",
+      "DnsDomain",
+      "domainAge",
+      "ipAddresses",
+      "isMalware",
+      "lastSeen",
+      "maxThreatScore",
+      "SourceIP",
+      "Activity",
+      "ASN",
+      "clusterIndicators",
+      "clusterKey",
+      "clusterType",
+      "DestinationHostName",
+      "DeviceVendor"
+    ],
+    "splitHints": []
   },
   "WindowsEvent": {
     "description": "Endpoint Telemetry - Mined from 22 community rules",
     "highValueFields": [
       "EventID",
-      "Account",
-      "HostName",
       "EventData",
-      "HostNameDomain",
       "TimeGenerated",
       "Computer",
-      "DomainIndex",
-      "NewProcessName",
-      "AccountName",
-      "ProcessName",
-      "Activity",
-      "ParentProcessName",
-      "CommandLine",
-      "AccountType",
-      "ObjectName",
-      "TargetAccount",
-      "Key",
-      "TargetUserName",
-      "IpAddress",
-      "SubjectUserSid",
-      "Type",
-      "Process"
+      "Type"
     ],
     "splitHints": []
   },
@@ -3456,14 +2752,12 @@
       "SourcePort",
       "DestinationIP",
       "DestinationPort",
-      "Protocol",
-      "Direction",
-      "ProcessName"
+      "Protocol"
     ],
     "splitHints": [
       {
-        "description": "Keep blocked connections and inbound traffic in Analytics",
-        "kql": "FirewallAction == \"DROP\" or Direction == \"IN\""
+        "description": "Keep blocked connections in Analytics",
+        "kql": "FirewallAction == \"DROP\""
       }
     ]
   },
@@ -3519,19 +2813,6 @@
     ],
     "splitHints": []
   },
-  "ZNSegmentAudit": {
-    "description": "Mined from 7 community rules",
-    "highValueFields": [
-      "AuditTypeId",
-      "TimeGenerated",
-      "PerformedByName",
-      "EnforcementSource",
-      "numOfTargetEntities",
-      "DestinationEntityId",
-      "DestinationEntityName"
-    ],
-    "splitHints": []
-  },
   "ZoomLogs": {
     "description": "Mined from 8 community rules",
     "highValueFields": [
@@ -3559,28 +2840,6 @@
       "dcount_ItemId",
       "EventName",
       "TimeZone"
-    ],
-    "splitHints": []
-  },
-  "ZPAEvent": {
-    "description": "Mined from 20 community rules",
-    "highValueFields": [
-      "DstUserName",
-      "DvcAction",
-      "TimeGenerated",
-      "EventCount",
-      "SrcIpAddr",
-      "EventResult",
-      "SrcGeoCountry",
-      "NetworkSessionId",
-      "VersionCheck",
-      "NewVersion1",
-      "ExpectedVersion2",
-      "Application",
-      "EventResult1",
-      "ConnectionID",
-      "NewVersion2",
-      "UrlHostname"
     ],
     "splitHints": []
   }
