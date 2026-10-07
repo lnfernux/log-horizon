@@ -1,0 +1,1824 @@
+[
+  {
+    "sourceId": "acronis",
+    "displayName": "Acronis Cyber Protect (CEF)",
+    "table": "CommonSecurityLog",
+    "filter": "DeviceVendor =~ \"Acronis\"",
+    "connector": "Acronis Cyber Protect (CEF via AMA)",
+    "classification": "primary",
+    "valueRule": "C1",
+    "category": "Security Alerts",
+    "description": "Acronis Cyber Protect alerts, including ransomware and backup protection",
+    "keywords": [
+      "acronis",
+      "cyber",
+      "protect",
+      "commonsecuritylog"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "tierRule": "T1",
+    "volumeClass": "low",
+    "volumeDriver": "alert",
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "azure-sentinel-rule-corpus",
+      "log-baseline-classification-rules",
+      "log-baseline-volume-model",
+      "acsc-priority-logs-siem",
+      "cisa-m-21-31-guidance"
+    ]
+  },
+  {
+    "sourceId": "acronis-audit",
+    "displayName": "Acronis Cyber Protect audit (CEF)",
+    "table": "CommonSecurityLog",
+    "filter": "DeviceVendor =~ \"Acronis audit\"",
+    "connector": "Acronis Cyber Protect (CEF via AMA)",
+    "classification": "primary",
+    "valueRule": "C3",
+    "category": "Configuration Management",
+    "description": "Acronis Cyber Protect audit events for console and policy changes",
+    "keywords": [
+      "acronis",
+      "cyber",
+      "protect",
+      "commonsecuritylog"
+    ],
+    "mitreSources": [
+      "Application Log: Application Log Content"
+    ],
+    "recommendedTier": "analytics",
+    "tierRule": "T1",
+    "volumeClass": "low",
+    "volumeDriver": "admin-action",
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "azure-sentinel-rule-corpus",
+      "log-baseline-classification-rules",
+      "log-baseline-volume-model",
+      "acsc-priority-logs-siem",
+      "cisa-m-21-31-guidance"
+    ]
+  },
+  {
+    "sourceId": "akamai-siem",
+    "displayName": "Akamai SIEM (CEF)",
+    "table": "CommonSecurityLog",
+    "filter": "DeviceVendor =~ \"Akamai\" and DeviceProduct =~ \"akamai_siem\"",
+    "parser": "AkamaiSIEMEvent",
+    "connector": "Akamai SIEM (CEF via AMA)",
+    "classification": "primary",
+    "valueRule": "C5",
+    "category": "Network Security",
+    "description": "Akamai web application firewall and bot security events",
+    "keywords": [
+      "akamai",
+      "siem",
+      "commonsecuritylog"
+    ],
+    "mitreSources": [
+      "Network Traffic: Network Traffic Content"
+    ],
+    "recommendedTier": "analytics",
+    "tierRule": "T1",
+    "volumeClass": "high",
+    "volumeDriver": "web-request",
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "azure-sentinel-rule-corpus",
+      "log-baseline-classification-rules",
+      "log-baseline-volume-model",
+      "acsc-priority-logs-siem",
+      "cisa-m-21-31-guidance"
+    ]
+  },
+  {
+    "sourceId": "arista-awake",
+    "displayName": "Arista Awake Security (CEF)",
+    "table": "CommonSecurityLog",
+    "filter": "DeviceVendor =~ \"Arista Networks\" and DeviceProduct =~ \"Awake Security\"",
+    "connector": "Arista Awake Security (CEF via AMA)",
+    "classification": "primary",
+    "valueRule": "C1",
+    "category": "Network Security",
+    "description": "Arista Awake Security network detection and response alerts",
+    "keywords": [
+      "arista",
+      "awake",
+      "security",
+      "commonsecuritylog"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "tierRule": "T1",
+    "volumeClass": "low",
+    "volumeDriver": "alert",
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "azure-sentinel-rule-corpus",
+      "log-baseline-classification-rules",
+      "log-baseline-volume-model",
+      "acsc-priority-logs-siem",
+      "cisa-m-21-31-guidance"
+    ]
+  },
+  {
+    "sourceId": "aruba-clearpass",
+    "displayName": "Aruba ClearPass (CEF)",
+    "table": "CommonSecurityLog",
+    "filter": "DeviceVendor =~ \"Aruba Networks\" and DeviceProduct =~ \"ClearPass\"",
+    "parser": "ArubaClearPass",
+    "connector": "Aruba ClearPass (CEF via AMA)",
+    "classification": "primary",
+    "valueRule": "C2",
+    "category": "Identity & Access",
+    "description": "Aruba ClearPass network access control authentication and policy events",
+    "keywords": [
+      "aruba",
+      "clearpass",
+      "commonsecuritylog"
+    ],
+    "mitreSources": [
+      "Logon Session: Logon Session Creation",
+      "User Account: User Account Authentication"
+    ],
+    "recommendedTier": "datalake",
+    "tierRule": "T3",
+    "volumeClass": "high",
+    "volumeDriver": "sign-in",
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "azure-sentinel-rule-corpus",
+      "log-baseline-classification-rules",
+      "log-baseline-volume-model",
+      "acsc-priority-logs-siem",
+      "cisa-m-21-31-guidance"
+    ]
+  },
+  {
+    "sourceId": "cisco-asa-ftd",
+    "displayName": "Cisco ASA and Firepower Threat Defense (CEF)",
+    "table": "CommonSecurityLog",
+    "filter": "DeviceVendor =~ \"Cisco\" and (DeviceProduct has \"ASA\" or DeviceProduct has \"FTD\")",
+    "connector": "Cisco ASA and Firepower Threat Defense (CEF via AMA)",
+    "classification": "primary",
+    "valueRule": "C5",
+    "category": "Network Security",
+    "description": "Cisco ASA and FTD firewall connection, deny, and threat events",
+    "keywords": [
+      "cisco",
+      "asa",
+      "and",
+      "firepower",
+      "threat",
+      "defense",
+      "commonsecuritylog"
+    ],
+    "mitreSources": [
+      "Network Traffic: Network Traffic Flow"
+    ],
+    "recommendedTier": "datalake",
+    "tierRule": "T3",
+    "volumeClass": "very-high",
+    "volumeDriver": "connection",
+    "recommendedRetentionDays": 180,
+    "splitHints": [
+      {
+        "description": "Keep threat detection messages and traffic that was not permitted in Analytics. Permitted traffic goes to the data lake.",
+        "kql": "(DeviceEventClassID in (\"733100\", \"733101\", \"733102\", \"733103\", \"733104\", \"733105\") or (isnotempty(DeviceAction) and DeviceAction !~ \"allow\" and DeviceAction !~ \"allowed\" and DeviceAction !~ \"accept\" and DeviceAction !~ \"accepted\" and DeviceAction !~ \"permitted\"))"
+      }
+    ],
+    "sourceIds": [
+      "azure-sentinel-rule-corpus",
+      "log-baseline-classification-rules",
+      "log-baseline-volume-model",
+      "acsc-priority-logs-siem",
+      "cisa-m-21-31-guidance"
+    ]
+  },
+  {
+    "sourceId": "citrix-netscaler",
+    "displayName": "Citrix NetScaler ADC (CEF)",
+    "table": "CommonSecurityLog",
+    "filter": "DeviceVendor =~ \"Citrix\" and DeviceProduct =~ \"NetScaler\"",
+    "parser": "CitrixADCEventOld",
+    "connector": "Citrix NetScaler ADC (CEF via AMA)",
+    "classification": "primary",
+    "valueRule": "C5",
+    "category": "Network Security",
+    "description": "Citrix NetScaler application delivery and web application firewall events",
+    "keywords": [
+      "citrix",
+      "netscaler",
+      "adc",
+      "commonsecuritylog"
+    ],
+    "mitreSources": [
+      "Network Traffic: Network Traffic Content"
+    ],
+    "recommendedTier": "analytics",
+    "tierRule": "T1",
+    "volumeClass": "high",
+    "volumeDriver": "web-request",
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "azure-sentinel-rule-corpus",
+      "log-baseline-classification-rules",
+      "log-baseline-volume-model",
+      "acsc-priority-logs-siem",
+      "cisa-m-21-31-guidance"
+    ]
+  },
+  {
+    "sourceId": "claroty",
+    "displayName": "Claroty (CEF)",
+    "table": "CommonSecurityLog",
+    "filter": "DeviceVendor =~ \"Claroty\"",
+    "parser": "ClarotyEvent",
+    "connector": "Claroty (CEF via AMA)",
+    "classification": "primary",
+    "valueRule": "C1",
+    "category": "IoT/OT Security",
+    "description": "Claroty OT security alerts and asset events",
+    "keywords": [
+      "claroty",
+      "commonsecuritylog"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "tierRule": "T1",
+    "volumeClass": "low",
+    "volumeDriver": "alert",
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "azure-sentinel-rule-corpus",
+      "log-baseline-classification-rules",
+      "log-baseline-volume-model",
+      "acsc-priority-logs-siem",
+      "cisa-m-21-31-guidance"
+    ]
+  },
+  {
+    "sourceId": "contrast-security",
+    "displayName": "Contrast Security (CEF)",
+    "table": "CommonSecurityLog",
+    "filter": "DeviceVendor =~ \"Contrast Security\"",
+    "connector": "Contrast Security (CEF via AMA)",
+    "classification": "primary",
+    "valueRule": "C1",
+    "category": "Application Logs",
+    "description": "Contrast Security application detection and response attack events",
+    "keywords": [
+      "contrast",
+      "security",
+      "commonsecuritylog"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "tierRule": "T1",
+    "volumeClass": "low",
+    "volumeDriver": "alert",
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "azure-sentinel-rule-corpus",
+      "log-baseline-classification-rules",
+      "log-baseline-volume-model",
+      "acsc-priority-logs-siem",
+      "cisa-m-21-31-guidance"
+    ]
+  },
+  {
+    "sourceId": "crowdstrike-falcon-cef",
+    "displayName": "CrowdStrike Falcon event stream (CEF)",
+    "table": "CommonSecurityLog",
+    "filter": "DeviceVendor =~ \"CrowdStrike\" and DeviceProduct =~ \"FalconHost\"",
+    "parser": "CrowdStrikeFalconEventStream",
+    "connector": "CrowdStrike Falcon event stream (CEF via AMA)",
+    "classification": "primary",
+    "valueRule": "C1",
+    "category": "Endpoint Detection",
+    "description": "CrowdStrike Falcon detections and audit events forwarded by the SIEM connector",
+    "keywords": [
+      "crowdstrike",
+      "falcon",
+      "event",
+      "stream",
+      "commonsecuritylog"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "tierRule": "T1",
+    "volumeClass": "medium",
+    "volumeDriver": "alert",
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "azure-sentinel-rule-corpus",
+      "log-baseline-classification-rules",
+      "log-baseline-volume-model",
+      "acsc-priority-logs-siem",
+      "cisa-m-21-31-guidance"
+    ]
+  },
+  {
+    "sourceId": "dragos",
+    "displayName": "Dragos Platform (CEF)",
+    "table": "CommonSecurityLog",
+    "filter": "DeviceVendor =~ \"Dragos\" and DeviceProduct =~ \"Platform\"",
+    "parser": "DragosPushNotificationsToSentinel",
+    "connector": "Dragos Platform (CEF via AMA)",
+    "classification": "primary",
+    "valueRule": "C1",
+    "category": "IoT/OT Security",
+    "description": "Dragos industrial control system threat detection notifications",
+    "keywords": [
+      "dragos",
+      "platform",
+      "commonsecuritylog"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "tierRule": "T1",
+    "volumeClass": "low",
+    "volumeDriver": "alert",
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "azure-sentinel-rule-corpus",
+      "log-baseline-classification-rules",
+      "log-baseline-volume-model",
+      "acsc-priority-logs-siem",
+      "cisa-m-21-31-guidance"
+    ]
+  },
+  {
+    "sourceId": "fireeye-nx",
+    "displayName": "FireEye NX (CEF)",
+    "table": "CommonSecurityLog",
+    "filter": "DeviceVendor =~ \"FireEye\"",
+    "parser": "FireEyeNXEvent",
+    "connector": "FireEye NX (CEF via AMA)",
+    "classification": "primary",
+    "valueRule": "C1",
+    "category": "Network Security",
+    "description": "FireEye NX network security alerts",
+    "keywords": [
+      "fireeye",
+      "nx",
+      "commonsecuritylog"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "tierRule": "T1",
+    "volumeClass": "low",
+    "volumeDriver": "alert",
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "azure-sentinel-rule-corpus",
+      "log-baseline-classification-rules",
+      "log-baseline-volume-model",
+      "acsc-priority-logs-siem",
+      "cisa-m-21-31-guidance"
+    ]
+  },
+  {
+    "sourceId": "forgerock",
+    "displayName": "ForgeRock (CEF)",
+    "table": "CommonSecurityLog",
+    "filter": "DeviceVendor =~ \"ForgeRock Inc\"",
+    "parser": "ForgeRockParser",
+    "connector": "ForgeRock (CEF via AMA)",
+    "classification": "primary",
+    "valueRule": "C2",
+    "category": "Identity & Access",
+    "description": "ForgeRock identity platform authentication and access events",
+    "keywords": [
+      "forgerock",
+      "commonsecuritylog"
+    ],
+    "mitreSources": [
+      "Logon Session: Logon Session Creation",
+      "User Account: User Account Authentication"
+    ],
+    "recommendedTier": "analytics",
+    "tierRule": "T1",
+    "volumeClass": "medium",
+    "volumeDriver": "sign-in",
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "azure-sentinel-rule-corpus",
+      "log-baseline-classification-rules",
+      "log-baseline-volume-model",
+      "acsc-priority-logs-siem",
+      "cisa-m-21-31-guidance"
+    ]
+  },
+  {
+    "sourceId": "fortigate",
+    "displayName": "Fortinet FortiGate (CEF)",
+    "table": "CommonSecurityLog",
+    "filter": "DeviceVendor =~ \"Fortinet\" and DeviceProduct startswith \"FortiGate\"",
+    "connector": "Fortinet FortiGate (CEF via AMA)",
+    "classification": "primary",
+    "valueRule": "C5",
+    "category": "Network Security",
+    "description": "FortiGate firewall traffic, UTM, and threat events",
+    "keywords": [
+      "fortinet",
+      "fortigate",
+      "commonsecuritylog"
+    ],
+    "mitreSources": [
+      "Network Traffic: Network Traffic Flow"
+    ],
+    "recommendedTier": "datalake",
+    "tierRule": "T3",
+    "volumeClass": "very-high",
+    "volumeDriver": "connection",
+    "recommendedRetentionDays": 180,
+    "sourceIds": [
+      "azure-sentinel-rule-corpus",
+      "log-baseline-classification-rules",
+      "log-baseline-volume-model",
+      "acsc-priority-logs-siem",
+      "cisa-m-21-31-guidance"
+    ]
+  },
+  {
+    "sourceId": "fortiweb",
+    "displayName": "Fortinet FortiWeb (CEF)",
+    "table": "CommonSecurityLog",
+    "filter": "DeviceVendor =~ \"Fortinet\" and DeviceProduct has \"Fortiweb\"",
+    "parser": "Fortiweb",
+    "connector": "Fortinet FortiWeb (CEF via AMA)",
+    "classification": "primary",
+    "valueRule": "C5",
+    "category": "Network Security",
+    "description": "FortiWeb web application firewall attack and traffic events",
+    "keywords": [
+      "fortinet",
+      "fortiweb",
+      "commonsecuritylog"
+    ],
+    "mitreSources": [
+      "Network Traffic: Network Traffic Content"
+    ],
+    "recommendedTier": "analytics",
+    "tierRule": "T1",
+    "volumeClass": "high",
+    "volumeDriver": "web-request",
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "azure-sentinel-rule-corpus",
+      "log-baseline-classification-rules",
+      "log-baseline-volume-model",
+      "acsc-priority-logs-siem",
+      "cisa-m-21-31-guidance"
+    ]
+  },
+  {
+    "sourceId": "iboss",
+    "displayName": "iboss (CEF)",
+    "table": "CommonSecurityLog",
+    "filter": "DeviceVendor =~ \"iboss\"",
+    "parser": "ibossUrlEvent",
+    "connector": "iboss (CEF via AMA)",
+    "classification": "primary",
+    "valueRule": "C5",
+    "category": "Network Security",
+    "description": "iboss secure web gateway URL and proxy events",
+    "keywords": [
+      "iboss",
+      "commonsecuritylog"
+    ],
+    "mitreSources": [
+      "Network Traffic: Network Traffic Content"
+    ],
+    "recommendedTier": "datalake",
+    "tierRule": "T3",
+    "volumeClass": "very-high",
+    "volumeDriver": "web-request",
+    "recommendedRetentionDays": 180,
+    "sourceIds": [
+      "azure-sentinel-rule-corpus",
+      "log-baseline-classification-rules",
+      "log-baseline-volume-model",
+      "acsc-priority-logs-siem",
+      "cisa-m-21-31-guidance"
+    ]
+  },
+  {
+    "sourceId": "illumio-core",
+    "displayName": "Illumio Core (CEF)",
+    "table": "CommonSecurityLog",
+    "filter": "DeviceVendor =~ \"Illumio\"",
+    "parser": "IllumioCoreEvent",
+    "connector": "Illumio Core (CEF via AMA)",
+    "classification": "primary",
+    "valueRule": "C5",
+    "category": "Network Flow",
+    "description": "Illumio Core workload traffic flows and policy events",
+    "keywords": [
+      "illumio",
+      "core",
+      "commonsecuritylog"
+    ],
+    "mitreSources": [
+      "Network Traffic: Network Traffic Flow"
+    ],
+    "recommendedTier": "datalake",
+    "tierRule": "T3",
+    "volumeClass": "very-high",
+    "volumeDriver": "connection",
+    "recommendedRetentionDays": 180,
+    "sourceIds": [
+      "azure-sentinel-rule-corpus",
+      "log-baseline-classification-rules",
+      "log-baseline-volume-model",
+      "acsc-priority-logs-siem",
+      "cisa-m-21-31-guidance"
+    ]
+  },
+  {
+    "sourceId": "illusive",
+    "displayName": "Illusive (CEF)",
+    "table": "CommonSecurityLog",
+    "filter": "DeviceProduct =~ \"illusive\"",
+    "connector": "Illusive (CEF via AMA)",
+    "classification": "primary",
+    "valueRule": "C1",
+    "category": "Security Alerts",
+    "description": "Illusive deception platform alerts on attacker interaction with decoys",
+    "keywords": [
+      "illusive",
+      "commonsecuritylog"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "tierRule": "T1",
+    "volumeClass": "low",
+    "volumeDriver": "alert",
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "azure-sentinel-rule-corpus",
+      "log-baseline-classification-rules",
+      "log-baseline-volume-model",
+      "acsc-priority-logs-siem",
+      "cisa-m-21-31-guidance"
+    ]
+  },
+  {
+    "sourceId": "infoblox-cdc",
+    "displayName": "Infoblox Cloud Data Connector (CEF)",
+    "table": "CommonSecurityLog",
+    "filter": "DeviceVendor =~ \"Infoblox\" and DeviceProduct =~ \"Data Connector\"",
+    "parser": "InfobloxCDC",
+    "connector": "Infoblox Cloud Data Connector (CEF via AMA)",
+    "classification": "primary",
+    "valueRule": "C5",
+    "category": "Network Security",
+    "description": "Infoblox BloxOne DNS query, threat defense, and SOC Insights events",
+    "keywords": [
+      "infoblox",
+      "cloud",
+      "data",
+      "connector",
+      "commonsecuritylog"
+    ],
+    "mitreSources": [
+      "Network Traffic: Network Traffic Content"
+    ],
+    "recommendedTier": "datalake",
+    "tierRule": "T3",
+    "volumeClass": "very-high",
+    "volumeDriver": "dns-query",
+    "recommendedRetentionDays": 180,
+    "splitHints": [
+      {
+        "description": "Keep response policy zone (RPZ) threat defense hits in Analytics. Other DNS queries go to the data lake.",
+        "kql": "DeviceEventClassID has_cs \"RPZ\""
+      }
+    ],
+    "sourceIds": [
+      "azure-sentinel-rule-corpus",
+      "log-baseline-classification-rules",
+      "log-baseline-volume-model",
+      "acsc-priority-logs-siem",
+      "cisa-m-21-31-guidance"
+    ]
+  },
+  {
+    "sourceId": "irondefense",
+    "displayName": "IronNet IronDefense (CEF)",
+    "table": "CommonSecurityLog",
+    "filter": "DeviceProduct =~ \"IronDefense\"",
+    "connector": "IronNet IronDefense (CEF via AMA)",
+    "classification": "primary",
+    "valueRule": "C1",
+    "category": "Network Security",
+    "description": "IronNet IronDefense network detection and response alerts",
+    "keywords": [
+      "ironnet",
+      "irondefense",
+      "commonsecuritylog"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "tierRule": "T1",
+    "volumeClass": "low",
+    "volumeDriver": "alert",
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "azure-sentinel-rule-corpus",
+      "log-baseline-classification-rules",
+      "log-baseline-volume-model",
+      "acsc-priority-logs-siem",
+      "cisa-m-21-31-guidance"
+    ]
+  },
+  {
+    "sourceId": "netwrix-auditor",
+    "displayName": "Netwrix Auditor (CEF)",
+    "table": "CommonSecurityLog",
+    "filter": "DeviceVendor =~ \"Netwrix\"",
+    "parser": "NetwrixAuditor",
+    "connector": "Netwrix Auditor (CEF via AMA)",
+    "classification": "primary",
+    "valueRule": "C3",
+    "category": "Configuration Management",
+    "description": "Netwrix Auditor change and access audit events across directory, file, and cloud systems",
+    "keywords": [
+      "netwrix",
+      "auditor",
+      "commonsecuritylog"
+    ],
+    "mitreSources": [
+      "Application Log: Application Log Content"
+    ],
+    "recommendedTier": "analytics",
+    "tierRule": "T1",
+    "volumeClass": "low",
+    "volumeDriver": "admin-action",
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "azure-sentinel-rule-corpus",
+      "log-baseline-classification-rules",
+      "log-baseline-volume-model",
+      "acsc-priority-logs-siem",
+      "cisa-m-21-31-guidance"
+    ]
+  },
+  {
+    "sourceId": "nozomi",
+    "displayName": "Nozomi Networks (CEF)",
+    "table": "CommonSecurityLog",
+    "filter": "DeviceVendor has \"Nozomi\"",
+    "parser": "NozomiNetworksEvents",
+    "connector": "Nozomi Networks (CEF via AMA)",
+    "classification": "primary",
+    "valueRule": "C1",
+    "category": "IoT/OT Security",
+    "description": "Nozomi Networks OT and IoT security alerts",
+    "keywords": [
+      "nozomi",
+      "networks",
+      "commonsecuritylog"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "tierRule": "T1",
+    "volumeClass": "low",
+    "volumeDriver": "alert",
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "azure-sentinel-rule-corpus",
+      "log-baseline-classification-rules",
+      "log-baseline-volume-model",
+      "acsc-priority-logs-siem",
+      "cisa-m-21-31-guidance"
+    ]
+  },
+  {
+    "sourceId": "oneidentity-safeguard",
+    "displayName": "One Identity Safeguard (CEF)",
+    "table": "CommonSecurityLog",
+    "filter": "DeviceVendor =~ \"OneIdentity\"",
+    "parser": "OneIdentity_Safeguard",
+    "connector": "One Identity Safeguard (CEF via AMA)",
+    "classification": "primary",
+    "valueRule": "C2",
+    "category": "Identity & Access",
+    "description": "One Identity Safeguard privileged access and password vault events",
+    "keywords": [
+      "one",
+      "identity",
+      "safeguard",
+      "commonsecuritylog"
+    ],
+    "mitreSources": [
+      "Logon Session: Logon Session Creation",
+      "User Account: User Account Authentication"
+    ],
+    "recommendedTier": "analytics",
+    "tierRule": "T1",
+    "volumeClass": "medium",
+    "volumeDriver": "sign-in",
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "azure-sentinel-rule-corpus",
+      "log-baseline-classification-rules",
+      "log-baseline-volume-model",
+      "acsc-priority-logs-siem",
+      "cisa-m-21-31-guidance"
+    ]
+  },
+  {
+    "sourceId": "ossec",
+    "displayName": "OSSEC (CEF)",
+    "table": "CommonSecurityLog",
+    "filter": "DeviceVendor has \"OSSEC\"",
+    "parser": "OSSECEvent",
+    "connector": "OSSEC (CEF via AMA)",
+    "classification": "primary",
+    "valueRule": "C1",
+    "category": "Endpoint Detection",
+    "description": "OSSEC host intrusion detection alerts",
+    "keywords": [
+      "ossec",
+      "commonsecuritylog"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "tierRule": "T1",
+    "volumeClass": "low",
+    "volumeDriver": "alert",
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "azure-sentinel-rule-corpus",
+      "log-baseline-classification-rules",
+      "log-baseline-volume-model",
+      "acsc-priority-logs-siem",
+      "cisa-m-21-31-guidance"
+    ]
+  },
+  {
+    "sourceId": "paloalto-cortex-data-lake",
+    "displayName": "Palo Alto Networks Cortex Data Lake (CEF)",
+    "table": "CommonSecurityLog",
+    "filter": "DeviceVendor =~ \"Palo Alto Networks\" and DeviceProduct =~ \"LF\"",
+    "parser": "PaloAltoCDLEvent",
+    "connector": "Palo Alto Networks Cortex Data Lake (CEF via AMA)",
+    "classification": "primary",
+    "valueRule": "C5",
+    "category": "Network Security",
+    "description": "Firewall traffic and threat logs forwarded from Cortex Data Lake",
+    "keywords": [
+      "palo",
+      "alto",
+      "networks",
+      "cortex",
+      "data",
+      "lake",
+      "commonsecuritylog"
+    ],
+    "mitreSources": [
+      "Network Traffic: Network Traffic Flow"
+    ],
+    "recommendedTier": "datalake",
+    "tierRule": "T3",
+    "volumeClass": "very-high",
+    "volumeDriver": "connection",
+    "recommendedRetentionDays": 180,
+    "sourceIds": [
+      "azure-sentinel-rule-corpus",
+      "log-baseline-classification-rules",
+      "log-baseline-volume-model",
+      "acsc-priority-logs-siem",
+      "cisa-m-21-31-guidance"
+    ]
+  },
+  {
+    "sourceId": "paloalto-cortex-xdr",
+    "displayName": "Palo Alto Networks Cortex XDR (CEF)",
+    "table": "CommonSecurityLog",
+    "filter": "DeviceVendor =~ \"Palo Alto Networks\" and DeviceProduct =~ \"Cortex XDR\"",
+    "connector": "Palo Alto Networks Cortex XDR (CEF via AMA)",
+    "classification": "primary",
+    "valueRule": "C1",
+    "category": "Endpoint Detection",
+    "description": "Cortex XDR alerts forwarded as CEF",
+    "keywords": [
+      "palo",
+      "alto",
+      "networks",
+      "cortex",
+      "xdr",
+      "commonsecuritylog"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "tierRule": "T1",
+    "volumeClass": "low",
+    "volumeDriver": "alert",
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "azure-sentinel-rule-corpus",
+      "log-baseline-classification-rules",
+      "log-baseline-volume-model",
+      "acsc-priority-logs-siem",
+      "cisa-m-21-31-guidance"
+    ]
+  },
+  {
+    "sourceId": "paloalto-panos",
+    "displayName": "Palo Alto Networks PAN-OS (CEF)",
+    "table": "CommonSecurityLog",
+    "filter": "DeviceVendor =~ \"Palo Alto Networks\" and DeviceProduct =~ \"PAN-OS\"",
+    "connector": "Palo Alto Networks PAN-OS (CEF via AMA)",
+    "classification": "primary",
+    "valueRule": "C5",
+    "category": "Network Security",
+    "description": "PAN-OS firewall traffic, threat, URL, and system logs",
+    "keywords": [
+      "palo",
+      "alto",
+      "networks",
+      "pan",
+      "os",
+      "commonsecuritylog"
+    ],
+    "mitreSources": [
+      "Network Traffic: Network Traffic Flow"
+    ],
+    "recommendedTier": "datalake",
+    "tierRule": "T3",
+    "volumeClass": "very-high",
+    "volumeDriver": "connection",
+    "recommendedRetentionDays": 180,
+    "splitHints": [
+      {
+        "description": "Keep threat logs and traffic that was not allowed in Analytics. Allowed traffic goes to the data lake.",
+        "kql": "(Activity !~ \"TRAFFIC\" or (isnotempty(DeviceAction) and DeviceAction !~ \"allow\"))"
+      }
+    ],
+    "sourceIds": [
+      "azure-sentinel-rule-corpus",
+      "log-baseline-classification-rules",
+      "log-baseline-volume-model",
+      "acsc-priority-logs-siem",
+      "cisa-m-21-31-guidance"
+    ]
+  },
+  {
+    "sourceId": "pingfederate",
+    "displayName": "PingFederate (CEF)",
+    "table": "CommonSecurityLog",
+    "filter": "DeviceProduct has \"PingFederate\"",
+    "parser": "PingFederateEvent",
+    "connector": "PingFederate (CEF via AMA)",
+    "classification": "primary",
+    "valueRule": "C2",
+    "category": "Identity & Access",
+    "description": "PingFederate federation and single sign-on authentication events",
+    "keywords": [
+      "pingfederate",
+      "commonsecuritylog"
+    ],
+    "mitreSources": [
+      "Logon Session: Logon Session Creation",
+      "User Account: User Account Authentication"
+    ],
+    "recommendedTier": "analytics",
+    "tierRule": "T1",
+    "volumeClass": "medium",
+    "volumeDriver": "sign-in",
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "azure-sentinel-rule-corpus",
+      "log-baseline-classification-rules",
+      "log-baseline-volume-model",
+      "acsc-priority-logs-siem",
+      "cisa-m-21-31-guidance"
+    ]
+  },
+  {
+    "sourceId": "radiflow",
+    "displayName": "Radiflow (CEF)",
+    "table": "CommonSecurityLog",
+    "filter": "DeviceVendor =~ \"radiflow\"",
+    "parser": "RadiflowEvent",
+    "connector": "Radiflow",
+    "classification": "primary",
+    "valueRule": "C1",
+    "category": "IoT/OT Security",
+    "description": "Radiflow OT/ICS network monitoring events for industrial control system threat detection",
+    "keywords": [
+      "radiflow",
+      "ot",
+      "ics",
+      "industrial",
+      "scada",
+      "iot"
+    ],
+    "mitreSources": [
+      "Network Traffic: Network Traffic Flow"
+    ],
+    "recommendedTier": "analytics",
+    "tierRule": "T1",
+    "volumeClass": "low",
+    "volumeDriver": "alert",
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications",
+      "azure-sentinel-rule-corpus",
+      "log-baseline-volume-model",
+      "log-baseline-classification-rules"
+    ]
+  },
+  {
+    "sourceId": "ridgesecurity",
+    "displayName": "Ridge Security RidgeBot (CEF)",
+    "table": "CommonSecurityLog",
+    "filter": "DeviceVendor =~ \"RidgeSecurity\"",
+    "connector": "Ridge Security RidgeBot (CEF via AMA)",
+    "classification": "primary",
+    "valueRule": "C3",
+    "category": "Vulnerability Management",
+    "description": "RidgeBot automated penetration testing findings",
+    "keywords": [
+      "ridge",
+      "security",
+      "ridgebot",
+      "commonsecuritylog"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "datalake",
+    "tierRule": "T4",
+    "volumeClass": "medium",
+    "volumeDriver": "snapshot",
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "azure-sentinel-rule-corpus",
+      "log-baseline-classification-rules",
+      "log-baseline-volume-model",
+      "acsc-priority-logs-siem",
+      "cisa-m-21-31-guidance"
+    ]
+  },
+  {
+    "sourceId": "silverfort",
+    "displayName": "Silverfort (CEF)",
+    "table": "CommonSecurityLog",
+    "filter": "DeviceVendor has \"Silverfort\" and DeviceProduct has \"Admin Console\"",
+    "connector": "Silverfort (CEF via AMA)",
+    "classification": "primary",
+    "valueRule": "C2",
+    "category": "Identity & Access",
+    "description": "Silverfort identity protection authentication and risk events",
+    "keywords": [
+      "silverfort",
+      "commonsecuritylog"
+    ],
+    "mitreSources": [
+      "Logon Session: Logon Session Creation",
+      "User Account: User Account Authentication"
+    ],
+    "recommendedTier": "analytics",
+    "tierRule": "T1",
+    "volumeClass": "medium",
+    "volumeDriver": "sign-in",
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "azure-sentinel-rule-corpus",
+      "log-baseline-classification-rules",
+      "log-baseline-volume-model",
+      "acsc-priority-logs-siem",
+      "cisa-m-21-31-guidance"
+    ]
+  },
+  {
+    "sourceId": "stealthdefend",
+    "displayName": "Netwrix StealthDEFEND (CEF)",
+    "table": "CommonSecurityLog",
+    "filter": "DeviceVendor =~ \"STEALTHbits Technologies\" and DeviceProduct =~ \"StealthDEFEND\"",
+    "parser": "StealthDefend",
+    "connector": "Netwrix StealthDEFEND (CEF via AMA)",
+    "classification": "primary",
+    "valueRule": "C1",
+    "category": "Identity & Access",
+    "description": "StealthDEFEND Active Directory threat detection alerts",
+    "keywords": [
+      "netwrix",
+      "stealthdefend",
+      "commonsecuritylog"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "tierRule": "T1",
+    "volumeClass": "low",
+    "volumeDriver": "alert",
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "azure-sentinel-rule-corpus",
+      "log-baseline-classification-rules",
+      "log-baseline-volume-model",
+      "acsc-priority-logs-siem",
+      "cisa-m-21-31-guidance"
+    ]
+  },
+  {
+    "sourceId": "symantec-dlp",
+    "displayName": "Symantec DLP (CEF)",
+    "table": "CommonSecurityLog",
+    "filter": "DeviceVendor =~ \"Symantec\" and DeviceProduct =~ \"DLP\"",
+    "parser": "SymantecDLP",
+    "connector": "Symantec DLP (CEF via AMA)",
+    "classification": "primary",
+    "valueRule": "C1",
+    "category": "Data Security",
+    "description": "Symantec Data Loss Prevention incidents",
+    "keywords": [
+      "symantec",
+      "dlp",
+      "commonsecuritylog"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "tierRule": "T1",
+    "volumeClass": "medium",
+    "volumeDriver": "alert",
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "azure-sentinel-rule-corpus",
+      "log-baseline-classification-rules",
+      "log-baseline-volume-model",
+      "acsc-priority-logs-siem",
+      "cisa-m-21-31-guidance"
+    ]
+  },
+  {
+    "sourceId": "tippingpoint",
+    "displayName": "TippingPoint IPS (CEF)",
+    "table": "CommonSecurityLog",
+    "filter": "DeviceVendor =~ \"TippingPoint\" and DeviceProduct =~ \"UnityOne\"",
+    "parser": "TrendMicroTippingPoint",
+    "connector": "TippingPoint IPS (CEF via AMA)",
+    "classification": "primary",
+    "valueRule": "C1",
+    "category": "Network Security",
+    "description": "TippingPoint intrusion prevention events",
+    "keywords": [
+      "tippingpoint",
+      "ips",
+      "commonsecuritylog"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "tierRule": "T1",
+    "volumeClass": "medium",
+    "volumeDriver": "alert",
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "azure-sentinel-rule-corpus",
+      "log-baseline-classification-rules",
+      "log-baseline-volume-model",
+      "acsc-priority-logs-siem",
+      "cisa-m-21-31-guidance"
+    ]
+  },
+  {
+    "sourceId": "trendmicro-apex-central",
+    "displayName": "Trend Micro Apex Central (CEF)",
+    "table": "CommonSecurityLog",
+    "filter": "DeviceVendor =~ \"Trend Micro\" and DeviceProduct =~ \"Apex Central\"",
+    "parser": "TMApexOneEvent",
+    "connector": "Trend Micro Apex Central (CEF via AMA)",
+    "classification": "primary",
+    "valueRule": "C1",
+    "category": "Endpoint Detection",
+    "description": "Trend Micro Apex One endpoint detections managed by Apex Central",
+    "keywords": [
+      "trend",
+      "micro",
+      "apex",
+      "central",
+      "commonsecuritylog"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "tierRule": "T1",
+    "volumeClass": "medium",
+    "volumeDriver": "alert",
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "azure-sentinel-rule-corpus",
+      "log-baseline-classification-rules",
+      "log-baseline-volume-model",
+      "acsc-priority-logs-siem",
+      "cisa-m-21-31-guidance"
+    ]
+  },
+  {
+    "sourceId": "trendmicro-deep-security",
+    "displayName": "Trend Micro Deep Security (CEF)",
+    "table": "CommonSecurityLog",
+    "filter": "(DeviceVendor =~ \"Trend Micro\" or DeviceVendor =~ \"TrendMicro\") and DeviceProduct startswith \"Deep Security\"",
+    "parser": "TrendMicroDeepSecurity",
+    "connector": "Trend Micro Deep Security (CEF via AMA)",
+    "classification": "primary",
+    "valueRule": "C1",
+    "category": "Endpoint Detection",
+    "description": "Trend Micro Deep Security anti-malware, IPS, and integrity monitoring events",
+    "keywords": [
+      "trend",
+      "micro",
+      "deep",
+      "security",
+      "commonsecuritylog"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "tierRule": "T1",
+    "volumeClass": "medium",
+    "volumeDriver": "alert",
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "azure-sentinel-rule-corpus",
+      "log-baseline-classification-rules",
+      "log-baseline-volume-model",
+      "acsc-priority-logs-siem",
+      "cisa-m-21-31-guidance"
+    ]
+  },
+  {
+    "sourceId": "varmour",
+    "displayName": "vArmour Application Controller (CEF)",
+    "table": "CommonSecurityLog",
+    "filter": "DeviceVendor =~ \"vArmour\" and DeviceProduct =~ \"AC\"",
+    "connector": "vArmour Application Controller (CEF via AMA)",
+    "classification": "primary",
+    "valueRule": "C5",
+    "category": "Network Flow",
+    "description": "vArmour application relationship and policy violation events",
+    "keywords": [
+      "varmour",
+      "application",
+      "controller",
+      "commonsecuritylog"
+    ],
+    "mitreSources": [
+      "Network Traffic: Network Traffic Flow"
+    ],
+    "recommendedTier": "datalake",
+    "tierRule": "T3",
+    "volumeClass": "very-high",
+    "volumeDriver": "connection",
+    "recommendedRetentionDays": 180,
+    "splitHints": [
+      {
+        "description": "Keep policy violations in Analytics. Relationship events go to the data lake.",
+        "kql": "Activity =~ \"POLICY_VIOLATION\""
+      }
+    ],
+    "sourceIds": [
+      "azure-sentinel-rule-corpus",
+      "log-baseline-classification-rules",
+      "log-baseline-volume-model",
+      "acsc-priority-logs-siem",
+      "cisa-m-21-31-guidance"
+    ]
+  },
+  {
+    "sourceId": "vectra-x",
+    "displayName": "Vectra X Series (CEF)",
+    "table": "CommonSecurityLog",
+    "filter": "DeviceVendor =~ \"Vectra Networks\" and DeviceProduct =~ \"X Series\"",
+    "connector": "Vectra X Series (CEF via AMA)",
+    "classification": "primary",
+    "valueRule": "C1",
+    "category": "Network Security",
+    "description": "Vectra network detection and response detections and host scoring",
+    "keywords": [
+      "vectra",
+      "series",
+      "commonsecuritylog"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "tierRule": "T1",
+    "volumeClass": "low",
+    "volumeDriver": "alert",
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "azure-sentinel-rule-corpus",
+      "log-baseline-classification-rules",
+      "log-baseline-volume-model",
+      "acsc-priority-logs-siem",
+      "cisa-m-21-31-guidance"
+    ]
+  },
+  {
+    "sourceId": "wazuh",
+    "displayName": "Wazuh (CEF)",
+    "table": "CommonSecurityLog",
+    "filter": "DeviceProduct =~ \"Wazuh\"",
+    "connector": "Wazuh (CEF via AMA)",
+    "classification": "primary",
+    "valueRule": "C1",
+    "category": "Endpoint Detection",
+    "description": "Wazuh host intrusion detection alerts",
+    "keywords": [
+      "wazuh",
+      "commonsecuritylog"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "tierRule": "T1",
+    "volumeClass": "low",
+    "volumeDriver": "alert",
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "azure-sentinel-rule-corpus",
+      "log-baseline-classification-rules",
+      "log-baseline-volume-model",
+      "acsc-priority-logs-siem",
+      "cisa-m-21-31-guidance"
+    ]
+  },
+  {
+    "sourceId": "zscaler-nss-web",
+    "displayName": "Zscaler Internet Access web logs (CEF)",
+    "table": "CommonSecurityLog",
+    "filter": "DeviceVendor =~ \"Zscaler\" and DeviceProduct =~ \"NSSWeblog\"",
+    "connector": "Zscaler Internet Access web logs (CEF via AMA)",
+    "classification": "primary",
+    "valueRule": "C5",
+    "category": "Network Security",
+    "description": "Zscaler Internet Access web proxy transactions from Nanolog Streaming Service",
+    "keywords": [
+      "zscaler",
+      "internet",
+      "access",
+      "web",
+      "logs",
+      "commonsecuritylog"
+    ],
+    "mitreSources": [
+      "Network Traffic: Network Traffic Content"
+    ],
+    "recommendedTier": "datalake",
+    "tierRule": "T3",
+    "volumeClass": "very-high",
+    "volumeDriver": "web-request",
+    "recommendedRetentionDays": 180,
+    "splitHints": [
+      {
+        "description": "Keep transactions that were not allowed in Analytics. Allowed transactions go to the data lake.",
+        "kql": "isnotempty(DeviceAction) and DeviceAction !~ \"Allowed\""
+      }
+    ],
+    "sourceIds": [
+      "azure-sentinel-rule-corpus",
+      "log-baseline-classification-rules",
+      "log-baseline-volume-model",
+      "acsc-priority-logs-siem",
+      "cisa-m-21-31-guidance"
+    ]
+  },
+  {
+    "sourceId": "barracuda-cloudgen",
+    "displayName": "Barracuda CloudGen Firewall (Syslog)",
+    "table": "Syslog",
+    "filter": "ProcessName =~ \"box_Firewall_Activity\"",
+    "parser": "CGFWFirewallActivity",
+    "connector": "Barracuda CloudGen Firewall (Syslog via AMA)",
+    "classification": "primary",
+    "valueRule": "C5",
+    "category": "Network Security",
+    "description": "Barracuda CloudGen Firewall activity logs",
+    "keywords": [
+      "barracuda",
+      "cloudgen",
+      "firewall",
+      "syslog"
+    ],
+    "mitreSources": [
+      "Network Traffic: Network Traffic Flow"
+    ],
+    "recommendedTier": "datalake",
+    "tierRule": "T3",
+    "volumeClass": "very-high",
+    "volumeDriver": "connection",
+    "recommendedRetentionDays": 180,
+    "sourceIds": [
+      "azure-sentinel-rule-corpus",
+      "log-baseline-classification-rules",
+      "log-baseline-volume-model",
+      "acsc-priority-logs-siem",
+      "cisa-m-21-31-guidance"
+    ]
+  },
+  {
+    "sourceId": "cisco-ise",
+    "displayName": "Cisco ISE (Syslog)",
+    "table": "Syslog",
+    "filter": "(ProcessName has \"CSCO\" or ProcessName has \"CISE\")",
+    "parser": "CiscoISEEvent",
+    "connector": "Cisco ISE (Syslog via AMA)",
+    "classification": "primary",
+    "valueRule": "C2",
+    "category": "Identity & Access",
+    "description": "Cisco Identity Services Engine RADIUS, TACACS+, and posture events",
+    "keywords": [
+      "cisco",
+      "ise",
+      "syslog"
+    ],
+    "mitreSources": [
+      "Logon Session: Logon Session Creation",
+      "User Account: User Account Authentication"
+    ],
+    "recommendedTier": "datalake",
+    "tierRule": "T3",
+    "volumeClass": "high",
+    "volumeDriver": "sign-in",
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "azure-sentinel-rule-corpus",
+      "log-baseline-classification-rules",
+      "log-baseline-volume-model",
+      "acsc-priority-logs-siem",
+      "cisa-m-21-31-guidance"
+    ]
+  },
+  {
+    "sourceId": "cisco-wsa",
+    "displayName": "Cisco Web Security Appliance (Syslog)",
+    "table": "Syslog",
+    "filter": "ProcessName =~ \"cisco_wsa\"",
+    "parser": "CiscoWSAEvent",
+    "connector": "Cisco Web Security Appliance (Syslog via AMA)",
+    "classification": "primary",
+    "valueRule": "C5",
+    "category": "Network Security",
+    "description": "Cisco WSA web proxy access logs",
+    "keywords": [
+      "cisco",
+      "web",
+      "security",
+      "appliance",
+      "syslog"
+    ],
+    "mitreSources": [
+      "Network Traffic: Network Traffic Content"
+    ],
+    "recommendedTier": "datalake",
+    "tierRule": "T3",
+    "volumeClass": "very-high",
+    "volumeDriver": "web-request",
+    "recommendedRetentionDays": 180,
+    "sourceIds": [
+      "azure-sentinel-rule-corpus",
+      "log-baseline-classification-rules",
+      "log-baseline-volume-model",
+      "acsc-priority-logs-siem",
+      "cisa-m-21-31-guidance"
+    ]
+  },
+  {
+    "sourceId": "ctera",
+    "displayName": "CTERA (Syslog)",
+    "table": "Syslog",
+    "filter": "ProcessName =~ \"gw-audit\"",
+    "connector": "CTERA (Syslog via AMA)",
+    "classification": "primary",
+    "valueRule": "C7",
+    "category": "Storage Access",
+    "description": "CTERA edge filer file access audit events",
+    "keywords": [
+      "ctera",
+      "syslog"
+    ],
+    "mitreSources": [
+      "File: File Access"
+    ],
+    "recommendedTier": "datalake",
+    "tierRule": "T3",
+    "volumeClass": "high",
+    "volumeDriver": "data-access",
+    "recommendedRetentionDays": 180,
+    "sourceIds": [
+      "azure-sentinel-rule-corpus",
+      "log-baseline-classification-rules",
+      "log-baseline-volume-model",
+      "acsc-priority-logs-siem",
+      "cisa-m-21-31-guidance"
+    ]
+  },
+  {
+    "sourceId": "eset-protect",
+    "displayName": "ESET PROTECT (Syslog)",
+    "table": "Syslog",
+    "filter": "ProcessName =~ \"ERAServer\"",
+    "parser": "ESETPROTECT",
+    "connector": "ESET PROTECT (Syslog via AMA)",
+    "classification": "primary",
+    "valueRule": "C1",
+    "category": "Endpoint Detection",
+    "description": "ESET PROTECT threat detections and audit events",
+    "keywords": [
+      "eset",
+      "protect",
+      "syslog"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "tierRule": "T1",
+    "volumeClass": "medium",
+    "volumeDriver": "alert",
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "azure-sentinel-rule-corpus",
+      "log-baseline-classification-rules",
+      "log-baseline-volume-model",
+      "acsc-priority-logs-siem",
+      "cisa-m-21-31-guidance"
+    ]
+  },
+  {
+    "sourceId": "exabeam",
+    "displayName": "Exabeam (Syslog)",
+    "table": "Syslog",
+    "filter": "ProcessName contains \"Exabeam\"",
+    "parser": "ExabeamEvent",
+    "connector": "Exabeam (Syslog via AMA)",
+    "classification": "primary",
+    "valueRule": "C1",
+    "category": "Security Alerts",
+    "description": "Exabeam notable sessions and alerts",
+    "keywords": [
+      "exabeam",
+      "syslog"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "tierRule": "T1",
+    "volumeClass": "low",
+    "volumeDriver": "alert",
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "azure-sentinel-rule-corpus",
+      "log-baseline-classification-rules",
+      "log-baseline-volume-model",
+      "acsc-priority-logs-siem",
+      "cisa-m-21-31-guidance"
+    ]
+  },
+  {
+    "sourceId": "forescout",
+    "displayName": "Forescout (Syslog)",
+    "table": "Syslog",
+    "filter": "ProcessName =~ \"ACTIONidentity\"",
+    "parser": "ForescoutEvent",
+    "connector": "Forescout (Legacy)",
+    "classification": "primary",
+    "valueRule": "C2",
+    "category": "Network Security",
+    "description": "Forescout network access control events including device visibility and compliance status",
+    "keywords": [
+      "forescout",
+      "nac",
+      "device",
+      "visibility",
+      "compliance",
+      "network"
+    ],
+    "mitreSources": [
+      "Network Traffic: Network Connection Creation"
+    ],
+    "recommendedTier": "analytics",
+    "tierRule": "T1",
+    "volumeClass": "medium",
+    "volumeDriver": "activity",
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "log-horizon-classifications",
+      "azure-sentinel-rule-corpus",
+      "log-baseline-volume-model",
+      "log-baseline-classification-rules"
+    ]
+  },
+  {
+    "sourceId": "gitlab-access",
+    "displayName": "GitLab access (Syslog)",
+    "table": "Syslog",
+    "filter": "Facility =~ \"local7\" and ProcessName =~ \"GitLab-Access-Logs\"",
+    "parser": "GitLabAccess",
+    "connector": "GitLab access (Syslog via AMA)",
+    "classification": "primary",
+    "valueRule": "C5",
+    "category": "Application Logs",
+    "description": "GitLab web access logs",
+    "keywords": [
+      "gitlab",
+      "access",
+      "syslog"
+    ],
+    "mitreSources": [
+      "Network Traffic: Network Traffic Content"
+    ],
+    "recommendedTier": "datalake",
+    "tierRule": "T3",
+    "volumeClass": "very-high",
+    "volumeDriver": "web-request",
+    "recommendedRetentionDays": 180,
+    "sourceIds": [
+      "azure-sentinel-rule-corpus",
+      "log-baseline-classification-rules",
+      "log-baseline-volume-model",
+      "acsc-priority-logs-siem",
+      "cisa-m-21-31-guidance"
+    ]
+  },
+  {
+    "sourceId": "gitlab-application",
+    "displayName": "GitLab application (Syslog)",
+    "table": "Syslog",
+    "filter": "Facility =~ \"local7\" and ProcessName =~ \"GitLab-Application-Logs\"",
+    "parser": "GitLabApp",
+    "connector": "GitLab application (Syslog via AMA)",
+    "classification": "secondary",
+    "valueRule": "C9",
+    "category": "Application Logs",
+    "description": "GitLab application logs",
+    "keywords": [
+      "gitlab",
+      "application",
+      "syslog"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "datalake",
+    "tierRule": "T4",
+    "volumeClass": "high",
+    "volumeDriver": "application-trace",
+    "recommendedRetentionDays": 90,
+    "sourceIds": [
+      "azure-sentinel-rule-corpus",
+      "log-baseline-classification-rules",
+      "log-baseline-volume-model",
+      "acsc-priority-logs-siem",
+      "cisa-m-21-31-guidance"
+    ]
+  },
+  {
+    "sourceId": "gitlab-audit",
+    "displayName": "GitLab audit (Syslog)",
+    "table": "Syslog",
+    "filter": "Facility =~ \"local7\" and ProcessName =~ \"GitLab-Audit-Logs\"",
+    "parser": "GitLabAudit",
+    "connector": "GitLab (Syslog via AMA)",
+    "classification": "primary",
+    "valueRule": "C3",
+    "category": "Configuration Management",
+    "description": "GitLab audit events for project, group, and permission changes",
+    "keywords": [
+      "gitlab",
+      "syslog"
+    ],
+    "mitreSources": [
+      "Application Log: Application Log Content"
+    ],
+    "recommendedTier": "analytics",
+    "tierRule": "T1",
+    "volumeClass": "low",
+    "volumeDriver": "admin-action",
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "azure-sentinel-rule-corpus",
+      "log-baseline-classification-rules",
+      "log-baseline-volume-model",
+      "acsc-priority-logs-siem",
+      "cisa-m-21-31-guidance"
+    ]
+  },
+  {
+    "sourceId": "linux-auth",
+    "displayName": "Linux authentication (Syslog)",
+    "table": "Syslog",
+    "filter": "(Facility =~ \"auth\" or Facility =~ \"authpriv\")",
+    "connector": "Linux authentication (Syslog via AMA)",
+    "classification": "primary",
+    "valueRule": "C2",
+    "category": "Identity & Access",
+    "description": "Linux sshd, sudo, su, and PAM authentication events. On many distributions, cron PAM session messages in authpriv add steady volume.",
+    "keywords": [
+      "linux",
+      "authentication",
+      "syslog"
+    ],
+    "mitreSources": [
+      "Logon Session: Logon Session Creation",
+      "User Account: User Account Authentication"
+    ],
+    "recommendedTier": "analytics",
+    "tierRule": "T1",
+    "volumeClass": "high",
+    "volumeDriver": "sign-in",
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "azure-sentinel-rule-corpus",
+      "log-baseline-classification-rules",
+      "log-baseline-volume-model",
+      "acsc-priority-logs-siem",
+      "cisa-m-21-31-guidance"
+    ]
+  },
+  {
+    "sourceId": "mcafee-epo",
+    "displayName": "McAfee ePolicy Orchestrator (Syslog)",
+    "table": "Syslog",
+    "filter": "ProcessName contains \"EPOEvents\"",
+    "parser": "McAfeeEPOEvent",
+    "connector": "McAfee ePolicy Orchestrator (Syslog via AMA)",
+    "classification": "primary",
+    "valueRule": "C1",
+    "category": "Endpoint Detection",
+    "description": "McAfee ePO threat events from managed endpoints",
+    "keywords": [
+      "mcafee",
+      "epolicy",
+      "orchestrator",
+      "syslog"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "tierRule": "T1",
+    "volumeClass": "medium",
+    "volumeDriver": "alert",
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "azure-sentinel-rule-corpus",
+      "log-baseline-classification-rules",
+      "log-baseline-volume-model",
+      "acsc-priority-logs-siem",
+      "cisa-m-21-31-guidance"
+    ]
+  },
+  {
+    "sourceId": "mcafee-nsp",
+    "displayName": "McAfee Network Security Platform (Syslog)",
+    "table": "Syslog",
+    "filter": "ProcessName =~ \"SyslogAlertForwarderNSP\"",
+    "parser": "McAfeeNSPEvent",
+    "connector": "McAfee Network Security Platform (Syslog via AMA)",
+    "classification": "primary",
+    "valueRule": "C1",
+    "category": "Network Security",
+    "description": "McAfee NSP intrusion prevention alerts",
+    "keywords": [
+      "mcafee",
+      "network",
+      "security",
+      "platform",
+      "syslog"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "tierRule": "T1",
+    "volumeClass": "medium",
+    "volumeDriver": "alert",
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "azure-sentinel-rule-corpus",
+      "log-baseline-classification-rules",
+      "log-baseline-volume-model",
+      "acsc-priority-logs-siem",
+      "cisa-m-21-31-guidance"
+    ]
+  },
+  {
+    "sourceId": "openvpn",
+    "displayName": "OpenVPN (Syslog)",
+    "table": "Syslog",
+    "filter": "ProcessName =~ \"openvpn\"",
+    "parser": "OpenVpnEvent",
+    "connector": "OpenVPN (Syslog via AMA)",
+    "classification": "primary",
+    "valueRule": "C2",
+    "category": "Identity & Access",
+    "description": "OpenVPN server connection and authentication events",
+    "keywords": [
+      "openvpn",
+      "syslog"
+    ],
+    "mitreSources": [
+      "Logon Session: Logon Session Creation",
+      "User Account: User Account Authentication"
+    ],
+    "recommendedTier": "datalake",
+    "tierRule": "T3",
+    "volumeClass": "high",
+    "volumeDriver": "sign-in",
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "azure-sentinel-rule-corpus",
+      "log-baseline-classification-rules",
+      "log-baseline-volume-model",
+      "acsc-priority-logs-siem",
+      "cisa-m-21-31-guidance"
+    ]
+  },
+  {
+    "sourceId": "squid",
+    "displayName": "Squid proxy (Syslog)",
+    "table": "Syslog",
+    "filter": "ProcessName contains \"squid\"",
+    "connector": "Squid proxy (Syslog via AMA)",
+    "classification": "primary",
+    "valueRule": "C5",
+    "category": "Network Security",
+    "description": "Squid proxy access logs",
+    "keywords": [
+      "squid",
+      "proxy",
+      "syslog"
+    ],
+    "mitreSources": [
+      "Network Traffic: Network Traffic Content"
+    ],
+    "recommendedTier": "datalake",
+    "tierRule": "T3",
+    "volumeClass": "very-high",
+    "volumeDriver": "web-request",
+    "recommendedRetentionDays": 180,
+    "sourceIds": [
+      "azure-sentinel-rule-corpus",
+      "log-baseline-classification-rules",
+      "log-baseline-volume-model",
+      "acsc-priority-logs-siem",
+      "cisa-m-21-31-guidance"
+    ]
+  },
+  {
+    "sourceId": "symantec-sep",
+    "displayName": "Symantec Endpoint Protection (Syslog)",
+    "table": "Syslog",
+    "filter": "ProcessName =~ \"SymantecServer\"",
+    "parser": "SymantecEndpointProtection",
+    "connector": "Symantec Endpoint Protection (Syslog via AMA)",
+    "classification": "primary",
+    "valueRule": "C1",
+    "category": "Endpoint Detection",
+    "description": "Symantec Endpoint Protection detections and policy events",
+    "keywords": [
+      "symantec",
+      "endpoint",
+      "protection",
+      "syslog"
+    ],
+    "mitreSources": [],
+    "recommendedTier": "analytics",
+    "tierRule": "T1",
+    "volumeClass": "medium",
+    "volumeDriver": "alert",
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "azure-sentinel-rule-corpus",
+      "log-baseline-classification-rules",
+      "log-baseline-volume-model",
+      "acsc-priority-logs-siem",
+      "cisa-m-21-31-guidance"
+    ]
+  },
+  {
+    "sourceId": "vmware-esxi",
+    "displayName": "VMware ESXi (Syslog)",
+    "table": "Syslog",
+    "filter": "(ProcessName has \"vpxd-main\" or ProcessName has \"vmkwarning\" or ProcessName has \"hostd-probe\")",
+    "parser": "VMwareESXi",
+    "connector": "VMware ESXi (Syslog via AMA)",
+    "classification": "primary",
+    "valueRule": "C3",
+    "category": "Configuration Management",
+    "description": "VMware ESXi host management, login, and configuration events",
+    "keywords": [
+      "vmware",
+      "esxi",
+      "syslog"
+    ],
+    "mitreSources": [
+      "Application Log: Application Log Content"
+    ],
+    "recommendedTier": "datalake",
+    "tierRule": "T3",
+    "volumeClass": "high",
+    "volumeDriver": "os-event",
+    "recommendedRetentionDays": 365,
+    "sourceIds": [
+      "azure-sentinel-rule-corpus",
+      "log-baseline-classification-rules",
+      "log-baseline-volume-model",
+      "acsc-priority-logs-siem",
+      "cisa-m-21-31-guidance"
+    ]
+  }
+]

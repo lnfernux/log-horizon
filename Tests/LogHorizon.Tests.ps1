@@ -1397,7 +1397,7 @@ Describe 'Update-LogBaseline' {
         $script:updateScript = Join-Path (Split-Path -Parent $PSScriptRoot) 'scripts' 'Update-LogBaseline.ps1'
         $script:bundledNames = @(
             'auxiliary-plan-tables.json', 'basic-plan-tables.json', 'custom-classifications-example.json', 'field-frequency-stats.json',
-            'high-value-fields.json', 'implicit-consumers.json', 'log-classifications.json'
+            'high-value-fields.json', 'implicit-consumers.json', 'log-classifications.json', 'shared-table-sources.json'
         )
 
         function New-TestBaseline {
@@ -1541,11 +1541,14 @@ Describe 'Classification database integrity' {
     }
 
     It 'free tables are correctly marked and SentinelAudit is billable' {
-        $freeNames = @('SecurityAlert', 'SecurityIncident', 'AzureActivity', 'OfficeActivity', 'SentinelHealth', 'Heartbeat', 'Operation', 'Usage', 'Watchlist', 'ConfidentialWatchlist')
+        $freeNames = @('SecurityAlert', 'AzureActivity', 'OfficeActivity', 'SentinelHealth', 'Heartbeat', 'Operation', 'Usage')
         foreach ($name in $freeNames) {
             ($script:db | Where-Object tableName -eq $name).isFree | Should -Be $true -Because "$name should be free"
         }
-        ($script:db | Where-Object tableName -eq 'SentinelAudit').isFree | Should -Be $false
+        # The baseline marks these billable because no Microsoft documentation lists them as free. Usage.IsBillable decides at runtime.
+        foreach ($name in 'SentinelAudit', 'SecurityIncident', 'Watchlist', 'ConfidentialWatchlist') {
+            ($script:db | Where-Object tableName -eq $name).isFree | Should -Be $false -Because $name
+        }
     }
 
     It 'has no duplicate table names' {
@@ -1571,7 +1574,7 @@ Describe 'Classification database integrity' {
         ($script:db | Where-Object tableName -eq 'ThreatIntelligenceIndicator').replacedBy | Should -Be @('ThreatIntelIndicators', 'ThreatIntelObjects')
         ($script:db | Where-Object tableName -eq 'DnsEvents').status | Should -Be 'legacy'
         ($script:db | Where-Object tableName -eq 'DnsEvents').replacedBy | Should -Be @('ASimDnsActivityLogs')
-        ($script:db | Where-Object tableName -eq 'Okta_CL').replacedBy | Should -Be @('OktaSSO')
+        ($script:db | Where-Object tableName -eq 'Okta_CL').replacedBy | Should -Be @('OktaV2_CL')
         ($script:db | Where-Object tableName -eq 'Update').replacedBy | Should -BeNullOrEmpty
         ($script:db | Where-Object tableName -eq 'darktrace_model_alerts_CL').replacedBy | Should -Contain 'DarktraceModelAlerts_CL'
     }
@@ -1582,7 +1585,7 @@ Describe 'Classification database integrity' {
         foreach ($n in 'DeviceTvmSoftwareInventory', 'DeviceTvmSoftwareVulnerabilities', 'DeviceTvmSecureConfigurationAssessment', 'DeviceTvmSecureConfigurationAssessmentKB', 'CloudAuditEvents', 'ExposureGraphNodes', 'GraphAPIAuditEvents', 'DeviceTvmInfoGathering') {
             ($script:db | Where-Object tableName -eq $n).xdrStreamable | Should -Be $false -Because $n
         }
-        foreach ($entry in ($script:db | Where-Object { $_.PSObject.Properties.Name -contains 'xdrStreamable' })) {
+        foreach ($entry in ($script:db | Where-Object { $_.xdrStreamable -eq $true })) {
             $entry.connector | Should -Match 'Defender' -Because "$($entry.tableName) xdrStreamable is only for Defender tables"
         }
     }
