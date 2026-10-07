@@ -639,6 +639,11 @@ Describe 'Get-TablesFromKql' {
             $result = @(Get-TablesFromKql -Kql 'SecurityEvent | extend x = _Im_DnsX')
             $result | Should -Not -Contain 'DnsEvents'
         }
+
+        It 'ignores an alias inside a string literal or a comment' {
+            $result = @(Get-TablesFromKql -Kql "SecurityEvent // calls _Im_Dns later`n| where Product == `"_Im_Dns`" or Note == '_Im_Dns'")
+            $result | Should -Not -Contain 'DnsEvents'
+        }
     }
 
     It 'loads parser source tables from the bundled field-frequency stats' {
@@ -4002,6 +4007,43 @@ Describe 'Get-DetectionAnalyzerData bucketing and scoring' {
         $small.Summary.NoisyRules | Should -Be 0
     }
 
+    It 'flags a mostly auto-closed rule as noisy even when there are too few rules to score' {
+        $rules = @(
+            [PSCustomObject]@{ RuleId = 'guid-n'; RuleName = 'Noisy test alert'; Kind = 'Scheduled'; Enabled = $true },
+            [PSCustomObject]@{ RuleId = 'guid-q'; RuleName = 'Quiet'; Kind = 'Scheduled'; Enabled = $true }
+        )
+        $incidents = @(1..6 | ForEach-Object {
+            [PSCustomObject]@{ IncidentId = "n$_"; IncidentNumber = $_; Title = 'n'; Status = 'Closed'; Classification = 'Undetermined'; CreatedTimeUtc = [datetime]'2026-08-01T10:00:00Z'; ClosedTimeUtc = [datetime]'2026-08-01T10:00:10Z'; RelatedAnalyticRuleIds = @('/s/alertRules/guid-n'); RelatedAnalyticRuleNames = @() }
+        }) + [PSCustomObject]@{ IncidentId = 'q1'; IncidentNumber = 99; Title = 'q'; Status = 'New'; Classification = $null; CreatedTimeUtc = [datetime]'2026-08-01T10:00:00Z'; ClosedTimeUtc = $null; RelatedAnalyticRuleIds = @('/s/alertRules/guid-q'); RelatedAnalyticRuleNames = @() }
+        $health = @{}; 1..6 | ForEach-Object { $health[$_] = $true }
+
+        $r = Get-DetectionAnalyzerData -Rules $rules -Incidents $incidents -AutomationRules @() -AutoCloseHealthData $health
+        $noisy = $r.RuleMetrics | Where-Object RuleId -eq 'guid-n'
+        $noisy.ScoreStatus | Should -Be 'InsufficientSample'
+        $noisy.AutoCloseRatio | Should -Be 1
+        $noisy.IsNoisy | Should -BeTrue
+        ($r.RuleMetrics | Where-Object RuleId -eq 'guid-q').IsNoisy | Should -BeFalse
+        $r.Summary.NoisyRules | Should -Be 1
+        $r.Recommendations[0].Detail | Should -Match '100% of closed incidents auto-closed'
+    }
+
+    It 'does not flag noisy from few closures or from timing-heuristic auto-closes' {
+        $rules = @([PSCustomObject]@{ RuleId = 'guid-f'; RuleName = 'Few closed'; Kind = 'Scheduled'; Enabled = $true }, [PSCustomObject]@{ RuleId = 'guid-h'; RuleName = 'Fast closer'; Kind = 'Scheduled'; Enabled = $true })
+        $open = @(1..10 | ForEach-Object { [PSCustomObject]@{ IncidentId = "f$_"; IncidentNumber = $_; Title = 'f'; Status = 'New'; Classification = $null; CreatedTimeUtc = [datetime]'2026-08-01T10:00:00Z'; ClosedTimeUtc = $null; RelatedAnalyticRuleIds = @('/s/alertRules/guid-f'); RelatedAnalyticRuleNames = @() } })
+        $fp = [PSCustomObject]@{ IncidentId = 'f99'; IncidentNumber = 99; Title = 'f'; Status = 'Closed'; Classification = 'FalsePositive'; CreatedTimeUtc = [datetime]'2026-08-01T10:00:00Z'; ClosedTimeUtc = [datetime]'2026-08-01T12:00:00Z'; RelatedAnalyticRuleIds = @('/s/alertRules/guid-f'); RelatedAnalyticRuleNames = @() }
+        $fast = @(1..6 | ForEach-Object { [PSCustomObject]@{ IncidentId = "h$_"; IncidentNumber = 100 + $_; Title = 'h'; Status = 'Closed'; Classification = 'TruePositive'; CreatedTimeUtc = [datetime]'2026-08-01T10:00:00Z'; ClosedTimeUtc = [datetime]'2026-08-01T10:02:00Z'; RelatedAnalyticRuleIds = @('/s/alertRules/guid-h'); RelatedAnalyticRuleNames = @() } })
+
+        $r = Get-DetectionAnalyzerData -Rules $rules -Incidents (@($open) + $fp + @($fast)) -AutomationRules @()
+        $few = $r.RuleMetrics | Where-Object RuleId -eq 'guid-f'
+        $few.FalsePositiveRatio | Should -Be 1
+        $few.IsNoisy | Should -BeFalse
+        $h = $r.RuleMetrics | Where-Object RuleId -eq 'guid-h'
+        $h.AutoCloseRatio | Should -Be 1
+        $h.AttributedAutoCloseRatio | Should -Be 0
+        $h.IsNoisy | Should -BeFalse
+        $r.Summary.NoisyRules | Should -Be 0
+    }
+
     It 'returns an empty result when there are no rules at all' {
         $empty = Get-DetectionAnalyzerData -Rules @() -Incidents $script:daIncidents -AutomationRules @()
         $empty.RuleMetrics.Count | Should -Be 0
@@ -5035,8 +5077,15 @@ Describe 'TUI layout helpers' {
             $pick | Should -Be 'X'
             $script:wrapArgs.Search | Should -BeTrue
             $script:synced | Should -BeTrue
+            $script:LogHorizonLastPick | Should -Be 'X'
+
+            Mock Read-LogHorizonResizableSelection { 'Y' }
+            $script:LogHorizonRedrawOnResize = $true
+            Read-LogHorizonSelection -Title 't' -Choices @('Back', 'Y') | Should -Be 'Y'
+            Should -Invoke Read-LogHorizonResizableSelection -Times 1 -Exactly
         }
         finally {
+            $script:LogHorizonRedrawOnResize = $false
             if ($null -ne $orig) { Set-Item -Path Function:\Read-SpectreSelection -Value $orig } else { Remove-Item -Path Function:\Read-SpectreSelection -ErrorAction SilentlyContinue }
         }
     }
@@ -6666,6 +6715,89 @@ Describe 'Shared table sources' {
         "$warn" | Should -Match 'CommonSecurityLog skipped'
     }
 
+    It 'summarizes by the filter columns first and flags rule-condition rows per row' {
+        $keys = Get-SharedSourceKeyColumn -Sources $script:ssSources -SchemaColumns @('TimeGenerated', 'DeviceVendor', 'DeviceAction', 'SourceIP')
+        $keys | Should -Be @('DeviceAction', 'DeviceVendor')
+        @(Get-SharedSourceKeyColumn -Sources $script:ssSources -SchemaColumns @()).Count | Should -Be 0
+        $nested = [PSCustomObject]@{ filter = '(isnotempty(DeviceProduct) and DeviceEventClassID in ("1", "SourceIP"))' }
+        Get-SharedSourceKeyColumn -Sources @($nested) -SchemaColumns @('DeviceProduct', 'DeviceEventClassID', 'SourceIP') | Should -Be @('DeviceEventClassID', 'DeviceProduct')
+
+        $kql = Get-SharedSourceUsageQuery -TableName 'CommonSecurityLog' -Sources $script:ssSources -RuleConditions @('SourceIP == "1.2.3.4"') -KeyColumns $keys
+        $kql | Should -Match '\| extend LogHorizonRule = \(SourceIP == "1\.2\.3\.4"\)'
+        $kql | Should -Match '\| summarize LogHorizonBytes = sum\(_BilledSize\) by DeviceAction, DeviceVendor, LogHorizonRule'
+        $kql | Should -Match 'summarize BilledBytes = sum\(LogHorizonBytes\) by LogHorizonSource, LogHorizonHint, LogHorizonRule$'
+        $kql.IndexOf('LogHorizonRule =') | Should -BeLessThan $kql.IndexOf('LogHorizonSource =')
+    }
+
+    It 'keeps only rule conditions whose columns exist in the schema' {
+        $rules = @(
+            [PSCustomObject]@{ Enabled = $true; Tables = @('CommonSecurityLog'); Query = 'CommonSecurityLog | where DeviceAction == "deny" | extend x = 1 | where x > 0' }
+            [PSCustomObject]@{ Enabled = $false; Tables = @('CommonSecurityLog'); Query = 'CommonSecurityLog | where DeviceVendor == "Off"' }
+            [PSCustomObject]@{ Enabled = $true; Tables = @('Syslog'); Query = 'Syslog | where Facility == "auth"' }
+        )
+        $c = @(Get-SharedTableRuleCondition -TableName 'CommonSecurityLog' -Rules $rules -SchemaColumns @('DeviceAction', 'DeviceVendor'))
+        $c | Should -Be @('DeviceAction == "deny"')
+    }
+
+    It 'skips a table whose configured plan is not Analytics even when Usage still shows Analytics' {
+        Mock Invoke-AzRestWithRetry { throw 'should not query' }
+        $usage = @([PSCustomObject]@{ TableName = 'CommonSecurityLog'; MonthlyGB = 10; ObservedPlans = @('Analytics', 'Basic') })
+        $ctx = [PSCustomObject]@{ LaToken = 't'; WorkspaceId = 'w' }
+        @(Get-SharedSourceUsage -Context $ctx -TableUsage $usage -TableRetention @([PSCustomObject]@{ TableName = 'CommonSecurityLog'; Plan = 'Basic' }) -Sources $script:ssSources).Count | Should -Be 0
+        @(Get-SharedSourceUsage -Context $ctx -TableUsage $usage -Sources $script:ssSources).Count | Should -Be 0
+        Should -Invoke Invoke-AzRestWithRetry -Times 0 -Exactly
+    }
+
+    It 'retries without rule conditions when the query fails with them' {
+        $script:ssBodies = [System.Collections.Generic.List[string]]::new()
+        Mock Invoke-AzRestWithRetry {
+            $script:ssBodies.Add($Body)
+            if ($script:ssBodies.Count -eq 1) { throw 'SemanticError' }
+            [PSCustomObject]@{ tables = @([PSCustomObject]@{
+                columns = @([PSCustomObject]@{ name = 'LogHorizonSource' }, [PSCustomObject]@{ name = 'LogHorizonHint' }, [PSCustomObject]@{ name = 'LogHorizonRule' }, [PSCustomObject]@{ name = 'BilledBytes' })
+                rows    = @(, @('a', $false, $false, 10))
+            }) }
+        }
+        $usage = @([PSCustomObject]@{ TableName = 'CommonSecurityLog'; MonthlyGB = 10; ObservedPlans = @('Analytics') })
+        $ret = @([PSCustomObject]@{ TableName = 'CommonSecurityLog'; Plan = 'Analytics'; Columns = @('TimeGenerated', 'DeviceVendor', 'DeviceAction') })
+        $rules = @([PSCustomObject]@{ Enabled = $true; Tables = @('CommonSecurityLog'); Query = 'CommonSecurityLog | where DeviceAction == "deny"' })
+        $r = @(Get-SharedSourceUsage -Context ([PSCustomObject]@{ LaToken = 't'; WorkspaceId = 'w' }) -TableUsage $usage -TableRetention $ret -Rules $rules -Sources $script:ssSources -WarningVariable warn -WarningAction SilentlyContinue)
+        $script:ssBodies.Count | Should -Be 2
+        $script:ssBodies[0] | Should -Match 'DeviceAction == \\"deny\\"'
+        $script:ssBodies[1] | Should -Match 'LogHorizonRule = false'
+        $r[0].RuleConditions.Count | Should -Be 0
+        $r[0].Rows[0].RuleMatch | Should -BeFalse
+        "$warn" | Should -Match 'retrying without them'
+    }
+
+    It 'keeps rule-matched rows in Analytics and adds the rule conditions to the split condition' {
+        $usage = @([PSCustomObject]@{ TableName = 'CommonSecurityLog'; SampleDays = 7; RuleConditions = @('DeviceAction == "deny"'); Rows = @(
+            [PSCustomObject]@{ SourceId = 'c'; HintMatch = $false; RuleMatch = $true; BilledBytes = 60 }
+            [PSCustomObject]@{ SourceId = 'c'; HintMatch = $false; RuleMatch = $false; BilledBytes = 40 }
+        ) })
+        $r = @(Get-SharedSourceAnalysis -SharedSourceUsage $usage -TableAnalysis @($script:ssTable) -Sources $script:ssSources)
+        $r[0].LakeMonthlyGB | Should -Be 40
+        $r[0].RuleConditionCount | Should -Be 1
+        $r[0].SplitCondition | Should -Match '(?m)^(or )?\(DeviceAction == "deny"\)$'
+    }
+
+    It 'skips SharedTableSplit below 1 GB/mo and warns when the condition exceeds the transformation limit' {
+        $usage = @([PSCustomObject]@{ TableName = 'CommonSecurityLog'; DataGB = 3; MonthlyGB = 1; EstMonthlyCostUSD = 5.59; IsFree = $false; IsFreeSource = 'usage' })
+        $cls = [PSCustomObject]@{ Classifications = @{
+            'CommonSecurityLog' = [PSCustomObject]@{ Classification = 'primary'; Category = 'Network Security'; RecommendedTier = 'analytics'; IsFree = $false; RecommendedRetentionDays = 365 }
+        }; KeywordGaps = @(); DatabaseEntries = 1 }
+        $rules = [PSCustomObject]@{ Rules = @(); TableCoverage = @{}; TotalRules = 0; EnabledRules = 0; DontCorrCount = 0; IncCorrCount = 0 }
+        $hunting = [PSCustomObject]@{ Queries = @(); TableCoverage = @{}; TotalQueries = 0 }
+        $small = @([PSCustomObject]@{ TableName = 'CommonSecurityLog'; SampleDays = 7; Rows = @([PSCustomObject]@{ SourceId = 'cisco-asa-ftd'; HintMatch = $false; BilledBytes = 50 }, [PSCustomObject]@{ SourceId = ''; HintMatch = $false; BilledBytes = 50 }) })
+        $r = Invoke-Analysis -TableUsage $usage -Classifications $cls -RulesData $rules -HuntingData $hunting -SharedSourceUsage $small
+        @($r.Recommendations | Where-Object Type -eq 'SharedTableSplit').Count | Should -Be 0
+
+        $usage[0].MonthlyGB = 100; $usage[0].EstMonthlyCostUSD = 559
+        $long = @([PSCustomObject]@{ TableName = 'CommonSecurityLog'; SampleDays = 7; RuleConditions = @("Message has '$('x' * 16000)'"); Rows = $small[0].Rows })
+        $r = Invoke-Analysis -TableUsage $usage -Classifications $cls -RulesData $rules -HuntingData $hunting -SharedSourceUsage $long
+        ($r.Recommendations | Where-Object Type -eq 'SharedTableSplit').Detail | Should -Match 'above the 15,360-character limit'
+    }
+
     It 'replaces the generic split estimate with a SharedTableSplit recommendation' {
         $usage = @([PSCustomObject]@{ TableName = 'CommonSecurityLog'; DataGB = 300; MonthlyGB = 100; EstMonthlyCostUSD = 559; IsFree = $false; IsFreeSource = 'usage' })
         $cls = [PSCustomObject]@{ Classifications = @{
@@ -6698,5 +6830,82 @@ Describe 'Shared table sources' {
         $section.Markdown | Should -Match '## Shared Table Sources'
         $section.Markdown | Should -Match '```kql'
         $section.Html | Should -Match 'kql-block'
+    }
+}
+
+Describe 'Write-InteractiveMenu' {
+    BeforeAll {
+        $script:menuOrig = @{}
+        foreach ($fn in 'Write-SpectreHost', 'Write-SpectreRule') {
+            $script:menuOrig[$fn] = if (Test-Path "Function:\$fn") { (Get-Item "Function:\$fn").ScriptBlock } else { $null }
+            Set-Item -Path "Function:\$fn" -Value { param($Title, $Color) }
+        }
+    }
+    AfterAll {
+        foreach ($fn in $script:menuOrig.Keys) {
+            if ($null -ne $script:menuOrig[$fn]) { Set-Item -Path "Function:\$fn" -Value $script:menuOrig[$fn] }
+            else { Remove-Item -Path "Function:\$fn" -ErrorAction SilentlyContinue }
+        }
+    }
+    BeforeEach {
+        Mock Invoke-ConsoleSizeCheck {}
+        Mock Clear-LogHorizonScreen {}
+        Mock Write-LogHorizonBanner {}
+        Mock Write-Dashboard {}
+        Mock Wait-ConsoleResizeSettled {}
+        Mock Write-DetectionAnalyzer {}
+        Mock Write-DictionaryView { $script:LogHorizonLastPick = 'Back' }
+        $script:menuTitles = [System.Collections.Generic.List[string]]::new()
+        Mock Read-LogHorizonSelection {
+            $script:menuTitles.Add($Title)
+            $answer = $script:menuAnswers.Dequeue()
+            if ($answer -eq '!resize') { throw 'LogHorizonConsoleResized' }
+            $answer
+        }
+    }
+
+    It 'holds a view that returns without a Back pick, but not one that ended on Back' {
+        $script:menuAnswers = [System.Collections.Generic.Queue[string]]::new([string[]]@('View Detection Analyzer', 'Back', 'Dictionary', 'Quit'))
+        Write-InteractiveMenu -Analysis ([PSCustomObject]@{}) -WorkspaceName 'ws'
+        $script:menuTitles[1] | Should -Match 'Return to the menu'
+        $script:menuTitles[2] | Should -Be 'Select a view:'
+        $script:menuTitles[3] | Should -Be 'Select a view:'
+        $script:menuTitles.Count | Should -Be 4
+        $script:LogHorizonRedrawOnResize | Should -BeFalse
+    }
+
+    It 'runs the view again after a resize and redraws the home screen after a resize at the menu' {
+        $script:menuAnswers = [System.Collections.Generic.Queue[string]]::new([string[]]@('View Detection Analyzer', '!resize', 'Back', '!resize', 'Quit'))
+        Write-InteractiveMenu -Analysis ([PSCustomObject]@{}) -WorkspaceName 'ws'
+        Should -Invoke Write-DetectionAnalyzer -Times 2 -Exactly
+        Should -Invoke Wait-ConsoleResizeSettled -Times 2 -Exactly
+        Should -Invoke Write-Dashboard -Times 2 -Exactly
+    }
+
+    It 'turns the resize mode off when a view throws' {
+        Mock Write-DetectionAnalyzer { throw 'boom' }
+        $script:menuAnswers = [System.Collections.Generic.Queue[string]]::new([string[]]@('View Detection Analyzer'))
+        { Write-InteractiveMenu -Analysis ([PSCustomObject]@{}) -WorkspaceName 'ws' } | Should -Throw 'boom'
+        $script:LogHorizonRedrawOnResize | Should -BeFalse
+    }
+
+    It 'the HTML report has an active, focus and pane rule for every section and keeps radios focusable' {
+        $out = Join-Path $TestDrive 'tabs.html'
+        $analysis = New-MockAnalysis
+        $null = Export-Report -Analysis $analysis -Format html -OutputPath $out -WorkspaceName 'w'
+        $html = Get-Content $out -Raw
+        foreach ($s in (ConvertTo-ReportSections -Analysis $analysis)) {
+            $id = $s.TabId
+            $html | Should -Match ([regex]::Escape("#tab-${id}:checked ~ #pane-$id"))
+            $html | Should -Match ([regex]::Escape("#tab-${id}:focus-visible ~ .tab-bar label[for=`"tab-$id`"]"))
+            $html | Should -Match "<h2 class=`"pane-title`" id=`"title-$id`">"
+        }
+        $html | Should -Not -Match '__TAB_CSS__'
+        $html | Should -Not -Match '(?m)^\s*\.tab-radio\s*\{\s*display:\s*none'
+    }
+
+    It 'keys the collection cache on -SkipSharedSources' {
+        (Get-CollectionCacheKey -SubscriptionId 's' -ResourceGroup 'r' -WorkspaceName 'w' -SkipSharedSources $true) |
+            Should -Not -Be (Get-CollectionCacheKey -SubscriptionId 's' -ResourceGroup 'r' -WorkspaceName 'w')
     }
 }

@@ -14,6 +14,7 @@ function Get-CollectionCacheKey {
         [int]$DetectionLookbackDays = 90,
         [bool]$IncludeDefenderXDR = $false,
         [bool]$IncludeDetectionAnalyzer = $false,
+        [bool]$SkipSharedSources = $false,
         [decimal]$PricePerGB = 5.59,
         [decimal]$BasicPricePerGB = 1.15,
         [decimal]$LakePricePerGB = 0.20,
@@ -29,6 +30,7 @@ function Get-CollectionCacheKey {
         "detdays=$DetectionLookbackDays"
         "xdr=$IncludeDefenderXDR"
         "da=$IncludeDetectionAnalyzer"
+        "noshared=$SkipSharedSources"
         "price=$($PricePerGB.ToString($inv))"
         "basic=$($BasicPricePerGB.ToString($inv))"
         "lake=$($LakePricePerGB.ToString($inv))"

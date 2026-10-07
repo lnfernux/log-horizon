@@ -47,6 +47,8 @@ function Invoke-LogHorizon {
 
         [switch]$IncludeDetectionAnalyzer,
 
+        [switch]$SkipSharedSources,
+
         [ValidateRange(1, 365)]
         [int]$DetectionLookbackDays = 90,
 
@@ -98,6 +100,7 @@ function Invoke-LogHorizon {
         $cacheKey = Get-CollectionCacheKey -SubscriptionId $SubscriptionId -ResourceGroup $ResourceGroup -WorkspaceName $WorkspaceName `
                                            -DaysBack $DaysBack -DetectionLookbackDays $DetectionLookbackDays `
                                            -IncludeDefenderXDR ([bool]$IncludeDefenderXDR) -IncludeDetectionAnalyzer ([bool]$IncludeDetectionAnalyzer) `
+                                           -SkipSharedSources ([bool]$SkipSharedSources) `
                                            -PricePerGB $PricePerGB -BasicPricePerGB $BasicPricePerGB -LakePricePerGB $LakePricePerGB `
                                            -ModuleVersion $moduleVersion
         $collectResult = $null
@@ -129,11 +132,6 @@ function Invoke-LogHorizon {
                     $result.TableUsage = Get-TableUsage -Context $ctx -DaysBack $DaysBack -PricePerGB $PricePerGB `
                                                         -BasicPricePerGB $BasicPricePerGB -LakePricePerGB $LakePricePerGB
 
-                    # Per-source volume in shared tables (CommonSecurityLog, Syslog)
-                    $result.SharedSourceUsage = @()
-                    try { $result.SharedSourceUsage = Get-SharedSourceUsage -Context $ctx -TableUsage $result.TableUsage }
-                    catch { Write-Warning "Shared source breakdown skipped: $($_.Exception.Message)" }
-
                     # Analytics rules
                     $result.RulesData = Get-AnalyticsRules -Context $ctx
 
@@ -164,6 +162,16 @@ function Invoke-LogHorizon {
 
                     # Data transforms (DCR-based); the workspace transformation DCR id comes from the workspace resource
                     $result.DataTransforms = Get-DataTransforms -Context $ctx -WorkspaceDefaultDcrId $result.TableRetention.WorkspaceDefaultDcrId
+
+                    # Per-source volume in shared tables (CommonSecurityLog, Syslog); needs the configured plan, schema and rules
+                    $result.SharedSourceUsage = @()
+                    if (-not $SkipSharedSources) {
+                        try {
+                            $result.SharedSourceUsage = Get-SharedSourceUsage -Context $ctx -TableUsage $result.TableUsage `
+                                                                              -TableRetention @($result.TableRetention.Tables) -Rules @($result.RulesData.Rules)
+                        }
+                        catch { Write-Warning "Shared source breakdown skipped: $($_.Exception.Message)" }
+                    }
 
                     [PSCustomObject]$result
                 } 3>&1

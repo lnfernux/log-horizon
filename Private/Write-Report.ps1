@@ -95,9 +95,71 @@ function Read-LogHorizonSelection {
 
     $splat = @{ Title = $Title; Choices = $Choices; Color = $Color }
     if ($EnableSearch) { $splat.EnableSearch = $true }
-    $pick = Read-SpectreSelection @splat
+    $pick = if ($script:LogHorizonRedrawOnResize) { Read-LogHorizonResizableSelection @splat } else { Read-SpectreSelection @splat }
     $null = Sync-ConsoleSize
+    $script:LogHorizonLastPick = $pick
     $pick
+}
+
+function Read-LogHorizonResizableSelection {
+    <#
+    .SYNOPSIS
+        Selection prompt that cancels when the window width changes and throws
+        'LogHorizonConsoleResized', so the menu can redraw the view at the new width.
+        Text already printed is re-wrapped by the terminal and cannot be fixed in place.
+    #>
+    [CmdletBinding()]
+    param(
+        [string]$Title,
+        [Parameter(Mandatory)][object[]]$Choices,
+        [object]$Color = 'DodgerBlue2',
+        [switch]$EnableSearch
+    )
+
+    $accent = if ($Color -is [Spectre.Console.Color]) { $Color } else { [Spectre.Console.Color]::"$Color" }
+    if ($null -eq $accent) { $accent = [Spectre.Console.Color]::DodgerBlue2 }
+    $prompt = [Spectre.Console.SelectionPromptExtensions]::AddChoices([Spectre.Console.SelectionPrompt[string]]::new(), [string[]]$Choices)
+    if ($Title) { $prompt.Title = $Title }
+    $prompt.PageSize = 5
+    $prompt.WrapAround = $true
+    $prompt.HighlightStyle = [Spectre.Console.Style]::new($accent)
+    $prompt.MoreChoicesText = '[grey](Move up and down to reveal more choices)[/]'
+    $prompt.SearchEnabled = [bool]$EnableSearch
+    $prompt.SearchHighlightStyle = [Spectre.Console.Style]::new($accent.Blend([Spectre.Console.Color]::White, 0.7))
+
+    $width = Get-ConsoleWidth
+    $cts = [System.Threading.CancellationTokenSource]::new()
+    $task = $prompt.ShowAsync([Spectre.Console.AnsiConsole]::Console, $cts.Token)
+    try {
+        # Polling keeps Ctrl+C working, as in PwshSpectreConsole's own prompt loop
+        while (-not $task.AsyncWaitHandle.WaitOne(200)) {
+            if ((Get-ConsoleWidth) -ne $width) { $cts.Cancel() }
+        }
+        if ($task.IsCanceled) {
+            [Spectre.Console.AnsiConsole]::Console.Cursor.Show($true)
+            throw 'LogHorizonConsoleResized'
+        }
+        $task.GetAwaiter().GetResult()
+    }
+    finally {
+        $cts.Cancel()
+        $task.Dispose()
+    }
+}
+
+function Wait-ConsoleResizeSettled {
+    # Dragging a window edge fires many size changes; redraw once the width stops moving
+    [CmdletBinding()]
+    param()
+
+    $last = Get-ConsoleWidth
+    for ($i = 0; $i -lt 20; $i++) {
+        Start-Sleep -Milliseconds 150
+        $now = Get-ConsoleWidth
+        if ($now -eq $last) { break }
+        $last = $now
+    }
+    $null = Sync-ConsoleSize
 }
 
 function Test-ConsoleSize {
@@ -408,54 +470,90 @@ function Write-InteractiveMenu {
     $menuItems['Quit']                = 'quit'
 
     $script:LogHorizonSkipNextHomeRedraw = $false
+    $script:LogHorizonRedrawOnResize = $true
     $continue = $true
     $isFirstMenuRender = $true
-    while ($continue) {
-        Invoke-ConsoleSizeCheck
-        $skipHomeRedraw = $false
-        if ($script:LogHorizonSkipNextHomeRedraw) {
-            $skipHomeRedraw = $true
-            $script:LogHorizonSkipNextHomeRedraw = $false
-        }
-
-        if (-not $isFirstMenuRender -and -not $skipHomeRedraw) {
-            Clear-LogHorizonScreen
-            Write-LogHorizonBanner
-            Write-Dashboard -Analysis $Analysis -WorkspaceName $WorkspaceName -DefenderXDR $DefenderXDR
-        }
-        $isFirstMenuRender = $false
-
-        Write-SpectreRule -Title "[dodgerblue2]MENU[/]" -Color DodgerBlue2
-        Write-SpectreHost ""
-
-        $choice = Read-LogHorizonSelection -Title "Select a view:" `
-                    -Choices @($menuItems.Keys) `
-                    -Color DodgerBlue2
-
-        $action = $menuItems[$choice]
-
-        Write-SpectreHost ""
-
-        switch ($action) {
-            'recommendations' { Write-RecommendationView -Analysis $Analysis }
-            'detection'       { Write-DetectionAssessment -Analysis $Analysis }
-            'detanalyzer'     { Write-DetectionAnalyzer -Analysis $Analysis }
-            'soc'             { Write-SocOptimization -Analysis $Analysis }
-            'retention'       { Write-RetentionAssessment -Analysis $Analysis }
-            'transforms'      { Write-DataTransformView -Analysis $Analysis }
-            'logtuning'       { Write-LogTuningMenu -Analysis $Analysis -Context $Context }
-            'tables'          { Write-TableInventory -Analysis $Analysis }
-            'manageretention' { Invoke-ManageRetentionWizard -Analysis $Analysis -Context $Context }
-            'dictionary'      { Write-DictionaryView }
-            'export'          {
-                Invoke-ExportFromMenu -Analysis $Analysis `
-                                      -WorkspaceName $WorkspaceName `
-                                      -DefenderXDR $DefenderXDR `
-                                      -ExportFormat $ExportFormat `
-                                      -ExportPath $ExportPath
+    try {
+        while ($continue) {
+            Invoke-ConsoleSizeCheck
+            $skipHomeRedraw = $false
+            if ($script:LogHorizonSkipNextHomeRedraw) {
+                $skipHomeRedraw = $true
+                $script:LogHorizonSkipNextHomeRedraw = $false
             }
-            'quit'            { $continue = $false }
+
+            if (-not $isFirstMenuRender -and -not $skipHomeRedraw) {
+                Clear-LogHorizonScreen
+                Write-LogHorizonBanner
+                Write-Dashboard -Analysis $Analysis -WorkspaceName $WorkspaceName -DefenderXDR $DefenderXDR
+            }
+            $isFirstMenuRender = $false
+
+            Write-SpectreRule -Title "[dodgerblue2]MENU[/]" -Color DodgerBlue2
+            Write-SpectreHost ""
+
+            try {
+                $choice = Read-LogHorizonSelection -Title "Select a view:" `
+                            -Choices @($menuItems.Keys) `
+                            -Color DodgerBlue2
+            }
+            catch {
+                if ("$_" -ne 'LogHorizonConsoleResized') { throw }
+                Wait-ConsoleResizeSettled
+                continue
+            }
+
+            $action = $menuItems[$choice]
+
+            Write-SpectreHost ""
+
+            # Views with side effects keep their screen on resize instead of running again
+            $script:LogHorizonRedrawOnResize = $action -notin 'manageretention', 'export'
+            $redraw = $true
+            while ($redraw) {
+                $redraw = $false
+                $script:LogHorizonLastPick = $null
+                try {
+                    switch ($action) {
+                        'recommendations' { Write-RecommendationView -Analysis $Analysis }
+                        'detection'       { Write-DetectionAssessment -Analysis $Analysis }
+                        'detanalyzer'     { Write-DetectionAnalyzer -Analysis $Analysis }
+                        'soc'             { Write-SocOptimization -Analysis $Analysis }
+                        'retention'       { Write-RetentionAssessment -Analysis $Analysis }
+                        'transforms'      { Write-DataTransformView -Analysis $Analysis }
+                        'logtuning'       { Write-LogTuningMenu -Analysis $Analysis -Context $Context }
+                        'tables'          { Write-TableInventory -Analysis $Analysis }
+                        'manageretention' { Invoke-ManageRetentionWizard -Analysis $Analysis -Context $Context }
+                        'dictionary'      { Write-DictionaryView }
+                        'export'          {
+                            Invoke-ExportFromMenu -Analysis $Analysis `
+                                                  -WorkspaceName $WorkspaceName `
+                                                  -DefenderXDR $DefenderXDR `
+                                                  -ExportFormat $ExportFormat `
+                                                  -ExportPath $ExportPath
+                        }
+                        'quit'            { $continue = $false }
+                    }
+
+                    # The home screen clears on return, so hold views that did not end on Back
+                    if ($action -notin 'quit', 'manageretention' -and "$script:LogHorizonLastPick" -notin 'Back', 'Cancel') {
+                        Write-SpectreHost ""
+                        $null = Read-LogHorizonSelection -Title '[deepskyblue1]Return to the menu:[/]' -Choices @('Back') -Color DodgerBlue2
+                    }
+                }
+                catch {
+                    if ("$_" -ne 'LogHorizonConsoleResized') { throw }
+                    Wait-ConsoleResizeSettled
+                    Clear-LogHorizonScreen
+                    $redraw = $true
+                }
+            }
+            $script:LogHorizonRedrawOnResize = $true
         }
+    }
+    finally {
+        # Prompts outside the menu (Set-LogHorizonTableRetention) must not throw on resize
+        $script:LogHorizonRedrawOnResize = $false
     }
 
     $moduleVersion = (Import-PowerShellDataFile "$PSScriptRoot\..\LogHorizon.psd1").ModuleVersion
@@ -1112,6 +1210,7 @@ function Write-SharedSourceView {
         Write-SpectreHost ""
         Write-SpectreHost "[bold]Split condition[/] [dim](rows that match stay in Analytics, the rest go to $(Get-SafeEscapedText $shared.TableName)_SPLT)[/]"
         Write-SpectreHost "[deepskyblue1]$(Get-SafeEscapedText $shared.SplitCondition)[/]"
+        if ($shared.RuleConditionCount -gt 0) { Write-SpectreHost "[dim]Includes $($shared.RuleConditionCount) where-condition(s) from enabled rules on the table.[/]" }
         $retention = @()
         if ($shared.TableRetentionDays) { $retention += "$($shared.TableName) $($shared.TableRetentionDays)d" }
         if ($shared.SplitRetentionDays) { $retention += "$($shared.TableName)_SPLT $($shared.SplitRetentionDays)d" }
@@ -1923,13 +2022,14 @@ function Write-DetectionAnalyzer {
 
     # Scored rules sorted by noisiness, then unscored (CDRs without incidents) at the end
     $scored = @($Analysis.DetectionAnalyzer.RuleMetrics | Where-Object { $null -ne $_.NoisinessScore } | Sort-Object NoisinessScore -Descending)
-    $unscored = @($Analysis.DetectionAnalyzer.RuleMetrics | Where-Object { $null -eq $_.NoisinessScore })
+    $unscored = @($Analysis.DetectionAnalyzer.RuleMetrics | Where-Object { $null -eq $_.NoisinessScore } |
+        Sort-Object @{ Expression = { [bool]$_.IsNoisy }; Descending = $true }, @{ Expression = 'IncidentsTotal'; Descending = $true })
     $metrics = @($scored) + @($unscored)
     $displayMetrics = @($metrics | Select-Object -First 15)
 
     $daSummary = $Analysis.DetectionAnalyzer.Summary
     if ($daSummary.ScorableRules -gt 0 -and $daSummary.ScorableRules -lt $daSummary.MinScorablePopulation) {
-        Write-SpectreHost "[yellow]Only $($daSummary.ScorableRules) rule(s) have incidents; noisiness scores need at least $($daSummary.MinScorablePopulation) to compare against. Scores shown as N/A.[/]"
+        Write-SpectreHost "[yellow]Only $($daSummary.ScorableRules) rule(s) have incidents; noisiness scores need at least $($daSummary.MinScorablePopulation) to compare against. Scores shown as N/A, and rules with 5+ closed incidents that are 80% or more auto-closed by automation or false positive show as Noisy.[/]"
         Write-SpectreHost ""
     }
 
@@ -1941,7 +2041,7 @@ function Write-DetectionAnalyzer {
     $table = @()
     foreach ($r in $displayMetrics) {
         $scoreMarkup = if ($null -eq $r.NoisinessScore) {
-            "[dim]N/A[/]"
+            if ($r.IsNoisy) { '[red]Noisy[/]' } else { '[dim]N/A[/]' }
         } elseif ($r.NoisinessScore -ge 70) {
             "[red]$($r.NoisinessScore)[/]"
         } elseif ($r.NoisinessScore -ge 50) {
@@ -1990,6 +2090,7 @@ function Write-DetectionAnalyzer {
         ""
         "  Each percentile ranks a rule relative to all analyzed rules (0-100)."
         "  [red]>= 70[/] = noisy   [yellow]>= 50[/] = watch   [green]< 50[/] = healthy"
+        "  [red]Noisy[/] also = at least 5 closed incidents, 80% or more auto-closed by automation or false positive"
         "  [dim]N/A[/] = no correlated incidents found (listing only)"
         ""
         "  [dim]A high score does not conclusively mean a detection is bad -- it is an[/]"
@@ -2022,7 +2123,7 @@ function Write-DetectionAnalyzer {
                 $fullTable = @()
                 foreach ($r in $metrics) {
                     $scoreMarkup = if ($null -eq $r.NoisinessScore) {
-                        "[dim]N/A[/]"
+                        if ($r.IsNoisy) { '[red]Noisy[/]' } else { '[dim]N/A[/]' }
                     } elseif ($r.NoisinessScore -ge 70) {
                         "[red]$($r.NoisinessScore)[/]"
                     } elseif ($r.NoisinessScore -ge 50) {
@@ -2133,6 +2234,9 @@ function Write-DetectionAnalyzerRuleDetail {
             $scoreColor = if ($selected.NoisinessScore -ge 70) { 'red' } elseif ($selected.NoisinessScore -ge 50) { 'yellow' } else { 'green' }
             $detailLines += "[bold]Noisiness Score:[/]  [${scoreColor}]$($selected.NoisinessScore)[/]"
             $detailLines += "[dim]  Volume %ile: $($selected.PercentileVolume)  |  AutoClose %ile: $($selected.PercentileAutoClose)  |  FalsePos %ile: $($selected.PercentileFalsePositive)[/]"
+        }
+        elseif ($selected.IsNoisy) {
+            $detailLines += "[bold]Noisiness:[/]        [red]Noisy[/] [dim](80% or more auto-closed by automation or false positive; too few rules to score)[/]"
         }
     } else {
         $detailLines += "[dim]No correlated incidents found. Noisiness score not available.[/]"

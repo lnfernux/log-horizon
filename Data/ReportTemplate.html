@@ -6,102 +6,93 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Log Horizon - Security &amp; SIEM Analysis Report</title>
     <style>
+        /* === Tokens === every text colour is at least 4.5:1 on --bg, --surface and --accent-bg; --brand is for large text and rules only */
+        :root {
+            --ink: #1a1a2e; --muted: #5b6570; --bg: #f6f8fa; --surface: #ffffff; --line: #dfe3e8;
+            --brand: #1e90ff; --accent: #1560bd; --accent-bg: #e8f1fc;
+            --ok: #2e7d32; --warn: #9a4f00; --bad: #c62828; --status: #6d4c41;
+            --space-1: 0.25rem; --space-2: 0.5rem; --space-3: 0.75rem; --space-4: 1rem; --space-6: 1.5rem; --space-8: 2rem;
+        }
+
         /* === Reset & Base === */
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
         html { font-size: 16px; line-height: 1.6; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif; color: #1a1a2e; background: #f8f9fa; padding: 2rem 1rem; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif; color: var(--ink); background: var(--bg); padding: var(--space-8) var(--space-4); }
         main { max-width: 1100px; margin: 0 auto; }
 
         /* === Header === */
-        .report-header { border-bottom: 2px solid #1e90ff; padding-bottom: 1rem; margin-bottom: 2rem; }
-        .report-header h1 { font-size: 1.8rem; color: #1e90ff; margin-bottom: 0.25rem; }
-        .report-header p { font-size: 0.85rem; color: #666; }
+        .report-header { border-bottom: 2px solid var(--brand); padding-bottom: var(--space-4); margin-bottom: var(--space-6); }
+        .report-header h1 { font-size: 1.8rem; line-height: 1.25; color: var(--brand); margin-bottom: var(--space-2); }
+        .report-header p { font-size: 0.875rem; color: var(--muted); }
+        .report-header strong { color: var(--ink); }
 
         /* === Summary Grid === */
-        .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 0.75rem; margin-bottom: 2rem; }
-        .metric-card { background: #fff; padding: 1.25rem; border-radius: 8px; text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,0.08); border: 1px solid #e9ecef; }
-        .metric-value { font-size: 1.6rem; font-weight: 700; color: #1e90ff; }
-        .metric-value.savings { color: #2e7d32; }
-        .metric-label { font-size: 0.75rem; text-transform: uppercase; font-weight: 600; color: #888; margin-top: 0.25rem; }
+        .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: var(--space-3); margin-bottom: var(--space-8); }
+        .metric-card { background: var(--surface); padding: var(--space-4); border-radius: 8px; border: 1px solid var(--line); }
+        .metric-value { font-size: clamp(1.3rem, 2.4vw, 1.6rem); line-height: 1.2; font-weight: 700; color: var(--ink); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+        .metric-value.savings { color: var(--ok); }
+        .metric-label { font-size: 0.8rem; font-weight: 600; color: var(--muted); margin-top: var(--space-1); }
 
-        /* === Pure-CSS Tabs (radio buttons) === */
-        .tab-radio { display: none; }
-        .tabs-wrapper { margin-bottom: 2rem; }
-        .tab-bar { display: flex; gap: 0; border-bottom: 2px solid #dee2e6; margin-bottom: 0; overflow-x: auto; flex-wrap: nowrap; }
-        .tab-label { display: inline-block; padding: 0.6rem 1.2rem; cursor: pointer; font-weight: 600; font-size: 0.85rem; color: #666; border-bottom: 2px solid transparent; margin-bottom: -2px; white-space: nowrap; transition: color 0.15s, border-color 0.15s; }
-        .tab-label:hover { color: #1e90ff; }
-        .tab-pane { display: none; padding: 1.5rem 0; }
+        /* === Pure-CSS Tabs (radio buttons, keyboard: Tab to the group, arrows to switch) === */
+        .tab-radio { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; }
+        /* Radios stay focusable; the wrapper anchors them so a click does not scroll the page to the top */
+        .tabs-wrapper { position: relative; margin-bottom: var(--space-8); }
+        .tab-bar { display: flex; flex-wrap: wrap; gap: var(--space-1); padding-bottom: var(--space-2); border-bottom: 1px solid var(--line); }
+        .tab-label { display: inline-block; padding: var(--space-2) var(--space-3); cursor: pointer; font-weight: 600; font-size: 0.875rem; color: var(--muted); border: 1px solid transparent; border-radius: 6px; white-space: nowrap; }
+        .tab-label:hover { color: var(--accent); border-color: var(--line); background: var(--surface); }
+        .tab-pane { display: none; padding: var(--space-6) 0; }
+        .pane-title { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; }
 
-        /* Show the active tab label + pane via radio sibling combinator */
-        .tab-radio:nth-of-type(1):checked ~ .tab-bar .tab-label:nth-of-type(1),
-        .tab-radio:nth-of-type(2):checked ~ .tab-bar .tab-label:nth-of-type(2),
-        .tab-radio:nth-of-type(3):checked ~ .tab-bar .tab-label:nth-of-type(3),
-        .tab-radio:nth-of-type(4):checked ~ .tab-bar .tab-label:nth-of-type(4),
-        .tab-radio:nth-of-type(5):checked ~ .tab-bar .tab-label:nth-of-type(5),
-        .tab-radio:nth-of-type(6):checked ~ .tab-bar .tab-label:nth-of-type(6),
-        .tab-radio:nth-of-type(7):checked ~ .tab-bar .tab-label:nth-of-type(7),
-        .tab-radio:nth-of-type(8):checked ~ .tab-bar .tab-label:nth-of-type(8),
-        .tab-radio:nth-of-type(9):checked ~ .tab-bar .tab-label:nth-of-type(9),
-        .tab-radio:nth-of-type(10):checked ~ .tab-bar .tab-label:nth-of-type(10),
-        .tab-radio:nth-of-type(11):checked ~ .tab-bar .tab-label:nth-of-type(11),
-        .tab-radio:nth-of-type(12):checked ~ .tab-bar .tab-label:nth-of-type(12) {
-            color: #1e90ff; border-bottom-color: #1e90ff;
-        }
-        .tab-radio:nth-of-type(1):checked ~ .tab-pane:nth-of-type(1),
-        .tab-radio:nth-of-type(2):checked ~ .tab-pane:nth-of-type(2),
-        .tab-radio:nth-of-type(3):checked ~ .tab-pane:nth-of-type(3),
-        .tab-radio:nth-of-type(4):checked ~ .tab-pane:nth-of-type(4),
-        .tab-radio:nth-of-type(5):checked ~ .tab-pane:nth-of-type(5),
-        .tab-radio:nth-of-type(6):checked ~ .tab-pane:nth-of-type(6),
-        .tab-radio:nth-of-type(7):checked ~ .tab-pane:nth-of-type(7),
-        .tab-radio:nth-of-type(8):checked ~ .tab-pane:nth-of-type(8),
-        .tab-radio:nth-of-type(9):checked ~ .tab-pane:nth-of-type(9),
-        .tab-radio:nth-of-type(10):checked ~ .tab-pane:nth-of-type(10),
-        .tab-radio:nth-of-type(11):checked ~ .tab-pane:nth-of-type(11),
-        .tab-radio:nth-of-type(12):checked ~ .tab-pane:nth-of-type(12) {
-            display: block;
-        }
+        /* Active label, keyboard focus and visible pane, generated per tab id */
+__TAB_CSS__
 
         /* === Tables === */
-        .table-wrap { overflow-x: auto; margin-bottom: 1rem; }
-        table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
-        th, td { padding: 0.5rem 0.75rem; border-bottom: 1px solid #e9ecef; text-align: left; }
-        th { background: #f1f3f5; font-weight: 600; color: #495057; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.03em; }
-        tbody tr:hover { background: #f8f9fa; }
-        .num { text-align: right; font-variant-numeric: tabular-nums; }
+        .table-wrap { overflow-x: auto; margin-bottom: var(--space-4); background: var(--surface); border: 1px solid var(--line); border-radius: 8px; }
+        table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
+        th, td { padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+        tbody tr:last-child td { border-bottom: 0; }
+        th { background: var(--bg); font-weight: 600; color: var(--muted); font-size: 0.8rem; white-space: nowrap; }
+        tbody tr:hover { background: var(--accent-bg); }
+        .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 
-        /* === Badges === */
-        .badge { display: inline-block; padding: 0.2em 0.55em; font-size: 0.7rem; font-weight: 700; color: #fff; background: #1e90ff; border-radius: 3px; margin-right: 0.3rem; vertical-align: middle; }
-        .badge-high { background: #e53935; }
-        .badge-medium { background: #fb8c00; }
-        .badge-low { background: #43a047; }
-        .badge-savings { background: #2e7d32; }
-        .badge-status { background: #6d4c41; }
+        /* === Badges (text carries the meaning, colour supports it) === */
+        .badge { display: inline-block; padding: 0.15em 0.55em; font-size: 0.75rem; font-weight: 700; color: #fff; background: var(--accent); border-radius: 4px; vertical-align: middle; }
+        .badge-high { background: var(--bad); }
+        .badge-medium { background: var(--warn); }
+        .badge-low { background: var(--muted); }
+        .badge-savings { background: var(--ok); }
+        .badge-status { background: var(--status); }
 
         /* === Classification colors === */
-        .cls-primary { color: #2e7d32; font-weight: 600; }
-        .cls-secondary { color: #fb8c00; font-weight: 600; }
-        .cls-unknown { color: #e53935; font-weight: 600; }
-        .bad { color: #e53935; font-weight: 600; }
+        .cls-primary { color: var(--ok); font-weight: 600; }
+        .cls-secondary { color: var(--warn); font-weight: 600; }
+        .cls-unknown { color: var(--bad); font-weight: 600; }
+        .bad { color: var(--bad); font-weight: 600; }
 
-        /* === Cards / Articles === */
-        .rec-card { background: #fff; border: 1px solid #e9ecef; border-radius: 8px; margin-bottom: 1rem; overflow: hidden; }
-        .rec-header { padding: 0.75rem 1rem; border-bottom: 1px solid #e9ecef; background: #fafbfc; }
-        .rec-card p { padding: 0.75rem 1rem; margin: 0; font-size: 0.9rem; color: #444; }
-        .warning { background: #fff3cd; border: 1px solid #ffc107; border-radius: 6px; padding: 0.75rem 1rem; margin-bottom: 1rem; font-size: 0.9rem; }
+        /* === Recommendation cards === */
+        .rec-card { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: var(--space-3) var(--space-4); margin-bottom: var(--space-3); }
+        .rec-title { font-size: 1rem; line-height: 1.4; color: var(--ink); margin: 0 0 var(--space-1) 0; }
+        .rec-meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-3); font-size: 0.8rem; color: var(--muted); margin-bottom: var(--space-2); }
+        .rec-meta .savings { color: var(--ok); font-weight: 700; }
+        .rec-card p { margin: 0; font-size: 0.9rem; color: var(--ink); }
+        .warning { background: #fff3cd; border: 1px solid #b38600; border-radius: 6px; padding: var(--space-3) var(--space-4); margin-bottom: var(--space-4); font-size: 0.9rem; }
+        .tab-pane > p { max-width: 75ch; margin-bottom: var(--space-3); }
 
         /* === KQL code blocks === */
-        .kql-block { background: #1e1e1e; color: #d4d4d4; padding: 1rem; border-radius: 4px; overflow-x: auto; font-family: 'Cascadia Code', 'Fira Code', Consolas, monospace; font-size: 0.8rem; white-space: pre-wrap; word-break: break-word; }
-        code.kql { background: #f1f3f5; padding: 0.15em 0.4em; border-radius: 3px; font-size: 0.8rem; font-family: 'Cascadia Code', Consolas, monospace; word-break: break-all; }
+        .kql-block { background: #1e1e1e; color: #d4d4d4; padding: var(--space-4); border-radius: 6px; overflow-x: auto; font-family: 'Cascadia Code', 'Fira Code', Consolas, monospace; font-size: 0.8rem; white-space: pre-wrap; word-break: break-word; margin-bottom: var(--space-3); }
+        code.kql { background: var(--bg); padding: 0.15em 0.4em; border-radius: 3px; font-size: 0.8rem; font-family: 'Cascadia Code', Consolas, monospace; word-break: break-all; }
 
-        h3 { font-size: 1.1rem; color: #343a40; margin: 1.5rem 0 0.75rem 0; }
+        h3 { font-size: 1.1rem; color: var(--ink); margin: var(--space-6) 0 var(--space-3) 0; }
+        .tab-pane > h3:first-child, .pane-title + h3 { margin-top: 0; }
 
         /* === Footer === */
-        .report-footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid #dee2e6; font-size: 0.75rem; color: #888; text-align: center; }
+        .report-footer { margin-top: var(--space-8); padding-top: var(--space-4); border-top: 1px solid var(--line); font-size: 0.8rem; color: var(--muted); text-align: center; }
 
-        /* === Print === */
+        /* === Print: every section, each with its heading === */
         @media print {
-            .tab-pane { display: block !important; page-break-inside: avoid; }
+            .tab-pane { display: block !important; }
+            .pane-title { position: static; width: auto; height: auto; overflow: visible; clip: auto; clip-path: none; white-space: normal; font-size: 1.3rem; margin: var(--space-6) 0 var(--space-3); break-after: avoid; }
+            .rec-card, tr { break-inside: avoid; }
             .tab-bar, .tab-radio { display: none; }
             body { padding: 0; background: #fff; }
         }

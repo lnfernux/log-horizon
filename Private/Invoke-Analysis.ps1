@@ -268,16 +268,24 @@ function Invoke-Analysis {
     foreach ($shared in @($sharedSources)) {
         $t = $tableAnalysis | Where-Object TableName -eq $shared.TableName | Select-Object -First 1
         $lakeSources = @($shared.Sources | Where-Object RecommendedTier -eq 'datalake')
-        if ($t.IsFree -or $t.HasTransform -or ($t.TablePlan -and $t.TablePlan -ne 'Analytics') -or $shared.LakeMonthlyGB -le 0 -or $lakeSources.Count -eq 0) { continue }
+        if ($t.IsFree -or $t.HasTransform -or ($t.TablePlan -and $t.TablePlan -ne 'Analytics') -or $shared.LakeMonthlyGB -lt 1 -or $lakeSources.Count -eq 0) { continue }
 
         [void]$sharedSplitTables.Add($shared.TableName)
         $names = @($lakeSources | ForEach-Object DisplayName)
         $nameText = if ($names.Count -gt 5) { "$(($names | Select-Object -First 5) -join ', ') and $($names.Count - 5) more" } else { $names -join ', ' }
         $detail = "$($lakeSources.Count) source(s) in $($shared.TableName) are recommended for the data lake: $nameText. " +
                   "Splitting by source moves about $($shared.LakeMonthlyGB) GB/mo to $($shared.TableName)_SPLT, based on a $($shared.SampleDays)-day sample. "
+        if ($shared.RuleConditionCount -gt 0) {
+            $detail += "The condition keeps the rows matched by $($shared.RuleConditionCount) where-condition(s) from enabled rules on the table. "
+        }
         $parserRules = ($lakeSources | Measure-Object ParserRuleCount -Sum).Sum
         if ($parserRules -gt 0) {
             $detail += "$parserRules enabled rule(s) call parsers for these sources. Check that the split keeps the rows they need. "
+        }
+        # The portal and DCRs prepend 'source | where ' to the condition
+        $transformLength = "source | where $($shared.SplitCondition)".Length
+        if ($transformLength -gt 15360) {
+            $detail += "The condition is $transformLength characters, above the 15,360-character limit for a transformation. Shorten it before applying. "
         }
         $detail += 'The composed split condition is listed under Shared table sources.'
         $recommendations.Add([PSCustomObject]@{
@@ -927,6 +935,7 @@ function Get-DetectionAnalyzerData {
         $closed = @($ruleIncidents | Where-Object { $_.Status -eq 'Closed' })
 
         $autoClosed = [System.Collections.Generic.List[object]]::new()
+        $attributedAutoClosed = 0
         $autoClosedIds = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
         $linkedAutomation = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
 
@@ -948,6 +957,8 @@ function Get-DetectionAnalyzerData {
                     foreach ($m in $matched) { if ($m.DisplayName) { [void]$linkedAutomation.Add($m.DisplayName) } }
                 }
             }
+
+            if ($isAutoClose) { $attributedAutoClosed++ }
 
             # Timing heuristic: only use this when no enabled close/playbook rule exists
             # to avoid overriding an explicit non-match on automation conditions.
@@ -996,6 +1007,7 @@ function Get-DetectionAnalyzerData {
             IncidentsTotal          = $total
             IncidentsClosed         = $closed.Count
             IncidentsAutoClosed     = $autoClosed.Count
+            IncidentsAutoClosedAttributed = $attributedAutoClosed
             IncidentsManualClosed   = $manualClosed.Count
             FalsePositiveClosed     = $falsePositive.Count
             BenignPositiveClosed    = $benignPositive.Count
@@ -1044,18 +1056,30 @@ function Get-DetectionAnalyzerData {
         }
     }
 
-    $noisyRules = @($ruleMetrics | Where-Object {
-        $_.Enabled -and $_.IncidentsTotal -ge 5 -and $null -ne $_.NoisinessScore -and $_.NoisinessScore -ge 70
-    })
+    # Percentiles need a population; a rule that is almost always auto-closed or false positive is noisy on its own.
+    # Ratios use closed incidents, and only auto-closes attributed to automation, not the 5-minute timing heuristic.
+    $noisyRatio = 0.8
+    foreach ($metric in $ruleMetrics) {
+        $attributedRatio = if ($metric.IncidentsClosed -gt 0) { $metric.IncidentsAutoClosedAttributed / $metric.IncidentsClosed } else { 0 }
+        $isNoisy = $metric.Enabled -and (
+            ($metric.IncidentsTotal -ge 5 -and $null -ne $metric.NoisinessScore -and $metric.NoisinessScore -ge 70) -or
+            ($metric.IncidentsClosed -ge 5 -and ($attributedRatio -ge $noisyRatio -or $metric.FalsePositiveRatio -ge $noisyRatio)))
+        Add-Member -InputObject $metric -NotePropertyName IsNoisy -NotePropertyValue ([bool]$isNoisy)
+        Add-Member -InputObject $metric -NotePropertyName AttributedAutoCloseRatio -NotePropertyValue ([math]::Round($attributedRatio, 4))
+    }
+    $noisyRules = @($ruleMetrics | Where-Object IsNoisy)
 
     $recList = [System.Collections.Generic.List[object]]::new()
     foreach ($rule in $noisyRules) {
+        $reason = if ($null -ne $rule.NoisinessScore -and $rule.NoisinessScore -ge 70) { "score $($rule.NoisinessScore)" }
+                  elseif ($rule.AttributedAutoCloseRatio -ge $noisyRatio) { "$([math]::Round($rule.AttributedAutoCloseRatio * 100, 1))% of closed incidents auto-closed by automation" }
+                  else { "$([math]::Round($rule.FalsePositiveRatio * 100, 1))% of closed incidents false positive" }
         $recList.Add([PSCustomObject]@{
             Priority     = 'High'
             Type         = 'DetectionAnalyzer'
             TableName    = '(rule-level)'
             Title        = "Review noisy rule: $($rule.RuleName)"
-            Detail       = "Rule appears noisy (score $($rule.NoisinessScore)). Auto-close ratio: $($rule.AutoCloseRatio), false positive ratio: $($rule.FalsePositiveRatio), incidents: $($rule.IncidentsTotal)."
+            Detail       = "Rule appears noisy ($reason). Auto-close ratio: $($rule.AutoCloseRatio), false positive ratio: $($rule.FalsePositiveRatio), incidents: $($rule.IncidentsTotal)."
             EstSavingsUSD = 0
             CurrentCost   = 0
         })

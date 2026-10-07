@@ -179,7 +179,7 @@ If you omit `-Output`, the analysis object is returned to the pipeline so you ca
 
 ### Collection cache
 
-The data collection phase (usage, rules, incidents, tables, DCRs) is cached by default so re-running against the same workspace, for example to export a second format or to reopen the TUI, takes seconds instead of minutes. The cache lives under `$env:LOCALAPPDATA\LogHorizon\cache` (override with `-CachePath`), one file per combination of subscription, resource group, workspace, `-DaysBack`, `-DetectionLookbackDays`, `-IncludeDefenderXDR`, `-IncludeDetectionAnalyzer`, the three price parameters and the module version. Entries older than `-CacheMaxAgeMinutes` (default 60) are ignored, and every save deletes expired entries so the folder does not accumulate files from other parameter sets or older versions. Tokens are never written to the cache; authentication runs on every invocation so the retention wizard always has live credentials.
+The data collection phase (usage, rules, incidents, tables, DCRs) is cached by default so re-running against the same workspace, for example to export a second format or to reopen the TUI, takes seconds instead of minutes. The cache lives under `$env:LOCALAPPDATA\LogHorizon\cache` (override with `-CachePath`), one file per combination of subscription, resource group, workspace, `-DaysBack`, `-DetectionLookbackDays`, `-IncludeDefenderXDR`, `-IncludeDetectionAnalyzer`, `-SkipSharedSources`, the three price parameters and the module version. Entries older than `-CacheMaxAgeMinutes` (default 60) are ignored, and every save deletes expired entries so the folder does not accumulate files from other parameter sets or older versions. Tokens are never written to the cache; authentication runs on every invocation so the retention wizard always has live credentials.
 
 The cache file is plaintext Clixml. With `-IncludeDetectionAnalyzer` it contains incident titles, numbers, status and classification from your workspace; incident owners, rule authors and assigned-owner identities are not collected. Use `-NoCache` on shared machines or point `-CachePath` at a location with the access control you need.
 
@@ -219,6 +219,7 @@ Invoke-LogHorizon -SubscriptionId '...' -ResourceGroup 'rg' -WorkspaceName 'ws' 
 | `-Keywords` | string[] | No | - | Keywords for gap analysis (e.g. `'AWS','CrowdStrike'`, alias `-kw`) |
 | `-IncludeDefenderXDR` | switch | No | - | Include Defender XDR custom detection analysis |
 | `-IncludeDetectionAnalyzer` | switch | No | - | Include per-rule noisy detection analysis using incidents and automation rules |
+| `-SkipSharedSources` | switch | No | - | Skip the per-source volume query on `CommonSecurityLog` and `Syslog` (one 7-day scan per table) |
 | `-DetectionLookbackDays` | int | No | 90 | Query window for incident/automation-based detection analysis (1-365 days) |
 | `-DaysBack` | int | No | 90 | Query window for usage data (1-365 days) |
 | `-PricePerGB` | decimal | No | 5.59 | Sentinel Analytics tier ingestion price per GB (alias `-ppgb`) |
@@ -291,14 +292,14 @@ Then the module generates recommendations (14 types):
 | **Missing Coverage** | Primary + zero detections (not platform tables) | Write analytics rules to get value from the data |
 | **Ingest-time Filter** | Primary + >20 GB + <=3 detections | Apply ingest-time transformation to cut volume |
 | **Split Candidate** | Primary + high volume + detections + no existing transform | Split the table so high-value rows stay on Analytics and the rest goes to Data Lake |
-| **Shared Table Split** | `CommonSecurityLog` or `Syslog` carries sources the baseline recommends for the data lake, measured per source over a 7-day sample | Apply the composed split condition from **Log Tuning / Transforms > Shared table sources**. It replaces the generic split estimate for that table |
+| **Shared Table Split** | `CommonSecurityLog` or `Syslog` on the Analytics plan carries at least 1 GB/mo of sources the baseline recommends for the data lake, measured per source over a 7-day sample | Apply the composed split condition from **Log Tuning / Transforms > Shared table sources**. It keeps the rows matched by where-conditions of enabled rules on the table and replaces the generic split estimate for that table |
 | **Plan Usage** | Usage rows show more than one plan, or the configured plan differs from what Usage observed | Review whether the plan transition was expected |
 | **Deprecated Source** | A table marked deprecated or legacy in the database is still ingesting | Migrate detections to the replacement tables, then retire the old connector. Informational: no savings are claimed because the ingestion moves rather than disappears |
 | **Retention Shortfall** | Workspace or table retention below the 90-day baseline | Increase total/archive retention to meet regulatory guidance |
 | **Retention Improvement** | Paid, non-platform table meets 90d but sits below the category recommendation | Consider longer total retention |
 | **Interactive Below Baseline** | Analytics table with interactive (hot) retention under 90 days | Raise interactive retention to the 90 days Sentinel includes, unless the short hot window is deliberate |
 | **XDR Checker** | Known Defender XDR table not streamed, streamed without coverage, not forwarded to Data Lake, or below the one-year advisory | Review streaming and retention for XDR telemetry |
-| **Detection Analyzer** | Rule scores >= 70 with at least 5 incidents (with `-IncludeDetectionAnalyzer`) | Tune or disable the noisy rule |
+| **Detection Analyzer** | Rule scores >= 70 with at least 5 incidents, or has at least 5 closed incidents of which 80% or more were auto-closed by automation or closed as false positive (with `-IncludeDetectionAnalyzer`) | Tune or disable the noisy rule |
 
 Recommendations are sorted once, High > Medium > Low and then by estimated savings, and every output (JSON, Markdown, HTML, TUI) keeps that order.
 
@@ -311,8 +312,8 @@ When you pass `-IncludeDetectionAnalyzer`, the module fetches recent incidents a
 | Metric | How it's calculated |
 |---|---|
 | Incidents total | Count of incidents linked to the rule |
-| AutoClose ratio | Incidents closed by automation rules ÷ total incidents. Primary source: SentinelHealth table (automation rule runs by enabled close-incident or playbook rules, matched on incident number). Fallback: automation rule condition matching (analytic rule id, title and severity conditions, ANDed like Sentinel does). Rules whose conditions are only status/tactics/entities are treated as applying to every incident. |
-| FalsePositive ratio | Incidents classified as false positive ÷ total incidents |
+| AutoClose ratio | Incidents closed by automation rules ÷ closed incidents. Primary source: SentinelHealth table (automation rule runs by enabled close-incident or playbook rules, matched on incident number). Fallback: automation rule condition matching (analytic rule id, title and severity conditions, ANDed like Sentinel does). Rules whose conditions are only status/tactics/entities are treated as applying to every incident. With no enabled close rules, incidents closed within 5 minutes also count. |
+| FalsePositive ratio | Incidents classified as false positive ÷ closed incidents |
 
 **Noisiness score formula**:
 
@@ -337,7 +338,7 @@ Score = (Volume_percentile × 0.35) + (AutoClose_percentile × 0.40) + (FalsePos
 
 Incidents are bucketed by analytic rule id (falling back to rule name, then title), so two rules sharing a display name are scored separately.
 
-Rules with a score ≥ 70 and at least 5 incidents are automatically surfaced as **High-priority recommendations** in the Recommendations view.
+Rules with a score ≥ 70 and at least 5 incidents are automatically surfaced as **High-priority recommendations** in the Recommendations view. So are rules with at least 5 closed incidents where 80% or more were auto-closed by automation (SentinelHealth or a matching close rule, not the 5-minute timing fallback) or closed as false positive. That ratio rule needs no population, so it still applies when fewer than 3 rules have incidents and the score is N/A.
 
 ### 5. Interactive dashboard
 
@@ -353,7 +354,7 @@ The main menu offers these views:
 - **Log Tuning / Transforms**: live tuning suggestions, knowledge-base split KQL, and a per-table evaluator with a single-table retention/type change
 - **View All Tables**: the full list with classification, plans, cost, rules, retention (colour-coded), and assessment; pick a table for a detail panel (coverage sources, plan support, retention, status, its recommendations)
 - **Manage table retention and type**: bulk retention and plan wizard with preview and apply
-- **Dictionary**: every term the tool uses (classification, cost and detection tiers, assessments, coverage sources, the 13 recommendation types, Detection Analyzer metrics and score labels, table plans, lifecycle status, XDR states, transform types) with the same definitions as this README, served from `Data/dictionary.json`
+- **Dictionary**: every term the tool uses (classification, cost and detection tiers, assessments, coverage sources, the 14 recommendation types, Detection Analyzer metrics and score labels, table plans, lifecycle status, XDR states, transform types) with the same definitions as this README, served from `Data/dictionary.json`
 - **Export Report**: pick a format, then a path (directory for a timestamped file, or a file name; Enter keeps the current directory) and write JSON, Markdown or HTML right from the menu
 - **XDR Analysis** appears on the dashboard when you used `-IncludeDefenderXDR`
 
@@ -547,7 +548,7 @@ Data/
   custom-classifications-example.json   Example custom classification override file
   ReportTemplate.html                   Static HTML report template (pure-CSS tabs, zero JS, CSP meta)
 Tests/
-  LogHorizon.Tests.ps1       461 Pester v5 unit tests
+  LogHorizon.Tests.ps1       475 Pester v5 unit tests
 ```
 
 ### How the knowledge bases are generated
@@ -564,7 +565,7 @@ At runtime, `Get-SplitKql` uses a fallback hierarchy: curated KB entry -> live r
 
 ## Tests
 
-437 Pester v5 tests, no Azure connectivity required. Run them from a plain PowerShell session rather than the VS Code integrated terminal:
+475 Pester v5 tests, no Azure connectivity required. Run them from a plain PowerShell session rather than the VS Code integrated terminal:
 
 ```powershell
 Invoke-Pester ./Tests/LogHorizon.Tests.ps1 -Output Detailed
@@ -576,25 +577,7 @@ GPL-3.0. See [LICENSE](LICENSE).
 
 ## Version history
 
-| Version | Date | Changes |
-|---|---|---|
-| 0.10.0 | 2026-10-07 | Data now comes from the bundled [log-baseline](https://github.com/lnfernux/log-baseline) release 0.5.0 (946 classifications, 57 shared-table sources), vendored by `scripts/Update-LogBaseline.ps1` and the baseline update workflow, with `Data/baseline-version.json` recording the release, source commit and file checksums. Keyword gaps skip deprecated, legacy and XDR-only tables (`logAnalyticsTable: false`) and label Defender native tables as already queryable in advanced hunting. Rules that call a parser count toward the parser's source tables. New `SharedTableSplit` recommendation: per-source volume in `CommonSecurityLog` and `Syslog` from a 7-day `_BilledSize` sample, one composed split condition with table and `_SPLT` retention, shown under Log Tuning / Transforms > Shared table sources and in the reports. `Get-SplitKql` joins all split hints. Long `DeprecatedSource` replacement lists are truncated. 461 tests passing |
-| 0.9.0 | 2026-09-06 | Remediation release from a full code and data review. Correctness: plan-aware pricing from `Usage.Plan` and `Usage.IsBillable` with Basic and Data Lake rates and billing GB (1000 MB), Detection Analyzer auto-close attribution restricted to enabled close/playbook rules (`triggeringLogic.isEnabled`), incidents via `2025-09-01` with `$top=1000`, implicit coverage for non-KQL rule kinds and platform tables (`implicit-consumers.json`), interactive-retention baseline check, single recommendation sort. Transforms: DCR discovery at subscription scope filtered on destination workspace plus the workspace transformation DCR and associations, with a visible status and warning when a permission is missing; workspace and multi-stage transform parsing; split KQL intersected with the live table schema. Robustness: collection cache on by default (`-NoCache`, `-RefreshCache`, `-CacheMaxAgeMinutes`, `-CachePath`), authentication before the spinner with warnings printed afterwards, escaped TUI and Markdown output, export path resolution that creates directories and returns the written path, CSP meta in HTML, REST retries on transport errors and Location-style async completion, workspace resolution over REST (`Az.Resources` dropped), custom classification validation, PascalCase-aware heuristics with a Microsoft first-party fallback, regex timeouts. Endpoints follow the signed-in Azure environment (Government, China) and API versions moved to SecurityInsights `2025-09-01`, OperationalInsights `2025-07-01`, recommendations `2025-10-01-preview`. Data: classification database 345 -> 481 entries with `status`/`replacedBy`/`xdrStreamable`/`platform` keys, 80+ first-party and 35 successor tables, connector label fixes, `isFree` corrections; regenerated `basic-plan-tables.json` and new `auxiliary-plan-tables.json` from the Azure Monitor table feature matrix; `DeprecatedSource` recommendation, plan-aware Data Lake recommendation with Basic fallback, XDR Checker honours streamability, lifecycle badges in TUI and exports. Review pass: cache key covers pricing and module version, custom classification booleans and tiers parsed rather than cast, severity-aware auto-close attribution, split KQL predicates checked against the live schema, XDR fetch status surfaced instead of a silent `$null`, output paths without an extension are files, incident owner identities no longer collected. Dictionary menu in the TUI with every term the tool uses, backed by `Data/dictionary.json` and pinned to the code by tests. Automation rule and Defender custom detection objects are projected to the consumed fields, so author identities (createdBy, lastModifiedBy, assigned owners) never reach the cache or exports. GPL-3.0 licence. 437 tests |
-| 0.8.0 | 2026-05-26 | Added interactive table retention management with a new bulk TUI flow and single-table update entry point, plus the public `Set-LogHorizonTableRetention` command. Added Tables API PATCH apply engine with validation, Azure async-operation polling, and two-step fallback (combined PATCH, then plan-only plus retention-only) for resilient retention updates. Added focused Pester coverage for validation, payload shape, fallback, and public command mapping. Also fixes an edge-case/bug where users would get recommendations to change data lake tables to data lake tier if they had analytics data still in Sentinel |
-| 0.7.1 | 2026-05-15 | Added plan-awareness from `Usage.Plan` without replacing the configured table plan: analysis now tracks observed plan history, flags multi-plan usage and configured-vs-observed mismatches, and surfaces plan data in the dashboard, table drill-down, View All Tables, retention assessment, and exports. Fixed Detection Analyzer auto-close attribution so the timing heuristic only applies when no enabled automation rules exist. 203 tests passing |
-| 0.7.0 | 2026-04-16 | Detection Assessment updated with cost-value matrix summary table (Primary/Secondary x7 assessment categories with color coding), drill-down submenu for primary/secondary tables with cost/detection tier columns. Detection Analyzer updated with GB-weighted volume coverage bars (detection/hunting/combined GB as percentage of total ingestion alongside existing table-count bars). Adaptive display improvements for Detection Analyzer (dynamic bar width, rule name truncation, conditional column hiding based on console width). 193 tests passing|
-| 0.6.3 | 2026-04-11 | Minor update for PSGallery|
-| 0.6.2 | 2026-04-11 | Log Tuning / Transforms menu: live data tuning analysis (per-table field usage from deployed rules/hunting queries, filter/project/combined KQL generation, savings estimates), schema column extraction from Tables API, `Get-SplitKql` fallback hierarchy (community stats → category defaults → universal fields), comprehensive table evaluator with field usage matrix, unified KB + live tuning export sections, `Build-FieldKnowledgeBase.ps1` mining script for Azure-Sentinel GitHub rule corpus. Detection Analyzer: SentinelHealth-based auto-close attribution (primary) with operator-aware rule-matching fallback, Boolean condition wrapper parsing, Resolved status detection, GUID-tail matching for ARM resource IDs. Coverage now table-count-based across all tables (including free tier). Scoring disclaimer added to TUI and exports. 174 tests |
-| 0.6.1 | 2026-04-10 | Bug fixes: `$kqlKeywords` filtering now shared at file scope (was undefined in `Get-TablesFromKql`), `[CmdletBinding()]` added to all helper functions, Defender unified check simplified, removed ghost `-RuleCount` test param. Robustness: `Get-HuntingQueries` pagination, `Invoke-AzRestWithRetry` retry wrapper with exponential backoff for 429/5xx, `PricePerGB` validation, `Write-Verbose` in key functions. Docs: version badge, DB count, prerequisites aligned with manifest |
-| 0.6.0 | 2026-04-10 | Dynamic XDR streaming detection with 21 `KnownXDRTables` (was hardcoded 18), per-table `XDRState` (`NotStreaming`/`Analytics`/`Basic`/`Auxiliary`), Auxiliary recognized as data lake tier, not-streamed XDR tables surfaced as Information/Low recommendations with `NotStreamedCount`, retention analyzer shows not-streamed XDR tables as "XDR only (30d)", overview tier breakdown (analytics/basic/data lake + not streamed), Export-Report Auxiliary→"data lake" labels, classification DB updated to 345 entries (+`DeviceNetworkInfo`, `DeviceInfo`→secondary/datalake, `DeviceImageLoadEvents` and `IdentityQueryEvents`→datalake tier), 15 new Pester tests (121 total) |
-| 0.5.0 | 2026-04-03 | Static HTML export with pure-CSS tabs (zero JS, no CDN, fully self-contained), unified MD/HTML section renderer, complete JSON data capture (dataTransforms, correlationExcluded/Included, streamingTables), `-NonInteractive` switch for CI/pipeline usage, `md` format alias, datetime-stamped auto-filenames, full KQL display in DCR transforms (no truncation), multiline KQL handling in markdown tables, fixed regex `$`-backreference corruption in HTML token replacement, renamed internal helpers to avoid PowerShell alias conflicts (`h`→`hEnc`, `md`→`mdEsc`), 33 new Pester tests (106 total) |
-| 0.4.1 | 2026-04-03 | Security & stability fixes - added token memory sanitization, output path validation & XSS protection, REST API pagination limits, fixed module loader error masking, and resolved PSScriptAnalyzer warnings |
-| 0.4.0 | 2026-04-02 | Transform discovery (DCR listing + transform type classification), split table detection (`_SPLT_CL`), split KQL helper with 15-table knowledge base (`high-value-fields.json`) + rule-analysis fallback, portal-ready condition-only KQL output, expandable recommendations list, split KQL suggestions TUI menu |
-| 0.3.0 | 2026-04-02 | Log retention compliance analysis (CISA M-21-31, NIST SP 800-92, NCSC-UK, ASD ACSC, NSA), correlation tag detection (`#DONT_CORR#`/`#INC_CORR#`), retention assessment menu view, retention column in All Tables, `recommendedRetentionDays` in classification schema |
-| 0.2.2 | 2026-04-02 | SOC optimization table hides Detail column on narrow consoles |
-| 0.2.1 | 2026-04-02 | Custom classification support (`-CustomClassificationPath`), enriched SOC optimization recommendations with API suggestions/drill-down, active-only default view, UTF-8 encoding warning suppression |
-| 0.2.0 | - | Initial public release with classification engine, cost-value scoring, Spectre.Console TUI, export to JSON/Markdown |
-| 0.1.0 | - | Internal version for development |
+See [CHANGELOG.md](CHANGELOG.md).
 
 ## Known issues
 

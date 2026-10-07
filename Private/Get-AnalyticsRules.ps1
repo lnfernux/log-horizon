@@ -219,15 +219,28 @@ function Get-TablesFromKql {
     }
 
     # A rule that calls a parser reads the parser's source tables; the alias itself is not a table.
+    # String literals and comments are blanked first so "Guardian" in a filter value is not a parser call.
     $parserMap = Get-ParserTableMap
+    $code = Remove-KqlLiteral -Kql $Kql
     foreach ($alias in $parserMap.Keys) {
         if ($alias -in $letNames) { continue }
-        if ($Kql -cmatch "(?<![\w.$])$([regex]::Escape($alias))(?![\w])") {
+        if ($code -cmatch "(?<![\w.$])$([regex]::Escape($alias))(?![\w])") {
             [void]$found.Remove($alias)
             foreach ($t in $parserMap[$alias]) { [void]$found.Add($t) }
         }
     }
     @($found)
+}
+
+function Remove-KqlLiteral {
+    <#
+    .SYNOPSIS
+        Blanks string literals and // comments so identifier matches only see code.
+    #>
+    [CmdletBinding()]
+    param([string]$Kql)
+
+    "$Kql" -replace '"(?:[^"\\\r\n]|\\.)*"', '""' -replace "'(?:[^'\\\r\n]|\\.)*'", "''" -replace '//[^\r\n]*', ''
 }
 
 function Get-ParserTableMap {

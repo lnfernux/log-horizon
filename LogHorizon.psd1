@@ -18,7 +18,7 @@
             Tags       = @('Sentinel', 'SIEM', 'Security', 'Azure', 'LogAnalytics')
             ProjectUri = 'https://github.com/lnfernux/log-horizon'
             LicenseUri = 'https://www.gnu.org/licenses/gpl-3.0.html'
-            ReleaseNotes = 'v0.10.0: bundled log-baseline 0.5.0 (946 classifications, 57 shared-table sources) vendored by Update-LogBaseline and the baseline update workflow; keyword gaps skip retired and XDR-only tables and label Defender native tables; rules that call a parser count toward its source tables; per-source volume in CommonSecurityLog and Syslog with a composed split rule (SharedTableSplit); split KQL uses all split hints. Full history: https://github.com/lnfernux/log-horizon#version-history'
+            ReleaseNotes = 'v0.10.0: bundled log-baseline 0.5.0 (946 classifications, 57 shared-table sources) vendored by Update-LogBaseline and the baseline update workflow; keyword gaps skip retired and XDR-only tables and label Defender native tables; rules that call a parser count toward its source tables; per-source volume in CommonSecurityLog and Syslog with a composed split rule (SharedTableSplit); split KQL uses all split hints; TUI views stay on screen until Back and redraw after a window resize; Detection Analyzer flags rules whose closed incidents are 80% or more auto-closed by automation or false positive without needing a score. Full history: https://github.com/lnfernux/log-horizon/blob/main/CHANGELOG.md'
         }
     }
 }
