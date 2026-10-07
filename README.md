@@ -5,7 +5,7 @@
 ### Microsoft Sentinel SIEM Log Source Analyzer
 
 ![PowerShell 7+](https://img.shields.io/badge/PowerShell-7%2B-blue)
-![Module Version](https://img.shields.io/badge/version-0.9.0-green)
+![Module Version](https://img.shields.io/badge/version-0.10.0-green)
 [![Log Baseline](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Flnfernux%2Flog-horizon%2Fmain%2FData%2Fbaseline-version.json&query=%24.dataVersion&label=log-baseline&color=00cc00)](https://github.com/lnfernux/log-baseline/releases)
 
 ---
@@ -507,7 +507,7 @@ Other sources were also used, along with the authors "expertise" if you can cate
 ## Project layout
 
 ```
-LogHorizon.psd1              Module manifest (v0.9.0)
+LogHorizon.psd1              Module manifest (v0.10.0)
 LogHorizon.psm1              Module loader
 Public/
   Invoke-LogHorizon.ps1              Entry point, the main orchestrator
@@ -535,7 +535,7 @@ Private/
   Write-Report.ps1           Spectre.Console TUI rendering
   Export-Report.ps1          JSON / Markdown / static HTML export with shared section renderer
 Data/
-  log-classifications.json              510-entry classification knowledge base
+  log-classifications.json              946-entry classification knowledge base
   baseline-version.json                 Bundled log-baseline release version, source commit, and file checksums
   basic-plan-tables.json                Built-in tables that support the Basic plan (from the Azure Monitor feature matrix)
   auxiliary-plan-tables.json            Built-in tables that support the Auxiliary / Data Lake plan
@@ -578,6 +578,7 @@ GPL-3.0. See [LICENSE](LICENSE).
 
 | Version | Date | Changes |
 |---|---|---|
+| 0.10.0 | 2026-10-07 | Data now comes from the bundled [log-baseline](https://github.com/lnfernux/log-baseline) release 0.5.0 (946 classifications, 57 shared-table sources), vendored by `scripts/Update-LogBaseline.ps1` and the baseline update workflow, with `Data/baseline-version.json` recording the release, source commit and file checksums. Keyword gaps skip deprecated, legacy and XDR-only tables (`logAnalyticsTable: false`) and label Defender native tables as already queryable in advanced hunting. Rules that call a parser count toward the parser's source tables. New `SharedTableSplit` recommendation: per-source volume in `CommonSecurityLog` and `Syslog` from a 7-day `_BilledSize` sample, one composed split condition with table and `_SPLT` retention, shown under Log Tuning / Transforms > Shared table sources and in the reports. `Get-SplitKql` joins all split hints. Long `DeprecatedSource` replacement lists are truncated. 461 tests passing |
 | 0.9.0 | 2026-09-06 | Remediation release from a full code and data review. Correctness: plan-aware pricing from `Usage.Plan` and `Usage.IsBillable` with Basic and Data Lake rates and billing GB (1000 MB), Detection Analyzer auto-close attribution restricted to enabled close/playbook rules (`triggeringLogic.isEnabled`), incidents via `2025-09-01` with `$top=1000`, implicit coverage for non-KQL rule kinds and platform tables (`implicit-consumers.json`), interactive-retention baseline check, single recommendation sort. Transforms: DCR discovery at subscription scope filtered on destination workspace plus the workspace transformation DCR and associations, with a visible status and warning when a permission is missing; workspace and multi-stage transform parsing; split KQL intersected with the live table schema. Robustness: collection cache on by default (`-NoCache`, `-RefreshCache`, `-CacheMaxAgeMinutes`, `-CachePath`), authentication before the spinner with warnings printed afterwards, escaped TUI and Markdown output, export path resolution that creates directories and returns the written path, CSP meta in HTML, REST retries on transport errors and Location-style async completion, workspace resolution over REST (`Az.Resources` dropped), custom classification validation, PascalCase-aware heuristics with a Microsoft first-party fallback, regex timeouts. Endpoints follow the signed-in Azure environment (Government, China) and API versions moved to SecurityInsights `2025-09-01`, OperationalInsights `2025-07-01`, recommendations `2025-10-01-preview`. Data: classification database 345 -> 481 entries with `status`/`replacedBy`/`xdrStreamable`/`platform` keys, 80+ first-party and 35 successor tables, connector label fixes, `isFree` corrections; regenerated `basic-plan-tables.json` and new `auxiliary-plan-tables.json` from the Azure Monitor table feature matrix; `DeprecatedSource` recommendation, plan-aware Data Lake recommendation with Basic fallback, XDR Checker honours streamability, lifecycle badges in TUI and exports. Review pass: cache key covers pricing and module version, custom classification booleans and tiers parsed rather than cast, severity-aware auto-close attribution, split KQL predicates checked against the live schema, XDR fetch status surfaced instead of a silent `$null`, output paths without an extension are files, incident owner identities no longer collected. Dictionary menu in the TUI with every term the tool uses, backed by `Data/dictionary.json` and pinned to the code by tests. Automation rule and Defender custom detection objects are projected to the consumed fields, so author identities (createdBy, lastModifiedBy, assigned owners) never reach the cache or exports. GPL-3.0 licence. 437 tests |
 | 0.8.0 | 2026-05-26 | Added interactive table retention management with a new bulk TUI flow and single-table update entry point, plus the public `Set-LogHorizonTableRetention` command. Added Tables API PATCH apply engine with validation, Azure async-operation polling, and two-step fallback (combined PATCH, then plan-only plus retention-only) for resilient retention updates. Added focused Pester coverage for validation, payload shape, fallback, and public command mapping. Also fixes an edge-case/bug where users would get recommendations to change data lake tables to data lake tier if they had analytics data still in Sentinel |
 | 0.7.1 | 2026-05-15 | Added plan-awareness from `Usage.Plan` without replacing the configured table plan: analysis now tracks observed plan history, flags multi-plan usage and configured-vs-observed mismatches, and surfaces plan data in the dashboard, table drill-down, View All Tables, retention assessment, and exports. Fixed Detection Analyzer auto-close attribution so the timing heuristic only applies when no enabled automation rules exist. 203 tests passing |

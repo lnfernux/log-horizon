@@ -1,6 +1,6 @@
 @{
     RootModule        = 'LogHorizon.psm1'
-    ModuleVersion     = '0.9.0'
+    ModuleVersion     = '0.10.0'
     GUID              = 'a3f7c8d1-4e2b-4f9a-b6c3-8d5e1f2a7b4c'
     Author            = 'infernux.no'
     Description       = 'Sentinel SIEM log source analyzer - classifies, scores, and optimizes log ingestion.'
@@ -18,7 +18,7 @@
             Tags       = @('Sentinel', 'SIEM', 'Security', 'Azure', 'LogAnalytics')
             ProjectUri = 'https://github.com/lnfernux/log-horizon'
             LicenseUri = 'https://www.gnu.org/licenses/gpl-3.0.html'
-            ReleaseNotes = 'v0.9.0: plan-aware pricing from Usage.Plan and Usage.IsBillable; default-on collection cache (-NoCache, -RefreshCache, -CacheMaxAgeMinutes, -CachePath); DCR discovery at subscription scope with workspace transformation DCR and associations; classification database 481 tables with lifecycle status, XDR streamability and platform flags; DeprecatedSource and plan-aware Data Lake recommendations; severity-aware auto-close attribution; sovereign cloud endpoints; current API versions; Dictionary menu; Az.Resources dependency removed; GPL-3.0. Full history: https://github.com/lnfernux/log-horizon#version-history'
+            ReleaseNotes = 'v0.10.0: bundled log-baseline 0.5.0 (946 classifications, 57 shared-table sources) vendored by Update-LogBaseline and the baseline update workflow; keyword gaps skip retired and XDR-only tables and label Defender native tables; rules that call a parser count toward its source tables; per-source volume in CommonSecurityLog and Syslog with a composed split rule (SharedTableSplit); split KQL uses all split hints. Full history: https://github.com/lnfernux/log-horizon#version-history'
         }
     }
 }
