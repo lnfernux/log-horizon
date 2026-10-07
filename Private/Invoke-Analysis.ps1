@@ -25,6 +25,7 @@ function Invoke-Analysis {
         [array]$Incidents = @(),
         [array]$AutomationRules = @(),
         [hashtable]$AutoCloseHealthData,
+        [array]$SharedSourceUsage = @(),
         [switch]$IncludeDetectionAnalyzer
     )
 
@@ -258,6 +259,39 @@ function Invoke-Analysis {
     # Generate recommendations
     $recommendations = [System.Collections.Generic.List[PSCustomObject]]::new()
 
+    # 13. Shared tables (CEF/Syslog): split by measured source instead of the generic split estimate
+    $sharedSources = if (@($SharedSourceUsage).Count -gt 0) {
+        Get-SharedSourceAnalysis -SharedSourceUsage $SharedSourceUsage -TableAnalysis $tableAnalysis `
+                                 -Sources (Get-SharedTableSource) -Rules @($RulesData.Rules) -LakePricePerGB $LakePricePerGB
+    } else { @() }
+    $sharedSplitTables = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+    foreach ($shared in @($sharedSources)) {
+        $t = $tableAnalysis | Where-Object TableName -eq $shared.TableName | Select-Object -First 1
+        $lakeSources = @($shared.Sources | Where-Object RecommendedTier -eq 'datalake')
+        if ($t.IsFree -or $t.HasTransform -or ($t.TablePlan -and $t.TablePlan -ne 'Analytics') -or $shared.LakeMonthlyGB -le 0 -or $lakeSources.Count -eq 0) { continue }
+
+        [void]$sharedSplitTables.Add($shared.TableName)
+        $names = @($lakeSources | ForEach-Object DisplayName)
+        $nameText = if ($names.Count -gt 5) { "$(($names | Select-Object -First 5) -join ', ') and $($names.Count - 5) more" } else { $names -join ', ' }
+        $detail = "$($lakeSources.Count) source(s) in $($shared.TableName) are recommended for the data lake: $nameText. " +
+                  "Splitting by source moves about $($shared.LakeMonthlyGB) GB/mo to $($shared.TableName)_SPLT, based on a $($shared.SampleDays)-day sample. "
+        $parserRules = ($lakeSources | Measure-Object ParserRuleCount -Sum).Sum
+        if ($parserRules -gt 0) {
+            $detail += "$parserRules enabled rule(s) call parsers for these sources. Check that the split keeps the rows they need. "
+        }
+        $detail += 'The composed split condition is listed under Shared table sources.'
+        $recommendations.Add([PSCustomObject]@{
+            Priority       = 'Medium'
+            Type           = 'SharedTableSplit'
+            TableName      = $shared.TableName
+            Title          = "Split $($shared.TableName) by source"
+            Detail         = $detail
+            EstSavingsUSD  = $shared.EstSavingsUSD
+            CurrentCost    = $t.EstMonthlyCostUSD
+            SplitCondition = $shared.SplitCondition
+        })
+    }
+
     foreach ($t in $tableAnalysis) {
         # 1. Data lake candidates: secondary + high cost + low rules (split copies are already lake data).
         #    Only when the table can actually move: Auxiliary where the feature matrix allows it, else Basic.
@@ -302,7 +336,9 @@ function Invoke-Analysis {
         # 12. Deprecated or legacy source still ingesting. Informational: migrating moves the
         #     ingestion to the replacement table rather than removing it, so no savings are claimed.
         if ($t.Status -in @('deprecated', 'legacy') -and $t.MonthlyGB -gt 0) {
-            $replacement = if (@($t.ReplacedBy).Count -gt 0) { "Replacement table(s): $(@($t.ReplacedBy) -join ', '). " } else { 'No direct replacement table is documented. ' }
+            $targets = @($t.ReplacedBy)
+            $targetText = if ($targets.Count -gt 5) { "$(($targets | Select-Object -First 5) -join ', ') and $($targets.Count - 5) more" } else { $targets -join ', ' }
+            $replacement = if ($targets.Count -gt 0) { "Replacement table(s): $targetText. " } else { 'No direct replacement table is documented. ' }
             $verb = if ($t.Status -eq 'deprecated') { 'is deprecated' } else { 'uses a legacy collection path' }
             $recommendations.Add([PSCustomObject]@{
                 Priority      = 'Medium'
@@ -392,6 +428,7 @@ function Invoke-Analysis {
         if (-not $t.IsFree -and
             -not $t.IsSplitTable -and
             -not $t.HasTransform -and
+            -not $sharedSplitTables.Contains($t.TableName) -and
             $t.MonthlyGB -ge 10 -and
             $t.EffectiveCoverage -ge 1 -and
             $t.Classification -eq 'primary') {
@@ -623,6 +660,7 @@ function Invoke-Analysis {
         TableAnalysis        = $tableAnalysis
         Recommendations      = @($sortedRecs)
         KeywordGaps          = $Classifications.KeywordGaps
+        SharedSources        = @($sharedSources)
         SocRecommendations   = $SocRecommendations
         CorrelationExcluded  = $corrExcluded
         CorrelationIncluded  = $corrIncluded

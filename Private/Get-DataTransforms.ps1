@@ -557,9 +557,9 @@ function Get-SplitKql {
     if ($HighValueFieldsDB -and $HighValueFieldsDB.ContainsKey($TableName)) {
         $hvEntry = $HighValueFieldsDB[$TableName]
         $hvFields = @($hvEntry.highValueFields)
-        if ($hvEntry.splitHints -and $hvEntry.splitHints.Count -gt 0) {
-            $splitHint = $hvEntry.splitHints[0]  # Use first (primary) hint
-        }
+        $hintKql = @(@($hvEntry.splitHints) | ForEach-Object { "$($_.kql)".Trim() } | Where-Object { $_ })
+        if ($hintKql.Count -eq 1) { $splitHint = $hintKql[0] }
+        elseif ($hintKql.Count -gt 1) { $splitHint = ($hintKql | ForEach-Object { "($_)" }) -join "`n    or " }
     }
 
     # 2b. Fallback: use field-frequency-stats for tables not in KB and with no rules
@@ -617,7 +617,7 @@ function Get-SplitKql {
 
     # Prefer knowledge-base split hint if available (these are curated)
     if ($splitHint) {
-        $splitKql = $splitHint.kql
+        $splitKql = $splitHint
         $source = 'knowledge-base'
 
         # Rule conditions widen the hint so every row a deployed rule needs stays in Analytics

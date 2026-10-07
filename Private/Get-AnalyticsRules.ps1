@@ -213,12 +213,44 @@ function Get-TablesFromKql {
     }
 
     # Pattern 5: table in datatable() or externaldata() - skip, not real tables
-    $tables | Where-Object {
-        $_ -notin $script:kqlKeywords -and
-        $_ -notin $letNames -and
-        $_.Length -gt 2 -and
-        $_ -cmatch '^[A-Z]'  # Real table names start with an uppercase letter
+    $found = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+    foreach ($t in $tables) {
+        if ($t -notin $script:kqlKeywords -and $t -notin $letNames -and $t.Length -gt 2 -and $t -cmatch '^[A-Z]') { [void]$found.Add($t) }
     }
+
+    # A rule that calls a parser reads the parser's source tables; the alias itself is not a table.
+    $parserMap = Get-ParserTableMap
+    foreach ($alias in $parserMap.Keys) {
+        if ($alias -in $letNames) { continue }
+        if ($Kql -cmatch "(?<![\w.$])$([regex]::Escape($alias))(?![\w])") {
+            [void]$found.Remove($alias)
+            foreach ($t in $parserMap[$alias]) { [void]$found.Add($t) }
+        }
+    }
+    @($found)
+}
+
+function Get-ParserTableMap {
+    <#
+    .SYNOPSIS
+        Parser alias -> source tables from the bundled field-frequency-stats.json, loaded once.
+    #>
+    [CmdletBinding()]
+    param([string]$Path = (Join-Path $PSScriptRoot '..\Data\field-frequency-stats.json'))
+
+    if ($null -ne $script:ParserTableMap) { return $script:ParserTableMap }
+    $map = @{}
+    if (Test-Path -LiteralPath $Path) {
+        $stats = Get-Content -LiteralPath $Path -Raw | ConvertFrom-Json
+        if ($stats.PSObject.Properties.Name -contains 'parsers' -and $stats.parsers) {
+            foreach ($parser in $stats.parsers.PSObject.Properties) {
+                $sourceTables = @(@($parser.Value.tables) | Where-Object { -not [string]::IsNullOrWhiteSpace("$_") })
+                if ($sourceTables.Count -gt 0) { $map[$parser.Name] = $sourceTables }
+            }
+        }
+    }
+    $script:ParserTableMap = $map
+    $map
 }
 
 function Get-FieldsFromKql {

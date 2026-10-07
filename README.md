@@ -29,7 +29,7 @@ I've had to answer *"what are we actually getting out of these logs?"* or *"what
 |---|---|
 | **Classification Engine** | 510-entry knowledge base covering 260+ connectors, 22 categories, with lifecycle status (deprecated/legacy plus replacement tables) and automatic heuristic fallback for unknown tables |
 | **Cost-Value Scoring** | Per-table cost tier vs detection tier matrix with combined assessment (High Value to Low Value), priced per observed plan (Analytics, Basic, Data Lake) |
-| **Recommendations** | 13 prioritised action types: data lake or Basic candidates, zero-detection tables, XDR streaming waste, ingest-time filtering, split candidates, plan usage, deprecated sources, retention shortfalls, XDR Checker and Detection Analyzer findings, each with savings estimates |
+| **Recommendations** | 14 prioritised action types: data lake or Basic candidates, zero-detection tables, XDR streaming waste, ingest-time filtering, split candidates, shared-table splits by source, plan usage, deprecated sources, retention shortfalls, XDR Checker and Detection Analyzer findings, each with savings estimates |
 | **Detection Mapping** | Maps analytics rules, hunting queries, and XDR detections to each table to spot coverage gaps |
 | **Correlation Tags** | Detects `#DONT_CORR#` / `#INC_CORR#` tags in rule descriptions and flags rules excluded from Defender correlation |
 | **Retention Compliance** | Compares actual retention against recommended minimums based on industry standards and security best practices |
@@ -277,11 +277,11 @@ Each table gets scored on a few dimensions:
 - **Cost tier**: Free / Low (<1 GB) / Medium (1-10 GB) / High (10-50 GB) / Very High (>50 GB)
 - **Detection tier**: None / Low (1-2 rules) / Medium (3-9 rules) / High (10+ rules)
 - **Assessment**: High Value / Good Value / Missing Coverage / Optimize / Low Value / Underutilized / Free Tier / Platform
-- **Coverage %**: Percentage of tables with at least one analytics rule or hunting query referencing them, calculated as `tablesWithRules / totalTables * 100`. Per-table coverage sums analytics rules + hunting queries found by parsing KQL for table names.
+- **Coverage %**: Percentage of tables with at least one analytics rule or hunting query referencing them, calculated as `tablesWithRules / totalTables * 100`. Per-table coverage sums analytics rules + hunting queries found by parsing KQL for table names. A rule that calls a solution parser (for example `ADOAuditLogs`) counts toward the parser's source tables, read from `parsers` in `field-frequency-stats.json`.
 - **Implicit coverage**: Rule kinds that carry no KQL still consume tables. `Data/implicit-consumers.json` maps them (Threat Intelligence matching -> `ThreatIntelIndicators`/`ThreatIntelObjects`, Fusion -> `SecurityAlert`/`Anomalies`, UEBA -> `BehaviorAnalytics`/`UserPeerAnalytics`/`IdentityInfo`, Microsoft incident creation -> `SecurityAlert`). Enabled rules of those kinds count toward effective coverage, and each table reports a `CoverageSource` of `kql`, `xdr`, `implicit`, `platform` or `none`. Platform tables Sentinel writes for itself (`SecurityIncident`, `SentinelHealth`, `Watchlist`, `Usage` ...) are never flagged as missing coverage and get the `Platform` assessment.
 - Only enabled analytics rules and enabled Defender custom detections count toward coverage.
 
-Then the module generates recommendations (13 types):
+Then the module generates recommendations (14 types):
 
 | Type | When it fires | What to do |
 |---|---|---|
@@ -291,6 +291,7 @@ Then the module generates recommendations (13 types):
 | **Missing Coverage** | Primary + zero detections (not platform tables) | Write analytics rules to get value from the data |
 | **Ingest-time Filter** | Primary + >20 GB + <=3 detections | Apply ingest-time transformation to cut volume |
 | **Split Candidate** | Primary + high volume + detections + no existing transform | Split the table so high-value rows stay on Analytics and the rest goes to Data Lake |
+| **Shared Table Split** | `CommonSecurityLog` or `Syslog` carries sources the baseline recommends for the data lake, measured per source over a 7-day sample | Apply the composed split condition from **Log Tuning / Transforms > Shared table sources**. It replaces the generic split estimate for that table |
 | **Plan Usage** | Usage rows show more than one plan, or the configured plan differs from what Usage observed | Review whether the plan transition was expected |
 | **Deprecated Source** | A table marked deprecated or legacy in the database is still ingesting | Migrate detections to the replacement tables, then retire the old connector. Informational: no savings are claimed because the ingestion moves rather than disappears |
 | **Retention Shortfall** | Workspace or table retention below the 90-day baseline | Increase total/archive retention to meet regulatory guidance |
@@ -523,6 +524,7 @@ Private/
   Get-AutomationRules.ps1    Automation rule inventory + close-logic attribution
   Get-SocOptimization.ps1    SOC improvement recommendations
   Get-TableRetention.ps1     Per-table retention, archive, and plan type
+  Get-SharedSourceUsage.ps1  Per-source volume in CommonSecurityLog / Syslog + composed split rule
   Get-CollectionCache.ps1    Collection cache (key, path, read, write)
   Get-LogHorizonEndpoint.ps1 ARM / Log Analytics / Graph endpoints for the signed-in Azure environment
   Get-LogHorizonDictionary.ps1 Loads the term dictionary shown by the Dictionary menu
@@ -541,10 +543,11 @@ Data/
   dictionary.json                       Term definitions for the Dictionary menu (kept 1:1 with this README, enforced by tests)
   high-value-fields.json                Split KQL knowledge base: 165 tables with curated fields and split hints
   field-frequency-stats.json            Community field frequency stats mined from the Azure-Sentinel rule corpus
+  shared-table-sources.json             CEF and Syslog sources in CommonSecurityLog / Syslog with row filters, tiers and split hints
   custom-classifications-example.json   Example custom classification override file
   ReportTemplate.html                   Static HTML report template (pure-CSS tabs, zero JS, CSP meta)
 Tests/
-  LogHorizon.Tests.ps1       445 Pester v5 unit tests
+  LogHorizon.Tests.ps1       461 Pester v5 unit tests
 ```
 
 ### How the knowledge bases are generated

@@ -71,6 +71,7 @@
         { "term": "MissingCoverage", "definition": "Primary, paid, not a platform table, zero detections. Write analytics rules." },
         { "term": "Filter", "definition": "Primary, 20 GB/mo or more, 1 to 3 detections. Apply an ingest-time transformation to cut volume." },
         { "term": "SplitCandidate", "definition": "Primary, 10 GB/mo or more, at least one detection, no existing transform. Split so detection-relevant rows stay on Analytics and the rest goes to Data Lake." },
+        { "term": "SharedTableSplit", "definition": "CommonSecurityLog or Syslog carries sources the baseline recommends for the data lake, measured over a 7-day sample. One composed split condition keeps Analytics sources, the split-hint rows of lake sources and unmatched rows in Analytics. Replaces SplitCandidate for that table." },
         { "term": "PlanUsage", "definition": "Usage rows show more than one plan in the period, or the configured plan differs from what Usage observed. Confirm the transition was expected." },
         { "term": "DeprecatedSource", "definition": "A table marked deprecated or legacy in the database is still ingesting. Migrate detections to the replacement tables, then retire the old connector. Informational: no savings are claimed because the ingestion moves rather than disappears." },
         { "term": "RetentionShortfall", "definition": "Workspace default or a table's total retention is below the 90-day baseline. Increase retention." },
