@@ -20,7 +20,8 @@ $bundledFiles = @(
     'field-frequency-stats.json',
     'high-value-fields.json',
     'implicit-consumers.json',
-    'log-classifications.json'
+    'log-classifications.json',
+    'shared-table-sources.json'
 )
 $supportedSchemaMajor = 1
 $markerName = 'baseline-version.json'

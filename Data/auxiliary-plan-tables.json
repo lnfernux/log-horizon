@@ -1,6 +1,6 @@
 {
-  "source": "https://learn.microsoft.com/en-us/azure/azure-monitor/reference/tables-features",
-  "generatedOn": "2026-09-06",
+  "source": "https://learn.microsoft.com/azure/azure-monitor/reference/tables-features",
+  "generatedOn": "2026-10-06",
   "tables": [
     "AADAgentRiskEvents",
     "AADCustomSecurityAttributeAuditLogs",
@@ -70,6 +70,7 @@
     "AKSControlPlane",
     "ALBHealthEvent",
     "AMAHealth",
+    "AMLManagedNetworkEvent",
     "AMSKeyDeliveryRequests",
     "AMSLiveEventOperations",
     "AMSMediaAccountHealth",
@@ -426,6 +427,7 @@
     "QualysKnowledgeBase",
     "QuantumProviderAccountDeviceOperationLogs",
     "QuantumProviderAccountJobAuditLogs",
+    "QuantumProviderAccountMessageAuditLogs",
     "QuantumProviderAccountQueueAuditLogs",
     "QuantumProviderAccountTargetAuditLogs",
     "QuantumWorkspaceJobAuditLogs",
