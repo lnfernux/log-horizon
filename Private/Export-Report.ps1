@@ -43,6 +43,7 @@
                 tableAnalysis        = $Analysis.TableAnalysis
                 recommendations      = $Analysis.Recommendations
                 keywordGaps          = $Analysis.KeywordGaps
+                sharedSources        = $Analysis.SharedSources
                 correlationExcluded  = $Analysis.CorrelationExcluded
                 correlationIncluded  = $Analysis.CorrelationIncluded
                 socRecommendations   = $Analysis.SocRecommendations
@@ -315,22 +316,77 @@ function ConvertTo-ReportSections {
         [void]$mdSb.AppendLine('| Table | Connector | Classification | Keyword |')
         [void]$mdSb.AppendLine('| --- | --- | --- | --- |')
         foreach ($kg in $Analysis.KeywordGaps) {
-            [void]$mdSb.AppendLine("| $(mdEsc $kg.TableName) | $(mdEsc $kg.Connector) | $(mdEsc $kg.Classification) | $(mdEsc $kg.MatchedKeyword) |")
+            $gapName = if ($kg.PSObject.Properties.Name -contains 'DefenderNative' -and $kg.DefenderNative) { "$($kg.TableName) (Defender native)" } else { $kg.TableName }
+            [void]$mdSb.AppendLine("| $(mdEsc $gapName) | $(mdEsc $kg.Connector) | $(mdEsc $kg.Classification) | $(mdEsc $kg.MatchedKeyword) |")
         }
+        [void]$mdSb.AppendLine('')
+        [void]$mdSb.AppendLine('Defender native tables are already queryable in Defender advanced hunting without ingestion.')
         [void]$mdSb.AppendLine('')
 
         $htmlSb = [System.Text.StringBuilder]::new()
-        [void]$htmlSb.AppendLine('            <p>Tables matching your keywords that are not currently ingested.</p>')
+        [void]$htmlSb.AppendLine('            <p>Tables matching your keywords that are not currently ingested. Defender native tables are already queryable in Defender advanced hunting without ingestion.</p>')
         [void]$htmlSb.AppendLine('            <div class="table-wrap"><table>')
         [void]$htmlSb.AppendLine('                <thead><tr><th>Table</th><th>Connector</th><th>Classification</th><th>Keyword</th></tr></thead>')
         [void]$htmlSb.AppendLine('                <tbody>')
         foreach ($kg in $Analysis.KeywordGaps) {
-            [void]$htmlSb.AppendLine("                <tr><td>$(hEnc $kg.TableName)</td><td>$(hEnc $kg.Connector)</td><td>$(hEnc $kg.Classification)</td><td>$(hEnc $kg.MatchedKeyword)</td></tr>")
+            $gapName = if ($kg.PSObject.Properties.Name -contains 'DefenderNative' -and $kg.DefenderNative) { "$($kg.TableName) (Defender native)" } else { $kg.TableName }
+            [void]$htmlSb.AppendLine("                <tr><td>$(hEnc $gapName)</td><td>$(hEnc $kg.Connector)</td><td>$(hEnc $kg.Classification)</td><td>$(hEnc $kg.MatchedKeyword)</td></tr>")
         }
         [void]$htmlSb.AppendLine('                </tbody>')
         [void]$htmlSb.AppendLine('            </table></div>')
 
         $sections.Add([PSCustomObject]@{ Title = 'Keyword Gaps'; TabId = 'keywords'; Markdown = $mdSb.ToString(); Html = $htmlSb.ToString() })
+    }
+
+    # - 4b. Shared table sources -
+    if (@($Analysis.SharedSources).Count -gt 0) {
+        $mdSb = [System.Text.StringBuilder]::new()
+        $htmlSb = [System.Text.StringBuilder]::new()
+        [void]$mdSb.AppendLine('## Shared Table Sources')
+        [void]$mdSb.AppendLine('')
+        [void]$htmlSb.AppendLine('            <p>Measured volume per CEF and Syslog source. Rows that match the split condition stay in Analytics, the rest go to the _SPLT table. Rules counts enabled analytics rules that call the source''s parser.</p>')
+        foreach ($shared in @($Analysis.SharedSources)) {
+            $remainderTier = if ($shared.RemainderTier -eq 'datalake') { 'Data lake' } else { 'Analytics' }
+            [void]$mdSb.AppendLine("### $(mdEsc $shared.TableName)")
+            [void]$mdSb.AppendLine('')
+            [void]$mdSb.AppendLine("$($shared.MonthlyGB) GB/mo, $($shared.SampleDays)-day sample. The split moves about $($shared.LakeMonthlyGB) GB/mo to the data lake (~`$$($shared.EstSavingsUSD)/mo).")
+            [void]$mdSb.AppendLine('')
+            [void]$mdSb.AppendLine('| Source | Tier | Retention | Share | GB/mo | Rules |')
+            [void]$mdSb.AppendLine('| --- | --- | ---: | ---: | ---: | ---: |')
+            [void]$htmlSb.AppendLine("            <h3>$(hEnc $shared.TableName)</h3>")
+            [void]$htmlSb.AppendLine("            <p>$($shared.MonthlyGB) GB/mo, $($shared.SampleDays)-day sample. The split moves about $($shared.LakeMonthlyGB) GB/mo to the data lake (~`$$($shared.EstSavingsUSD)/mo).</p>")
+            [void]$htmlSb.AppendLine('            <div class="table-wrap"><table>')
+            [void]$htmlSb.AppendLine('                <thead><tr><th>Source</th><th>Tier</th><th>Retention</th><th>Share</th><th>GB/mo</th><th>Rules</th></tr></thead>')
+            [void]$htmlSb.AppendLine('                <tbody>')
+            foreach ($s in @($shared.Sources)) {
+                $tier = if ($s.RecommendedTier -eq 'datalake') { 'Data lake' } else { 'Analytics' }
+                $share = "$([math]::Round($s.Share * 100, 1))%"
+                [void]$mdSb.AppendLine("| $(mdEsc $s.DisplayName) | $tier | $($s.RecommendedRetentionDays)d | $share | $($s.MonthlyGB) | $($s.ParserRuleCount) |")
+                [void]$htmlSb.AppendLine("                <tr><td>$(hEnc $s.DisplayName)</td><td>$tier</td><td class=`"num`">$($s.RecommendedRetentionDays)d</td><td class=`"num`">$share</td><td class=`"num`">$($s.MonthlyGB)</td><td class=`"num`">$($s.ParserRuleCount)</td></tr>")
+            }
+            $unmatchedShare = "$([math]::Round($shared.UnmatchedShare * 100, 1))%"
+            [void]$mdSb.AppendLine("| Unmatched rows | $remainderTier | - | $unmatchedShare | $($shared.UnmatchedMonthlyGB) | - |")
+            [void]$mdSb.AppendLine('')
+            [void]$mdSb.AppendLine('Split condition:')
+            [void]$mdSb.AppendLine('')
+            [void]$mdSb.AppendLine('```kql')
+            [void]$mdSb.AppendLine($shared.SplitCondition)
+            [void]$mdSb.AppendLine('```')
+            [void]$mdSb.AppendLine('')
+            [void]$htmlSb.AppendLine("                <tr><td>Unmatched rows</td><td>$remainderTier</td><td class=`"num`">-</td><td class=`"num`">$unmatchedShare</td><td class=`"num`">$($shared.UnmatchedMonthlyGB)</td><td class=`"num`">-</td></tr>")
+            [void]$htmlSb.AppendLine('                </tbody>')
+            [void]$htmlSb.AppendLine('            </table></div>')
+            [void]$htmlSb.AppendLine("                <pre class=`"kql-block`">$(hEnc $shared.SplitCondition)</pre>")
+            $retention = @()
+            if ($shared.TableRetentionDays) { $retention += "$($shared.TableName) $($shared.TableRetentionDays)d" }
+            if ($shared.SplitRetentionDays) { $retention += "$($shared.TableName)_SPLT $($shared.SplitRetentionDays)d" }
+            if ($retention.Count -gt 0) {
+                [void]$mdSb.AppendLine("Recommended retention: $(mdEsc ($retention -join ', ')).")
+                [void]$mdSb.AppendLine('')
+                [void]$htmlSb.AppendLine("            <p>Recommended retention: $(hEnc ($retention -join ', ')).</p>")
+            }
+        }
+        $sections.Add([PSCustomObject]@{ Title = 'Shared Sources'; TabId = 'shared'; Markdown = $mdSb.ToString(); Html = $htmlSb.ToString() })
     }
 
     # - 5. Retention Assessment -

@@ -21,6 +21,7 @@ BeforeAll {
     . "$privatePath\Get-HuntingQueries.ps1"
     . "$privatePath\Get-DataConnectors.ps1"
     . "$privatePath\Get-SocOptimization.ps1"
+    . "$privatePath\Get-SharedSourceUsage.ps1"
     . (Join-Path $PSScriptRoot '..\Public\Set-LogHorizonTableRetention.ps1')
 
     function New-MockAnalysis {
@@ -616,6 +617,41 @@ Describe 'Set-LogHorizonTableRetention' {
 }
 
 Describe 'Get-TablesFromKql' {
+    Context 'parser attribution' {
+        BeforeAll { $script:savedParserMap = $script:ParserTableMap }
+        AfterAll { $script:ParserTableMap = $script:savedParserMap }
+        BeforeEach { $script:ParserTableMap = @{ '_Im_Dns' = @('DnsEvents', 'ASimDnsActivityLogs') } }
+
+        It 'replaces a parser alias with its source tables' {
+            $result = @(Get-TablesFromKql -Kql '_Im_Dns(starttime=ago(1d)) | where DnsQuery has "evil"')
+            $result | Should -Contain 'DnsEvents'
+            $result | Should -Contain 'ASimDnsActivityLogs'
+            $result | Should -Not -Contain '_Im_Dns'
+        }
+
+        It 'ignores a let variable that shadows a parser alias' {
+            $result = @(Get-TablesFromKql -Kql "let _Im_Dns = SecurityEvent | take 1;`n_Im_Dns | count")
+            $result | Should -Contain 'SecurityEvent'
+            $result | Should -Not -Contain 'DnsEvents'
+        }
+
+        It 'does not match an alias inside a longer identifier' {
+            $result = @(Get-TablesFromKql -Kql 'SecurityEvent | extend x = _Im_DnsX')
+            $result | Should -Not -Contain 'DnsEvents'
+        }
+    }
+
+    It 'loads parser source tables from the bundled field-frequency stats' {
+        $saved = $script:ParserTableMap
+        try {
+            $script:ParserTableMap = $null
+            $map = Get-ParserTableMap
+            $map.Count | Should -BeGreaterThan 0
+            @($map.Values | Where-Object { @($_).Count -eq 0 }).Count | Should -Be 0
+        }
+        finally { $script:ParserTableMap = $saved }
+    }
+
     It 'extracts a single table from simple KQL' {
         $result = Get-TablesFromKql -Kql 'SecurityEvent | where EventID == 4625'
         $result | Should -Contain 'SecurityEvent'
@@ -950,6 +986,31 @@ Describe 'Invoke-Classification' {
         $result = Invoke-Classification -TableUsage $tableUsage -RuleTableCoverage @{} -Keywords @('AWS')
         $result.KeywordGaps.Count | Should -BeGreaterThan 0
         $result.KeywordGaps.TableName | Should -Contain 'AWSCloudTrail'
+    }
+
+    It 'passes DefenderNative and LogAnalyticsTable through from the database' {
+        $tableUsage = @(
+            [PSCustomObject]@{ TableName = 'IdentityLogonEvents'; MonthlyGB = 1; IsFree = $false }
+            [PSCustomObject]@{ TableName = 'MessageContents'; MonthlyGB = 1; IsFree = $false }
+            [PSCustomObject]@{ TableName = 'SecurityEvent'; MonthlyGB = 1; IsFree = $false }
+        )
+        $result = Invoke-Classification -TableUsage $tableUsage -RuleTableCoverage @{}
+        $result.Classifications['IdentityLogonEvents'].DefenderNative | Should -BeTrue
+        $result.Classifications['IdentityLogonEvents'].LogAnalyticsTable | Should -BeTrue
+        $result.Classifications['MessageContents'].LogAnalyticsTable | Should -BeFalse
+        $result.Classifications['SecurityEvent'].DefenderNative | Should -BeFalse
+        $result.Classifications['SecurityEvent'].LogAnalyticsTable | Should -BeTrue
+    }
+
+    It 'skips retired and hunting-only tables in keyword gaps and flags Defender-native gaps' {
+        $tableUsage = @([PSCustomObject]@{ TableName = 'SecurityEvent'; MonthlyGB = 1; IsFree = $false })
+        $result = Invoke-Classification -TableUsage $tableUsage -RuleTableCoverage @{} -Keywords @('corelight', 'SignInEvents', 'IdentityLogonEvents')
+        $names = @($result.KeywordGaps.TableName)
+        $names | Should -Not -Contain 'Corelight_CL'
+        $names | Should -Not -Contain 'AADSignInEventsBeta'
+        $names | Should -Not -Contain 'EntraIdSignInEvents'
+        ($result.KeywordGaps | Where-Object TableName -eq 'IdentityLogonEvents').DefenderNative | Should -BeTrue
+        @($result.KeywordGaps | Where-Object { $_.TableName -like 'Corelight*' }).Count | Should -BeGreaterThan 0
     }
 }
 
@@ -1789,6 +1850,17 @@ Describe 'Invoke-Analysis lifecycle and XDR streamability' {
         @($r.Recommendations | Where-Object { $_.Type -eq 'DeprecatedSource' -and $_.TableName -eq 'Fine' }).Count | Should -Be 0
     }
 
+    It 'truncates long replacement lists in DeprecatedSource details' {
+        $usage = @([PSCustomObject]@{ TableName = 'Old_CL'; DataGB = 3; MonthlyGB = 1; EstMonthlyCostUSD = 5.59; IsFree = $false; IsFreeSource = 'usage' })
+        $cls = [PSCustomObject]@{ Classifications = @{
+            'Old_CL' = [PSCustomObject]@{ Classification = 'secondary'; Category = 'X'; RecommendedTier = 'analytics'; IsFree = $false; RecommendedRetentionDays = 90; Status = 'legacy'; ReplacedBy = @('A1', 'A2', 'A3', 'A4', 'A5', 'A6', 'A7') }
+        }; KeywordGaps = @(); DatabaseEntries = 1 }
+        $r = Invoke-Analysis -TableUsage $usage -Classifications $cls -RulesData $script:lcRules -HuntingData $script:lcHunting
+        $rec = $r.Recommendations | Where-Object { $_.Type -eq 'DeprecatedSource' -and $_.TableName -eq 'Old_CL' }
+        $rec.Detail | Should -Match 'Replacement table\(s\): A1, A2, A3, A4, A5 and 2 more\.'
+        $rec.Detail | Should -Not -Match 'A6'
+    }
+
     It 'treats a table as platform when the classification says so even if the implicit map does not' {
         $usage = @([PSCustomObject]@{ TableName = 'Usage'; DataGB = 0.3; MonthlyGB = 0.1; EstMonthlyCostUSD = 0.56; IsFree = $false; IsFreeSource = 'usage' })
         $cls = [PSCustomObject]@{ Classifications = @{ 'Usage' = [PSCustomObject]@{ Classification = 'secondary'; Category = 'Platform Health'; RecommendedTier = 'analytics'; IsFree = $false; RecommendedRetentionDays = 90; IsPlatform = $true } }; KeywordGaps = @(); DatabaseEntries = 1 }
@@ -2528,6 +2600,21 @@ Describe 'Get-SplitKql' {
         $result.Source | Should -Be 'knowledge-base'
         $result.HighValueFields | Should -Contain 'TimeGenerated'
         $result.HighValueFields | Should -Contain 'EventID'
+    }
+
+    It 'joins every split hint with or' {
+        $hvFields = @{
+            'Syslog' = [PSCustomObject]@{
+                highValueFields = @('Facility')
+                splitHints      = @(
+                    [PSCustomObject]@{ description = 'auth'; kql = 'Facility in ("auth", "authpriv")' }
+                    [PSCustomObject]@{ description = 'errors'; kql = 'SeverityLevel in ("err", "crit")' }
+                )
+            }
+        }
+        $result = Get-SplitKql -TableName 'Syslog' -HighValueFieldsDB $hvFields
+        $result.SplitKql | Should -Be "(Facility in (`"auth`", `"authpriv`"))`n    or (SeverityLevel in (`"err`", `"crit`"))"
+        $result.Source | Should -Be 'knowledge-base'
     }
 
     It 'generates split KQL from rules when no KB entry exists' {
@@ -6479,5 +6566,137 @@ Describe 'Detection coverage GB-weighted percentages' {
 
         $pct = [math]::Round(($detCoveredGB / $totalAllGB) * 100, 1)
         $pct | Should -Be 50.0
+    }
+}
+
+Describe 'Shared table sources' {
+    BeforeAll {
+        $script:ssSources = @(
+            [PSCustomObject]@{ sourceId = 'a'; displayName = 'Vendor A'; table = 'CommonSecurityLog'; filter = 'DeviceVendor =~ "A"'; recommendedTier = 'analytics'; recommendedRetentionDays = 365 }
+            [PSCustomObject]@{ sourceId = 'b'; displayName = 'Vendor B'; table = 'CommonSecurityLog'; filter = 'DeviceVendor =~ "B"'; parser = 'BParser'; recommendedTier = 'datalake'; recommendedRetentionDays = 180; splitHints = @([PSCustomObject]@{ kql = 'DeviceAction != "allow"' }) }
+            [PSCustomObject]@{ sourceId = 'c'; displayName = 'Vendor C'; table = 'CommonSecurityLog'; filter = 'DeviceVendor =~ "C"'; recommendedTier = 'datalake'; recommendedRetentionDays = 90 }
+            [PSCustomObject]@{ sourceId = 'd'; displayName = 'Vendor D'; table = 'CommonSecurityLog'; filter = 'DeviceVendor =~ "D"'; recommendedTier = 'analytics'; recommendedRetentionDays = 730 }
+        )
+        $script:ssUsage = @([PSCustomObject]@{ TableName = 'CommonSecurityLog'; SampleDays = 7; Rows = @(
+            [PSCustomObject]@{ SourceId = 'a'; HintMatch = $false; BilledBytes = 100 }
+            [PSCustomObject]@{ SourceId = 'b'; HintMatch = $true; BilledBytes = 50 }
+            [PSCustomObject]@{ SourceId = 'b'; HintMatch = $false; BilledBytes = 250 }
+            [PSCustomObject]@{ SourceId = 'c'; HintMatch = $false; BilledBytes = 100 }
+            [PSCustomObject]@{ SourceId = ''; HintMatch = $false; BilledBytes = 500 }
+        ) })
+        $script:ssTable = [PSCustomObject]@{ TableName = 'CommonSecurityLog'; MonthlyGB = 100; EstMonthlyCostUSD = 559; IsFree = $false; RecommendedTier = 'analytics'; RecommendedRetentionDays = 365 }
+    }
+
+    It 'parenthesizes expressions unless one outer pair already wraps them' {
+        ConvertTo-KqlGroup 'A == 1' | Should -Be '(A == 1)'
+        ConvertTo-KqlGroup '(A == 1)' | Should -Be '(A == 1)'
+        ConvertTo-KqlGroup '(A == 1) or (B == 2)' | Should -Be '((A == 1) or (B == 2))'
+        ConvertTo-KqlGroup '(A == ")")' | Should -Be '(A == ")")'
+    }
+
+    It 'composes one split condition like the baseline explorer' {
+        $rule = Get-SharedTableSplitRule -Sources $script:ssSources[0..2] -RemainderTier analytics -RemainderRetentionDays 365
+        $rule.Condition | Should -Be (@(
+            '(DeviceVendor =~ "A")'
+            'or ((DeviceVendor =~ "B") and (DeviceAction != "allow"))'
+            'or case((DeviceVendor =~ "A") or (DeviceVendor =~ "B") or (DeviceVendor =~ "C"), false, true)'
+        ) -join "`n")
+        $rule.TableRetentionDays | Should -Be 365
+        $rule.SplitRetentionDays | Should -Be 180
+    }
+
+    It 'sends the remainder to the split table when the table record is data lake' {
+        $rule = Get-SharedTableSplitRule -Sources $script:ssSources[2] -RemainderTier datalake -RemainderRetentionDays 30
+        $rule.Condition | Should -Be ''
+        $rule.TableRetentionDays | Should -BeNullOrEmpty
+        $rule.SplitRetentionDays | Should -Be 90
+    }
+
+    It 'builds a usage query with balanced parentheses for the bundled catalogue' {
+        foreach ($group in (Get-SharedTableSource | Group-Object table)) {
+            $kql = Get-SharedSourceUsageQuery -TableName $group.Name -Sources @($group.Group)
+            $kql | Should -Match "^$($group.Name)"
+            $kql | Should -Match 'summarize BilledBytes = sum\(_BilledSize\) by LogHorizonSource, LogHorizonHint'
+            $unquoted = $kql -replace '"(?:[^"\\]|\\.)*"', '""'
+            ($unquoted.ToCharArray() | Where-Object { $_ -eq '(' }).Count | Should -Be ($unquoted.ToCharArray() | Where-Object { $_ -eq ')' }).Count
+        }
+        Get-SharedSourceUsageQuery -TableName 'CommonSecurityLog' -Sources $script:ssSources[0] | Should -Match 'LogHorizonHint = false'
+    }
+
+    It 'estimates per-source volume, moved volume and savings from the sample' {
+        $rules = @([PSCustomObject]@{ Enabled = $true; Query = 'BParser | where x' }, [PSCustomObject]@{ Enabled = $false; Query = 'BParser' })
+        $r = @(Get-SharedSourceAnalysis -SharedSourceUsage $script:ssUsage -TableAnalysis @($script:ssTable) -Sources $script:ssSources -Rules $rules)
+        $r.Count | Should -Be 1
+        $r[0].Sources.Count | Should -Be 3
+        ($r[0].Sources | Where-Object SourceId -eq 'b').MonthlyGB | Should -Be 30
+        ($r[0].Sources | Where-Object SourceId -eq 'b').ParserRuleCount | Should -Be 1
+        ($r[0].Sources | Where-Object SourceId -eq 'a').Share | Should -Be 0.1
+        $r[0].UnmatchedShare | Should -Be 0.5
+        $r[0].LakeMonthlyGB | Should -Be 35
+        $r[0].EstSavingsUSD | Should -Be 188.65
+        $r[0].SplitRetentionDays | Should -Be 180
+    }
+
+    It 'queries only Analytics-plan shared tables and reads rows by column name' {
+        Mock Invoke-AzRestWithRetry {
+            [PSCustomObject]@{ tables = @([PSCustomObject]@{
+                columns = @([PSCustomObject]@{ name = 'LogHorizonSource' }, [PSCustomObject]@{ name = 'LogHorizonHint' }, [PSCustomObject]@{ name = 'BilledBytes' })
+                rows    = @(, @('b', $true, 42))
+            }) }
+        }
+        $usage = @(
+            [PSCustomObject]@{ TableName = 'CommonSecurityLog'; MonthlyGB = 10; ObservedPlans = @('Analytics') }
+            [PSCustomObject]@{ TableName = 'Syslog'; MonthlyGB = 10; ObservedPlans = @('Basic') }
+        )
+        $sources = @($script:ssSources) + [PSCustomObject]@{ sourceId = 's'; table = 'Syslog'; filter = 'Facility == "x"'; recommendedTier = 'analytics' }
+        $r = @(Get-SharedSourceUsage -Context ([PSCustomObject]@{ LaToken = 't'; WorkspaceId = 'w' }) -TableUsage $usage -Sources $sources)
+        Should -Invoke Invoke-AzRestWithRetry -Times 1 -Exactly
+        $r.Count | Should -Be 1
+        $r[0].TableName | Should -Be 'CommonSecurityLog'
+        $r[0].Rows[0].SourceId | Should -Be 'b'
+        $r[0].Rows[0].HintMatch | Should -BeTrue
+        $r[0].Rows[0].BilledBytes | Should -Be 42
+    }
+
+    It 'turns a failed shared-source query into a warning' {
+        Mock Invoke-AzRestWithRetry { throw 'SemanticError' }
+        $usage = @([PSCustomObject]@{ TableName = 'CommonSecurityLog'; MonthlyGB = 10; ObservedPlans = @('Analytics') })
+        $r = @(Get-SharedSourceUsage -Context ([PSCustomObject]@{ LaToken = 't'; WorkspaceId = 'w' }) -TableUsage $usage -Sources $script:ssSources -WarningVariable warn -WarningAction SilentlyContinue)
+        $r.Count | Should -Be 0
+        "$warn" | Should -Match 'CommonSecurityLog skipped'
+    }
+
+    It 'replaces the generic split estimate with a SharedTableSplit recommendation' {
+        $usage = @([PSCustomObject]@{ TableName = 'CommonSecurityLog'; DataGB = 300; MonthlyGB = 100; EstMonthlyCostUSD = 559; IsFree = $false; IsFreeSource = 'usage' })
+        $cls = [PSCustomObject]@{ Classifications = @{
+            'CommonSecurityLog' = [PSCustomObject]@{ Classification = 'primary'; Category = 'Network Security'; RecommendedTier = 'analytics'; IsFree = $false; RecommendedRetentionDays = 365 }
+        }; KeywordGaps = @(); DatabaseEntries = 1 }
+        $rules = [PSCustomObject]@{ Rules = @(); TableCoverage = @{ 'CommonSecurityLog' = 2 }; TotalRules = 2; EnabledRules = 2; DontCorrCount = 0; IncCorrCount = 0 }
+        $hunting = [PSCustomObject]@{ Queries = @(); TableCoverage = @{}; TotalQueries = 0 }
+        $shared = @([PSCustomObject]@{ TableName = 'CommonSecurityLog'; SampleDays = 7; Rows = @(
+            [PSCustomObject]@{ SourceId = 'acronis'; HintMatch = $false; BilledBytes = 100 }
+            [PSCustomObject]@{ SourceId = 'cisco-asa-ftd'; HintMatch = $true; BilledBytes = 100 }
+            [PSCustomObject]@{ SourceId = 'cisco-asa-ftd'; HintMatch = $false; BilledBytes = 300 }
+            [PSCustomObject]@{ SourceId = ''; HintMatch = $false; BilledBytes = 500 }
+        ) })
+
+        $without = Invoke-Analysis -TableUsage $usage -Classifications $cls -RulesData $rules -HuntingData $hunting
+        @($without.Recommendations | Where-Object Type -eq 'SplitCandidate').Count | Should -Be 1
+        @($without.SharedSources).Count | Should -Be 0
+
+        $r = Invoke-Analysis -TableUsage $usage -Classifications $cls -RulesData $rules -HuntingData $hunting -SharedSourceUsage $shared
+        @($r.Recommendations | Where-Object Type -eq 'SplitCandidate').Count | Should -Be 0
+        $rec = $r.Recommendations | Where-Object Type -eq 'SharedTableSplit'
+        $rec.TableName | Should -Be 'CommonSecurityLog'
+        $rec.EstSavingsUSD | Should -Be 161.7
+        $rec.Detail | Should -Match 'about 30 GB/mo to CommonSecurityLog_SPLT'
+        $rec.SplitCondition | Should -Match 'DeviceEventClassID'
+        @($r.SharedSources).Count | Should -Be 1
+
+        $sections = ConvertTo-ReportSections -Analysis $r
+        $section = $sections | Where-Object TabId -eq 'shared'
+        $section.Markdown | Should -Match '## Shared Table Sources'
+        $section.Markdown | Should -Match '```kql'
+        $section.Html | Should -Match 'kql-block'
     }
 }

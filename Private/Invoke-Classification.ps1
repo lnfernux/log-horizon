@@ -90,6 +90,8 @@ function Invoke-Classification {
                 ReplacedBy             = @(@($entry.replacedBy) | Where-Object { -not [string]::IsNullOrWhiteSpace("$_") })
                 IsPlatform             = ($entry.platform -eq $true)
                 XdrStreamable          = if ($entry.PSObject.Properties.Name -contains 'xdrStreamable' -and $null -ne $entry.xdrStreamable) { [bool]$entry.xdrStreamable } else { $null }
+                DefenderNative         = ($entry.defenderNative -eq $true)
+                LogAnalyticsTable      = -not ($entry.PSObject.Properties.Name -contains 'logAnalyticsTable' -and $entry.logAnalyticsTable -eq $false)
             }
         }
         else {
@@ -105,6 +107,9 @@ function Invoke-Classification {
         $ingestingNames = @($TableUsage.TableName)
         foreach ($entry in $db) {
             if ($entry.tableName -in $ingestingNames) { continue }
+            # Retired tables are not onboarding targets, and hunting-only tables cannot be ingested.
+            if (Get-ClassificationEntryStatus -Entry $entry) { continue }
+            if ($entry.PSObject.Properties.Name -contains 'logAnalyticsTable' -and $entry.logAnalyticsTable -eq $false) { continue }
 
             $matchedKeywords = @($Keywords | Where-Object { Test-ClassificationKeywordMatch -Entry $entry -Keyword $_ })
             if ($matchedKeywords.Count -eq 0) { continue }
@@ -116,6 +121,7 @@ function Invoke-Classification {
                 Category       = $entry.category
                 Description    = $entry.description
                 MatchedKeyword = ($matchedKeywords -join ', ')
+                DefenderNative = ($entry.defenderNative -eq $true)
             })
         }
     }

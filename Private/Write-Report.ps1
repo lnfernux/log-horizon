@@ -626,7 +626,8 @@ function Write-DetectionAssessment {
     if ($Analysis.KeywordGaps.Count -gt 0) {
         $lines += "[red][bold]Not Ingesting (recommended based on keywords)[/][/]"
         foreach ($kg in $Analysis.KeywordGaps) {
-            $lines += "  [red]●[/] $(Get-SafeEscapedText $kg.TableName) - $(Get-SafeEscapedText $kg.Description)"
+            $native = if ($kg.PSObject.Properties.Name -contains 'DefenderNative' -and $kg.DefenderNative) { ' [dim](already queryable in Defender advanced hunting)[/]' } else { '' }
+            $lines += "  [red]●[/] $(Get-SafeEscapedText $kg.TableName) - $(Get-SafeEscapedText $kg.Description)$native"
         }
         $lines += ""
     }
@@ -1062,6 +1063,7 @@ function Write-LogTuningMenu {
             'Log tuning suggestions (knowledge base)'  = 'kb'
             'Evaluate specific table'                  = 'evaluate'
         }
+        if (@($Analysis.SharedSources).Count -gt 0) { $subMenu['Shared table sources (CEF and Syslog)'] = 'shared' }
 
         $subChoice = Read-LogHorizonSelection -Title "[deepskyblue1]Select a tuning mode:[/]" `
                         -Choices @($subMenu.Keys) `
@@ -1074,8 +1076,48 @@ function Write-LogTuningMenu {
             'live'     { Write-LiveTuningView -Analysis $Analysis }
             'kb'       { Write-SplitKqlSuggestionView -Analysis $Analysis }
             'evaluate' { Write-TableEvaluation -Analysis $Analysis -Context $Context }
+            'shared'   { Write-SharedSourceView -Analysis $Analysis }
             'back'     { $subContinue = $false }
         }
+    }
+}
+
+# Shared tables: measured volume per CEF/Syslog source and the composed split rule
+function Write-SharedSourceView {
+    param([PSCustomObject]$Analysis)
+    $null = Sync-ConsoleSize
+
+    foreach ($shared in @($Analysis.SharedSources)) {
+        Write-SpectreHost "[dodgerblue2][bold]$(Get-SafeEscapedText $shared.TableName)[/][/] [dim]($($shared.MonthlyGB) GB/mo, $($shared.SampleDays)-day sample)[/]"
+        $rows = @(foreach ($s in $shared.Sources) {
+            [PSCustomObject]@{
+                'Source'    = Get-SafeEscapedText $s.DisplayName
+                'Tier'      = $(if ($s.RecommendedTier -eq 'datalake') { '[yellow]Data lake[/]' } else { '[green]Analytics[/]' })
+                'Retention' = "$($s.RecommendedRetentionDays)d"
+                'Share'     = "$([math]::Round($s.Share * 100, 1))%"
+                'GB/mo'     = $s.MonthlyGB
+                'Rules'     = $s.ParserRuleCount
+            }
+        })
+        $rows += [PSCustomObject]@{
+            'Source'    = '[dim]Unmatched rows[/]'
+            'Tier'      = $(if ($shared.RemainderTier -eq 'datalake') { '[yellow]Data lake[/]' } else { '[green]Analytics[/]' })
+            'Retention' = ''
+            'Share'     = "$([math]::Round($shared.UnmatchedShare * 100, 1))%"
+            'GB/mo'     = $shared.UnmatchedMonthlyGB
+            'Rules'     = ''
+        }
+        $rows | Format-SpectreTable -Border Rounded -Color DodgerBlue2 -HeaderColor DodgerBlue2 -AllowMarkup
+        Write-SpectreHost "[dim]Rules counts enabled analytics rules that call the source's parser.[/]"
+        Write-SpectreHost ""
+        Write-SpectreHost "[bold]Split condition[/] [dim](rows that match stay in Analytics, the rest go to $(Get-SafeEscapedText $shared.TableName)_SPLT)[/]"
+        Write-SpectreHost "[deepskyblue1]$(Get-SafeEscapedText $shared.SplitCondition)[/]"
+        $retention = @()
+        if ($shared.TableRetentionDays) { $retention += "$($shared.TableName) $($shared.TableRetentionDays)d" }
+        if ($shared.SplitRetentionDays) { $retention += "$($shared.TableName)_SPLT $($shared.SplitRetentionDays)d" }
+        if ($retention.Count -gt 0) { Write-SpectreHost "[dim]Recommended retention: $(Get-SafeEscapedText ($retention -join ', '))[/]" }
+        Write-SpectreHost "[dim]Moves about $($shared.LakeMonthlyGB) GB/mo to the data lake (~`$$($shared.EstSavingsUSD)/mo).[/]"
+        Write-SpectreHost ""
     }
 }
 

@@ -129,6 +129,11 @@ function Invoke-LogHorizon {
                     $result.TableUsage = Get-TableUsage -Context $ctx -DaysBack $DaysBack -PricePerGB $PricePerGB `
                                                         -BasicPricePerGB $BasicPricePerGB -LakePricePerGB $LakePricePerGB
 
+                    # Per-source volume in shared tables (CommonSecurityLog, Syslog)
+                    $result.SharedSourceUsage = @()
+                    try { $result.SharedSourceUsage = Get-SharedSourceUsage -Context $ctx -TableUsage $result.TableUsage }
+                    catch { Write-Warning "Shared source breakdown skipped: $($_.Exception.Message)" }
+
                     # Analytics rules
                     $result.RulesData = Get-AnalyticsRules -Context $ctx
 
@@ -203,6 +208,7 @@ function Invoke-LogHorizon {
         $incidents = @($collectResult.Incidents)
         $automationRules = @($collectResult.AutomationRules)
         $autoCloseHealth = $collectResult.AutoCloseHealth
+        $sharedSourceUsage = if ($collectResult.PSObject.Properties.Name -contains 'SharedSourceUsage') { @($collectResult.SharedSourceUsage) } else { @() }
 
         # Phase 2 - Classification
         $classifications = Invoke-SpectreCommandWithStatus -Title "[deepskyblue1]Classifying log sources...[/]" -Spinner Dots -ScriptBlock {
@@ -264,6 +270,7 @@ function Invoke-LogHorizon {
                             -Incidents $incidents `
                             -AutomationRules $automationRules `
                             -AutoCloseHealthData $autoCloseHealth `
+                            -SharedSourceUsage $sharedSourceUsage `
                             -IncludeDetectionAnalyzer:$IncludeDetectionAnalyzer
         }
 
