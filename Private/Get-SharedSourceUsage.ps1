@@ -53,13 +53,20 @@ function Get-SharedSourceUsageQuery {
     <#
     .SYNOPSIS
         Builds the KQL that attributes billed bytes in a shared table to catalogue
-        sources (first matching filter wins) and flags rows matched by the source's split hints.
+        sources (first matching filter wins) and flags rows matched by the source's
+        split hints and by deployed rule conditions.
+    .DESCRIPTION
+        With -KeyColumns the rows are first summarized by the columns the filters and
+        hints read, so the 40-branch case() runs on distinct values, not on every row.
+        Rule conditions are evaluated per row before that, because they can read any column.
     #>
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)][string]$TableName,
         [Parameter(Mandatory)][array]$Sources,
-        [int]$SampleDays = 7
+        [int]$SampleDays = 7,
+        [string[]]$RuleConditions = @(),
+        [string[]]$KeyColumns = @()
     )
 
     $sourceCases = ($Sources | ForEach-Object { "$(ConvertTo-KqlGroup $_.filter), `"$($_.sourceId)`"" }) -join ",`n    "
@@ -67,15 +74,60 @@ function Get-SharedSourceUsageQuery {
     $hintExpr = if ($hinted.Count -gt 0) {
         "case(" + (($hinted | ForEach-Object { "LogHorizonSource == `"$($_.sourceId)`", $(Get-SharedSourceHintKql -Source $_)" }) -join ",`n    ") + ",`n    false)"
     } else { 'false' }
+    $ruleExpr = if (@($RuleConditions).Count -gt 0) { (@($RuleConditions) | ForEach-Object { ConvertTo-KqlGroup $_ }) -join ' or ' } else { 'false' }
 
-    @"
-$TableName
-| where TimeGenerated > ago(${SampleDays}d)
-| extend LogHorizonSource = case($sourceCases,
-    "")
-| extend LogHorizonHint = $hintExpr
-| summarize BilledBytes = sum(_BilledSize) by LogHorizonSource, LogHorizonHint
-"@
+    $lines = [System.Collections.Generic.List[string]]::new()
+    $lines.Add($TableName)
+    $lines.Add("| where TimeGenerated > ago(${SampleDays}d)")
+    $lines.Add("| extend LogHorizonRule = $ruleExpr")
+    $bytes = '_BilledSize'
+    if (@($KeyColumns).Count -gt 0) {
+        $lines.Add("| summarize LogHorizonBytes = sum(_BilledSize) by $(@($KeyColumns) -join ', '), LogHorizonRule")
+        $bytes = 'LogHorizonBytes'
+    }
+    $lines.Add("| extend LogHorizonSource = case($sourceCases,`n    `"`")")
+    $lines.Add("| extend LogHorizonHint = $hintExpr")
+    $lines.Add("| summarize BilledBytes = sum($bytes) by LogHorizonSource, LogHorizonHint, LogHorizonRule")
+    $lines -join "`n"
+}
+
+function Get-SharedSourceKeyColumn {
+    <#
+    .SYNOPSIS
+        Schema columns read by the catalogue filters and split hints of a table, or
+        none when the schema is unknown (the query then evaluates every row).
+    #>
+    [CmdletBinding()]
+    param(
+        [array]$Sources = @(),
+        [string[]]$SchemaColumns = @()
+    )
+
+    $SchemaColumns = @($SchemaColumns | Where-Object { $_ })
+    if ($SchemaColumns.Count -eq 0) { return @() }
+    $schemaSet = [System.Collections.Generic.HashSet[string]]::new([string[]]$SchemaColumns, [StringComparer]::Ordinal)
+    # Any identifier that is a schema column; a missed key column would make the summarize-first query fail
+    $expressions = @($Sources | ForEach-Object { $_.filter; Get-SharedSourceHintKql -Source $_ } | Where-Object { $_ })
+    $identifiers = @($expressions | ForEach-Object { [regex]::Matches((Remove-KqlLiteral -Kql $_), '\b[A-Za-z_]\w*\b') | ForEach-Object Value })
+    @($identifiers | Where-Object { $schemaSet.Contains($_) } | Sort-Object -Unique -CaseSensitive)
+}
+
+function Get-SharedTableRuleCondition {
+    <#
+    .SYNOPSIS
+        Where-predicates from enabled rules on the table whose columns all exist in
+        the schema, so the split keeps the rows those rules read.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$TableName,
+        [array]$Rules = @(),
+        [string[]]$SchemaColumns = @()
+    )
+
+    $conditions = @($Rules | Where-Object { $_.Enabled -and $_.Query -and @($_.Tables) -contains $TableName } |
+        ForEach-Object { Get-KqlWhereCondition -Kql $_.Query } | Select-Object -Unique)
+    @((Select-KqlConditionInSchema -Conditions $conditions -SchemaColumns $SchemaColumns).Kept)
 }
 
 function Get-SharedSourceUsage {
@@ -84,15 +136,21 @@ function Get-SharedSourceUsage {
         Measures billed volume per shared-table source in CommonSecurityLog and Syslog.
     .DESCRIPTION
         Runs one summarize query per shared table over a short sample window. Tables
-        that are not ingesting, or are only on the Basic or Auxiliary plan (queries
-        there are billed per GB scanned), are skipped. Query failures become warnings.
+        that are not ingesting, or are not on the Analytics plan (queries on Basic and
+        Auxiliary are billed per GB scanned), are skipped. The configured plan from the
+        Tables API decides; without it every observed Usage plan must be Analytics.
+        A query that fails with rule conditions is retried once without them; other
+        failures become warnings.
     .OUTPUTS
-        One object per table with TableName, SampleDays and Rows (SourceId, HintMatch, BilledBytes).
+        One object per table with TableName, SampleDays, RuleConditions and Rows
+        (SourceId, HintMatch, RuleMatch, BilledBytes).
     #>
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)][PSCustomObject]$Context,
         [array]$TableUsage = @(),
+        [array]$TableRetention = @(),
+        [array]$Rules = @(),
         [ValidateRange(1, 30)][int]$SampleDays = 7,
         [array]$Sources = (Get-SharedTableSource)
     )
@@ -106,30 +164,49 @@ function Get-SharedSourceUsage {
     $results = foreach ($group in ($Sources | Group-Object table)) {
         $usage = $TableUsage | Where-Object TableName -eq $group.Name | Select-Object -First 1
         if (-not $usage -or $usage.MonthlyGB -le 0) { continue }
-        $plans = @($usage.ObservedPlans | Where-Object { $_ -and $_ -ne 'Unknown' })
-        if ($plans.Count -gt 0 -and 'Analytics' -notin $plans) {
+        $ret = $TableRetention | Where-Object TableName -eq $group.Name | Select-Object -First 1
+        $plans = @($usage.ObservedPlans | Where-Object { $_ -and $_ -ne 'Unknown' } | Sort-Object -Unique)
+        $isAnalytics = if ($ret -and $ret.Plan) { $ret.Plan -eq 'Analytics' } else { -not ($plans | Where-Object { $_ -ne 'Analytics' }) }
+        if (-not $isAnalytics) {
             Write-Verbose "$($group.Name) is not on the Analytics plan; skipping the shared source breakdown."
             continue
         }
-
-        $body = @{ query = (Get-SharedSourceUsageQuery -TableName $group.Name -Sources @($group.Group) -SampleDays $SampleDays) } | ConvertTo-Json -Compress
-        try { $response = Invoke-AzRestWithRetry -Uri $uri -Method Post -Headers $headers -Body $body }
-        catch {
-            Write-Warning "Shared source breakdown for $($group.Name) skipped: $($_.Exception.Message)"
-            continue
+        $schema = @(if ($ret -and $ret.Columns) { $ret.Columns })
+        $keyColumns = Get-SharedSourceKeyColumn -Sources @($group.Group) -SchemaColumns $schema
+        $ruleConditions = @(Get-SharedTableRuleCondition -TableName $group.Name -Rules $Rules -SchemaColumns $schema)
+        $response = $null
+        foreach ($attempt in 1..2) {
+            $query = Get-SharedSourceUsageQuery -TableName $group.Name -Sources @($group.Group) -SampleDays $SampleDays -RuleConditions $ruleConditions -KeyColumns $keyColumns
+            try {
+                $response = Invoke-AzRestWithRetry -Uri $uri -Method Post -Headers $headers -Body (@{ query = $query } | ConvertTo-Json -Compress)
+                break
+            }
+            catch {
+                if ($attempt -eq 1 -and $ruleConditions.Count -gt 0) {
+                    Write-Warning "Shared source breakdown for $($group.Name) failed with rule conditions; retrying without them: $($_.Exception.Message)"
+                    $ruleConditions = @()
+                    continue
+                }
+                Write-Warning "Shared source breakdown for $($group.Name) skipped: $($_.Exception.Message)"
+                break
+            }
         }
+        if (-not $response) { continue }
 
         $columns = @($response.tables[0].columns | ForEach-Object name)
         $iSource = [array]::IndexOf($columns, 'LogHorizonSource')
         $iHint = [array]::IndexOf($columns, 'LogHorizonHint')
+        $iRule = [array]::IndexOf($columns, 'LogHorizonRule')
         $iBytes = [array]::IndexOf($columns, 'BilledBytes')
         [PSCustomObject]@{
-            TableName  = $group.Name
-            SampleDays = $SampleDays
-            Rows       = @(@($response.tables[0].rows) | ForEach-Object {
+            TableName      = $group.Name
+            SampleDays     = $SampleDays
+            RuleConditions = $ruleConditions
+            Rows           = @(@($response.tables[0].rows) | ForEach-Object {
                 [PSCustomObject]@{
                     SourceId    = "$($_[$iSource])"
                     HintMatch   = ConvertTo-UsageBoolean -Value $_[$iHint]
+                    RuleMatch   = if ($iRule -ge 0) { ConvertTo-UsageBoolean -Value $_[$iRule] } else { $false }
                     BilledBytes = [double]$_[$iBytes]
                 }
             })
@@ -147,6 +224,7 @@ function Get-SharedTableSplitRule {
     [CmdletBinding()]
     param(
         [array]$Sources = @(),
+        [string[]]$RuleConditions = @(),
         [ValidateSet('analytics', 'datalake')][string]$RemainderTier = 'analytics',
         [int]$RemainderRetentionDays = 90
     )
@@ -159,6 +237,7 @@ function Get-SharedTableSplitRule {
         $hint = Get-SharedSourceHintKql -Source $s
         if ($hint) { $parts.Add("($(ConvertTo-KqlGroup $s.filter) and $hint)") }
     }
+    foreach ($c in @($RuleConditions)) { if ($c) { $parts.Add((ConvertTo-KqlGroup $c)) } }
     # case() because transformations do not list not() as supported
     if ($RemainderTier -eq 'analytics') {
         $parts.Add($(if ($Sources.Count -gt 0) { "case($(($Sources | ForEach-Object { ConvertTo-KqlGroup $_.filter }) -join ' or '), false, true)" } else { 'true' }))
@@ -208,7 +287,8 @@ function Get-SharedSourceAnalysis {
             $total += $bytes
             $bytesBySource[$row.SourceId] = [double]$bytesBySource[$row.SourceId] + $bytes
             $src = $catalogue[$row.SourceId]
-            $keep = if (-not $src) { $remainderTier -eq 'analytics' }
+            $keep = if ([bool]$row.RuleMatch) { $true }
+                    elseif (-not $src) { $remainderTier -eq 'analytics' }
                     elseif ($src.recommendedTier -ne 'datalake') { $true }
                     else { [bool]$row.HintMatch -and [bool](Get-SharedSourceHintKql -Source $src) }
             if ($keep) { $kept += $bytes }
@@ -223,7 +303,7 @@ function Get-SharedSourceAnalysis {
             $ruleCount = 0
             if ($s.parser) {
                 $pattern = "(?<![\w.$])$([regex]::Escape($s.parser))(?![\w])"
-                $ruleCount = @($Rules | Where-Object { $_.Enabled -and $_.Query -cmatch $pattern }).Count
+                $ruleCount = @($Rules | Where-Object { $_.Enabled -and (Remove-KqlLiteral -Kql $_.Query) -cmatch $pattern }).Count
             }
             [PSCustomObject]@{
                 SourceId                 = $s.sourceId
@@ -240,7 +320,8 @@ function Get-SharedSourceAnalysis {
         $unmatched = [double]$bytesBySource['']
         $movedGB = ($total - $kept) * $gbPerByte
         $effectivePrice = if ($t.MonthlyGB -gt 0 -and -not $t.IsFree) { $t.EstMonthlyCostUSD / $t.MonthlyGB } else { 0 }
-        $rule = Get-SharedTableSplitRule -Sources $deployed -RemainderTier $remainderTier -RemainderRetentionDays ([int]$t.RecommendedRetentionDays)
+        $ruleConditions = if ($usage.PSObject.Properties.Name -contains 'RuleConditions') { @($usage.RuleConditions) } else { @() }
+        $rule = Get-SharedTableSplitRule -Sources $deployed -RuleConditions $ruleConditions -RemainderTier $remainderTier -RemainderRetentionDays ([int]$t.RecommendedRetentionDays)
 
         [PSCustomObject]@{
             TableName          = $usage.TableName
@@ -250,6 +331,7 @@ function Get-SharedSourceAnalysis {
             UnmatchedShare     = [math]::Round($unmatched / $total, 4)
             UnmatchedMonthlyGB = [math]::Round($unmatched * $gbPerByte, 2)
             RemainderTier      = $remainderTier
+            RuleConditionCount = $ruleConditions.Count
             LakeMonthlyGB      = [math]::Round($movedGB, 2)
             SplitCondition     = $rule.Condition
             TableRetentionDays = $rule.TableRetentionDays

@@ -94,25 +94,38 @@
             $templatePath = Join-Path -Path $PSScriptRoot -ChildPath '..\Data\ReportTemplate.html'
             $template = Get-Content -Path $templatePath -Raw
 
-            # Build tab navigation (radios + labels) and tab panes
+            # Build tab navigation (radios + labels), tab panes, and one CSS rule set per tab id
             $tabRadios = [System.Text.StringBuilder]::new()
             $tabLabels = [System.Text.StringBuilder]::new()
             $tabBody = [System.Text.StringBuilder]::new()
+            $activeLabels = [System.Collections.Generic.List[string]]::new()
+            $focusLabels = [System.Collections.Generic.List[string]]::new()
+            $activePanes = [System.Collections.Generic.List[string]]::new()
             $tabIndex = 0
             foreach ($section in $sections) {
                 $tabId = $section.TabId
                 $checked = if ($tabIndex -eq 0) { ' checked' } else { '' }
                 [void]$tabRadios.AppendLine("            <input type=`"radio`" name=`"tabs`" id=`"tab-$tabId`" class=`"tab-radio`"$checked>")
                 [void]$tabLabels.AppendLine("                <label for=`"tab-$tabId`" class=`"tab-label`">$($section.Title)</label>")
-                [void]$tabBody.AppendLine("            <section class=`"tab-pane`" id=`"pane-$tabId`">")
+                [void]$tabBody.AppendLine("            <section class=`"tab-pane`" id=`"pane-$tabId`" aria-labelledby=`"title-$tabId`">")
+                [void]$tabBody.AppendLine("            <h2 class=`"pane-title`" id=`"title-$tabId`">$($section.Title)</h2>")
                 [void]$tabBody.Append($section.Html)
                 [void]$tabBody.AppendLine('            </section>')
+                $activeLabels.Add("#tab-${tabId}:checked ~ .tab-bar label[for=`"tab-$tabId`"]")
+                $focusLabels.Add("#tab-${tabId}:focus-visible ~ .tab-bar label[for=`"tab-$tabId`"]")
+                $activePanes.Add("#tab-${tabId}:checked ~ #pane-$tabId")
                 $tabIndex++
             }
+            $tabCss = @(
+                "        $($activeLabels -join ",`n        ") { color: var(--accent); background: var(--accent-bg); border-color: var(--accent); }"
+                "        $($focusLabels -join ",`n        ") { outline: 3px solid var(--accent); outline-offset: 2px; }"
+                "        $($activePanes -join ",`n        ") { display: block; }"
+            ) -join "`n"
 
             $html = $template.Replace('__WORKSPACE__', $safeWorkspaceHTML)
             $html = $html.Replace('__GENERATED__', (ConvertTo-HtmlSafe $generatedStr))
             $html = $html.Replace('__VERSION__', (ConvertTo-HtmlSafe $moduleVersion))
+            $html = $html.Replace('__TAB_CSS__', $tabCss)
             $html = $html.Replace('__TAB_NAVIGATION__', $tabRadios.ToString())
             $html = $html.Replace('__TAB_LABELS__', $tabLabels.ToString())
             $html = $html.Replace('__TAB_PANES__', $tabBody.ToString())
@@ -184,6 +197,8 @@ function ConvertTo-ReportSections {
 
     function hEnc([string]$Text) { [System.Net.WebUtility]::HtmlEncode($Text) }
     function mdEsc([string]$Text) { ConvertTo-SafeMarkdownText -Text $Text }
+    function money($Value) { '$' + ([double]$Value).ToString('N2', [cultureinfo]::InvariantCulture) }
+    function amount($Value) { ([double]$Value).ToString('#,0.##', [cultureinfo]::InvariantCulture) }
 
     $sections = [System.Collections.Generic.List[PSCustomObject]]::new()
     $summary = $Analysis.Summary
@@ -217,12 +232,12 @@ function ConvertTo-ReportSections {
     $htmlSb = [System.Text.StringBuilder]::new()
     [void]$htmlSb.AppendLine('            <div class="summary-grid">')
     $metrics = @(
-        @{ Value = $summary.TotalTables; Label = 'Total Tables' }
-        @{ Value = "$($summary.TotalMonthlyGB) GB/mo"; Label = 'Ingestion' }
-        @{ Value = "`$$($summary.TotalMonthlyCost)/mo"; Label = 'Est. Cost' }
-        @{ Value = $summary.EnabledRules; Label = 'Active Rules' }
-        @{ Value = "$($summary.CoveragePercent)%"; Label = 'Rule Coverage' }
-        @{ Value = "`$$($summary.EstTotalSavings)/mo"; Label = 'Potential Savings'; Class = 'savings' }
+        @{ Value = (amount $summary.TotalTables); Label = 'Tables' }
+        @{ Value = "$(amount $summary.TotalMonthlyGB) GB"; Label = 'Ingestion per month' }
+        @{ Value = (money $summary.TotalMonthlyCost); Label = 'Est. cost per month' }
+        @{ Value = (amount $summary.EnabledRules); Label = 'Active rules' }
+        @{ Value = "$($summary.CoveragePercent)%"; Label = 'Tables with a rule or hunting query' }
+        @{ Value = (money $summary.EstTotalSavings); Label = 'Potential savings per month'; Class = 'savings' }
     )
     foreach ($metric in $metrics) {
         $metricClass = if ($metric.Class) { " class=`"metric-value $($metric.Class)`"" } else { ' class="metric-value"' }
@@ -258,15 +273,20 @@ function ConvertTo-ReportSections {
         }
 
         $htmlSb = [System.Text.StringBuilder]::new()
-        $num = 1
         foreach ($rec in $sortedRecs) {
             $prioClass = switch ($rec.Priority) { 'High' { 'badge-high' } 'Medium' { 'badge-medium' } 'Low' { 'badge-low' } }
-            $saveBadge = if ($rec.EstSavingsUSD -gt 0) { " <span class=`"badge badge-savings`">Saves `$$($rec.EstSavingsUSD)/mo</span>" } else { '' }
+            # SharedTableSplit -> Shared Table Split, XDROptimize -> XDR Optimize
+            $typeLabel = "$($rec.Type)" -creplace '(?<=[a-z])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])', ' '
+            $meta = [System.Collections.Generic.List[string]]::new()
+            $meta.Add("<span class=`"badge $prioClass`">$(hEnc $rec.Priority) priority</span>")
+            $meta.Add("<span>$(hEnc $typeLabel)</span>")
+            if ($rec.EstSavingsUSD -gt 0) { $meta.Add("<span class=`"savings`">Saves $(money $rec.EstSavingsUSD)/mo</span>") }
+            if ($rec.CurrentCost -gt 0) { $meta.Add("<span>Current cost $(money $rec.CurrentCost)/mo</span>") }
             [void]$htmlSb.AppendLine("            <article class=`"rec-card`">")
-            [void]$htmlSb.AppendLine("                <div class=`"rec-header`"><span class=`"badge $prioClass`">$($rec.Priority)</span> <span class=`"badge`">$($rec.Type)</span>$saveBadge <strong>$(hEnc $rec.Title)</strong></div>")
+            [void]$htmlSb.AppendLine("                <h3 class=`"rec-title`">$(hEnc $rec.Title)</h3>")
+            [void]$htmlSb.AppendLine("                <div class=`"rec-meta`">$($meta -join '')</div>")
             [void]$htmlSb.AppendLine("                <p>$(hEnc $rec.Detail)</p>")
             [void]$htmlSb.AppendLine('            </article>')
-            $num++
         }
 
         $sections.Add([PSCustomObject]@{ Title = 'Recommendations'; TabId = 'recs'; Markdown = $mdSb.ToString(); Html = $htmlSb.ToString() })
@@ -296,7 +316,7 @@ function ConvertTo-ReportSections {
     [void]$htmlSb.AppendLine('                <tbody>')
     foreach ($tableEntry in $sorted) {
         $classificationClass = switch ($tableEntry.Classification) { 'primary' { 'cls-primary' } 'secondary' { 'cls-secondary' } default { 'cls-unknown' } }
-        $costStr = if ($tableEntry.IsFree) { '<span class="badge badge-savings">FREE</span>' } else { "`$$($tableEntry.EstMonthlyCostUSD)" }
+        $costStr = if ($tableEntry.IsFree) { '<span class="badge badge-savings">FREE</span>' } else { money $tableEntry.EstMonthlyCostUSD }
         $configuredPlan = if ($tableEntry.TablePlan) { hEnc $tableEntry.TablePlan } else { '-' }
         $observedPlans = if ($tableEntry.ObservedPlanSummary) { hEnc $tableEntry.ObservedPlanSummary } else { '-' }
         $statusNote = Get-TableStatusLabel -Table $tableEntry
@@ -344,7 +364,7 @@ function ConvertTo-ReportSections {
         $htmlSb = [System.Text.StringBuilder]::new()
         [void]$mdSb.AppendLine('## Shared Table Sources')
         [void]$mdSb.AppendLine('')
-        [void]$htmlSb.AppendLine('            <p>Measured volume per CEF and Syslog source. Rows that match the split condition stay in Analytics, the rest go to the _SPLT table. Rules counts enabled analytics rules that call the source''s parser.</p>')
+        [void]$htmlSb.AppendLine('            <p>Measured volume per CEF and Syslog source. Rows that match the split condition stay in Analytics, the rest go to the _SPLT table. The Rules column counts enabled analytics rules that call the source''s parser.</p>')
         foreach ($shared in @($Analysis.SharedSources)) {
             $remainderTier = if ($shared.RemainderTier -eq 'datalake') { 'Data lake' } else { 'Analytics' }
             [void]$mdSb.AppendLine("### $(mdEsc $shared.TableName)")
@@ -354,7 +374,7 @@ function ConvertTo-ReportSections {
             [void]$mdSb.AppendLine('| Source | Tier | Retention | Share | GB/mo | Rules |')
             [void]$mdSb.AppendLine('| --- | --- | ---: | ---: | ---: | ---: |')
             [void]$htmlSb.AppendLine("            <h3>$(hEnc $shared.TableName)</h3>")
-            [void]$htmlSb.AppendLine("            <p>$($shared.MonthlyGB) GB/mo, $($shared.SampleDays)-day sample. The split moves about $($shared.LakeMonthlyGB) GB/mo to the data lake (~`$$($shared.EstSavingsUSD)/mo).</p>")
+            [void]$htmlSb.AppendLine("            <p>$(amount $shared.MonthlyGB) GB/mo, $($shared.SampleDays)-day sample. The split moves about $(amount $shared.LakeMonthlyGB) GB/mo to the data lake (~$(money $shared.EstSavingsUSD)/mo).</p>")
             [void]$htmlSb.AppendLine('            <div class="table-wrap"><table>')
             [void]$htmlSb.AppendLine('                <thead><tr><th>Source</th><th>Tier</th><th>Retention</th><th>Share</th><th>GB/mo</th><th>Rules</th></tr></thead>')
             [void]$htmlSb.AppendLine('                <tbody>')
@@ -377,6 +397,11 @@ function ConvertTo-ReportSections {
             [void]$htmlSb.AppendLine('                </tbody>')
             [void]$htmlSb.AppendLine('            </table></div>')
             [void]$htmlSb.AppendLine("                <pre class=`"kql-block`">$(hEnc $shared.SplitCondition)</pre>")
+            if ($shared.RuleConditionCount -gt 0) {
+                [void]$mdSb.AppendLine("Includes $($shared.RuleConditionCount) where-condition(s) from enabled rules on the table.")
+                [void]$mdSb.AppendLine('')
+                [void]$htmlSb.AppendLine("            <p>Includes $($shared.RuleConditionCount) where-condition(s) from enabled rules on the table.</p>")
+            }
             $retention = @()
             if ($shared.TableRetentionDays) { $retention += "$($shared.TableName) $($shared.TableRetentionDays)d" }
             if ($shared.SplitRetentionDays) { $retention += "$($shared.TableName)_SPLT $($shared.SplitRetentionDays)d" }
@@ -762,7 +787,8 @@ function ConvertTo-ReportSections {
     # - 10. Detection Analyzer (conditional) -
     if ($Analysis.DetectionAnalyzer -and $Analysis.DetectionAnalyzer.RuleMetrics.Count -gt 0) {
         $scored = @($Analysis.DetectionAnalyzer.RuleMetrics | Where-Object { $null -ne $_.NoisinessScore } | Sort-Object NoisinessScore -Descending)
-        $unscored = @($Analysis.DetectionAnalyzer.RuleMetrics | Where-Object { $null -eq $_.NoisinessScore })
+        $unscored = @($Analysis.DetectionAnalyzer.RuleMetrics | Where-Object { $null -eq $_.NoisinessScore } |
+            Sort-Object @{ Expression = { [bool]$_.IsNoisy }; Descending = $true }, @{ Expression = 'IncidentsTotal'; Descending = $true })
         $sortedMetrics = @($scored) + @($unscored)
 
         $mdSb = [System.Text.StringBuilder]::new()
@@ -782,7 +808,7 @@ function ConvertTo-ReportSections {
             [void]$mdSb.AppendLine('')
         }
         [void]$mdSb.AppendLine("**Rules analyzed:** $($daSummary.RulesAnalyzed)  ")
-        [void]$mdSb.AppendLine("**Noisy rules (score >= 70):** $($daSummary.NoisyRules)  ")
+        [void]$mdSb.AppendLine("**Noisy rules:** $($daSummary.NoisyRules)  ")
         [void]$mdSb.AppendLine("**Incidents analyzed:** $($daSummary.IncidentsAnalyzed)  ")
         if ($daSummary.ScorableRules -gt 0 -and $daSummary.ScorableRules -lt $daSummary.MinScorablePopulation) {
             [void]$mdSb.AppendLine("**Note:** only $($daSummary.ScorableRules) rule(s) have incidents; noisiness scores need at least $($daSummary.MinScorablePopulation) rules to compare against, so scores are N/A.  ")
@@ -794,11 +820,11 @@ function ConvertTo-ReportSections {
         [void]$mdSb.AppendLine('| Rule | Kind | Incidents | AutoClose % | FalsePositive % | Noisiness Score |')
         [void]$mdSb.AppendLine('| --- | --- | ---: | ---: | ---: | ---: |')
         foreach ($r in ($sortedMetrics | Select-Object -First 25)) {
-            $scoreStr = if ($null -eq $r.NoisinessScore) { 'N/A' } else { $r.NoisinessScore }
+            $scoreStr = if ($null -ne $r.NoisinessScore) { $r.NoisinessScore } elseif ($r.IsNoisy) { 'Noisy' } else { 'N/A' }
             [void]$mdSb.AppendLine("| $(mdEsc $r.RuleName) | $(mdEsc $r.RuleKind) | $($r.IncidentsTotal) | $([math]::Round($r.AutoCloseRatio * 100, 1)) | $([math]::Round($r.FalsePositiveRatio * 100, 1)) | $scoreStr |")
         }
         [void]$mdSb.AppendLine('')
-        [void]$mdSb.AppendLine('**Scoring:** Score = (Volume_percentile x 35%) + (AutoClose_percentile x 40%) + (FalsePos_percentile x 25%). >= 70 = noisy, >= 50 = watch, < 50 = healthy.  ')
+        [void]$mdSb.AppendLine('**Scoring:** Score = (Volume_percentile x 35%) + (AutoClose_percentile x 40%) + (FalsePos_percentile x 25%). >= 70 = noisy, >= 50 = watch, < 50 = healthy. A rule with at least 5 closed incidents of which 80% or more were auto-closed by automation or false positive is noisy regardless of score.  ')
         [void]$mdSb.AppendLine('*A high score does not conclusively mean a detection is bad -- it is an indicator that the rule may warrant closer review.*  ')
         [void]$mdSb.AppendLine('')
 
@@ -824,12 +850,12 @@ function ConvertTo-ReportSections {
         [void]$htmlSb.AppendLine('                <thead><tr><th>Rule</th><th>Kind</th><th>Incidents</th><th>AutoClose %</th><th>FalsePositive %</th><th>Noisiness Score</th></tr></thead>')
         [void]$htmlSb.AppendLine('                <tbody>')
         foreach ($r in ($sortedMetrics | Select-Object -First 25)) {
-            $scoreStr = if ($null -eq $r.NoisinessScore) { 'N/A' } else { $r.NoisinessScore }
+            $scoreStr = if ($null -ne $r.NoisinessScore) { $r.NoisinessScore } elseif ($r.IsNoisy) { 'Noisy' } else { 'N/A' }
             [void]$htmlSb.AppendLine("                <tr><td>$(hEnc $r.RuleName)</td><td>$(hEnc $r.RuleKind)</td><td class=`"num`">$($r.IncidentsTotal)</td><td class=`"num`">$([math]::Round($r.AutoCloseRatio * 100, 1))</td><td class=`"num`">$([math]::Round($r.FalsePositiveRatio * 100, 1))</td><td class=`"num`">$scoreStr</td></tr>")
         }
         [void]$htmlSb.AppendLine('                </tbody>')
         [void]$htmlSb.AppendLine('            </table></div>')
-        [void]$htmlSb.AppendLine('            <p><strong>Scoring:</strong> Score = (Volume_percentile x 35%) + (AutoClose_percentile x 40%) + (FalsePos_percentile x 25%). &gt;= 70 = noisy, &gt;= 50 = watch, &lt; 50 = healthy.</p>')
+        [void]$htmlSb.AppendLine('            <p><strong>Scoring:</strong> Score = (Volume_percentile x 35%) + (AutoClose_percentile x 40%) + (FalsePos_percentile x 25%). &gt;= 70 = noisy, &gt;= 50 = watch, &lt; 50 = healthy. A rule with at least 5 closed incidents of which 80% or more were auto-closed by automation or false positive is noisy regardless of score.</p>')
         [void]$htmlSb.AppendLine('            <p><em>A high score does not conclusively mean a detection is bad -- it is an indicator that the rule may warrant closer review.</em></p>')
 
         $sections.Add([PSCustomObject]@{ Title = 'Detection Analyzer'; TabId = 'detanalyzer'; Markdown = $mdSb.ToString(); Html = $htmlSb.ToString() })
