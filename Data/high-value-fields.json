@@ -20,8 +20,8 @@
     ],
     "splitHints": [
       {
-        "description": "Keep failures and risky sign-ins in Analytics; routine token refreshes to Data Lake",
-        "kql": "ResultType != 0 or RiskLevelDuringSignIn != \"none\""
+        "description": "Keep failures, risky sign-ins, and all emergency access account sign-ins in Analytics; routine token refreshes to Data Lake. Replace the placeholders with the object IDs of your emergency access accounts.",
+        "kql": "(ResultType != \"0\" or RiskLevelDuringSignIn != \"none\" or UserId in (\"<emergency-account-object-id-1>\", \"<emergency-account-object-id-2>\"))"
       }
     ]
   },
@@ -214,8 +214,8 @@
     ],
     "splitHints": [
       {
-        "description": "Keep role/group changes, credential changes, and app modifications in Analytics",
-        "kql": "(OperationName has \"Add member\" or OperationName has \"Remove member\" or OperationName has \"Add owner\" or OperationName has \"Remove owner\" or OperationName has \"role\" or OperationName has \"password\" or OperationName has \"credential\" or OperationName has \"application\" or OperationName has \"service principal\" or OperationName has \"policy\" or OperationName has \"conditional access\")"
+        "description": "Keep role/group changes, credential changes, app modifications, and all actions by emergency access accounts in Analytics. Replace the placeholders with the object IDs of your emergency access accounts.",
+        "kql": "(OperationName has \"Add member\" or OperationName has \"Remove member\" or OperationName has \"Add owner\" or OperationName has \"Remove owner\" or OperationName has \"role\" or OperationName has \"password\" or OperationName has \"credential\" or OperationName has \"application\" or OperationName has \"service principal\" or OperationName has \"policy\" or OperationName has \"conditional access\" or tostring(InitiatedBy.user.id) in (\"<emergency-account-object-id-1>\", \"<emergency-account-object-id-2>\"))"
       }
     ]
   },
@@ -854,7 +854,7 @@
     "splitHints": [
       {
         "description": "Keep connections from suspicious processes and uncommon ports in Analytics",
-        "kql": "(InitiatingProcessFileName =~ \"powershell.exe\" or InitiatingProcessFileName =~ \"pwsh.exe\" or InitiatingProcessFileName =~ \"cmd.exe\" or InitiatingProcessFileName =~ \"wscript.exe\" or InitiatingProcessFileName =~ \"cscript.exe\" or InitiatingProcessFileName =~ \"mshta.exe\" or InitiatingProcessFileName =~ \"rundll32.exe\" or InitiatingProcessFileName =~ \"certutil.exe\") or RemotePort in (22, 23, 445, 3389, 5985, 5986, 4444, 8080, 8443, 1337)"
+        "kql": "(InitiatingProcessFileName =~ \"powershell.exe\" or InitiatingProcessFileName =~ \"pwsh.exe\" or InitiatingProcessFileName =~ \"cmd.exe\" or InitiatingProcessFileName =~ \"wscript.exe\" or InitiatingProcessFileName =~ \"cscript.exe\" or InitiatingProcessFileName =~ \"mshta.exe\" or InitiatingProcessFileName =~ \"rundll32.exe\" or InitiatingProcessFileName =~ \"certutil.exe\" or tolong(RemotePort) in (22, 23, 445, 3389, 5985, 5986, 4444, 8080, 8443, 1337))"
       }
     ]
   },
@@ -1608,7 +1608,7 @@
     "splitHints": [
       {
         "description": "Keep file sharing, permission changes, mailbox delegation, and external access events in Analytics",
-        "kql": "(Operation has \"SharingSet\" or Operation has \"AnonymousLinkCreated\" or Operation has \"SharingInvitationCreated\" or Operation has \"AddedToSecureLink\" or Operation has \"MemberAdded\" or Operation has \"MemberRemoved\" or Operation has \"Add-MailboxPermission\" or Operation has \"Set-Mailbox\" or Operation has \"New-InboxRule\" or Operation has \"Set-InboxRule\" or Operation has \"UpdateInboxRules\" or Operation has \"FileDownloaded\" or Operation has \"FileSyncDownloadedFull\") or ExternalAccess == true"
+        "kql": "(Operation has \"SharingSet\" or Operation has \"AnonymousLinkCreated\" or Operation has \"SharingInvitationCreated\" or Operation has \"AddedToSecureLink\" or Operation has \"MemberAdded\" or Operation has \"MemberRemoved\" or Operation has \"Add-MailboxPermission\" or Operation has \"Set-Mailbox\" or Operation has \"New-InboxRule\" or Operation has \"Set-InboxRule\" or Operation has \"UpdateInboxRules\" or Operation has \"FileDownloaded\" or Operation has \"FileSyncDownloadedFull\" or ExternalAccess =~ \"true\")"
       }
     ]
   },
@@ -1853,7 +1853,7 @@
     "splitHints": [
       {
         "description": "Keep security-critical EventIDs in Analytics: logon (4624/4625/4648), process (4688), service install (7045), account changes (4720-4738), privilege (4672), Kerberoasting (4769), audit log cleared (1102)",
-        "kql": "EventID in (1102, 4624, 4625, 4634, 4648, 4657, 4663, 4672, 4688, 4697, 4698, 4699, 4700, 4701, 4702, 4720, 4722, 4723, 4724, 4725, 4726, 4728, 4732, 4733, 4738, 4740, 4756, 4767, 4769, 4771, 4776, 5136, 5140, 5145, 7034, 7040, 7045)"
+        "kql": "tolong(EventID) in (1102, 4624, 4625, 4634, 4648, 4657, 4663, 4672, 4688, 4697, 4698, 4699, 4700, 4701, 4702, 4720, 4722, 4723, 4724, 4725, 4726, 4728, 4732, 4733, 4738, 4740, 4756, 4767, 4769, 4771, 4776, 5136, 5140, 5145, 7034, 7040, 7045)"
       }
     ]
   },
@@ -1933,8 +1933,8 @@
     ],
     "splitHints": [
       {
-        "description": "Keep failed sign-ins, risky sign-ins, and MFA events in Analytics",
-        "kql": "ResultType != 0 or RiskLevelDuringSignIn != \"none\" or ConditionalAccessStatus == \"failure\" or AuthenticationRequirement == \"multiFactorAuthentication\""
+        "description": "Keep failed sign-ins, risky sign-ins, MFA events, and all emergency access account sign-ins in Analytics. Replace the placeholders with the object IDs of your emergency access accounts.",
+        "kql": "(ResultType != \"0\" or RiskLevelDuringSignIn != \"none\" or ConditionalAccessStatus == \"failure\" or AuthenticationRequirement == \"multiFactorAuthentication\" or UserId in (\"<emergency-account-object-id-1>\", \"<emergency-account-object-id-2>\"))"
       }
     ]
   },
@@ -2634,7 +2634,7 @@
     "splitHints": [
       {
         "description": "Keep error responses (4xx/5xx) and suspicious request patterns in Analytics",
-        "kql": "scStatus >= 400 or (csUriStem has \".asp\" or csUriStem has \".php\" or csUriStem has \".jsp\" or csUriStem has \".cgi\" or csUriStem has \"cmd.exe\" or csUriStem has \"..\\\\\")"
+        "kql": "(toint(scStatus) >= 400 or csUriStem has \".asp\" or csUriStem has \".php\" or csUriStem has \".jsp\" or csUriStem has \".cgi\" or csUriStem has \"cmd.exe\" or csUriStem has \"..\\\\\")"
       }
     ]
   },
